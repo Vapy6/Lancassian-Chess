@@ -50,3 +50,4 @@ SECURITY AND LIMITS
 - The supplied PDF template is included. The field editor dynamically exposes its fillable PDF fields and exports a filled PDF. Image/button fields are not editable in this browser form.
 - Shared audio uses a private Storage bucket and signed URLs. Browsers may require each player to click once before audio can start. Audio sync uses realtime broadcast timing and may vary slightly across networks.
 - Campaign membership is currently one active campaign at a time in this panel. Share the code only with players you want in the campaign.
+Campaign creation fix: this version creates campaigns through the authenticated create_myosia_campaign Supabase RPC. After uploading this version, run the matching create_myosia_campaign function definition from supabase-setup.sql in Supabase SQL Editor (you do not need to rerun the entire setup).

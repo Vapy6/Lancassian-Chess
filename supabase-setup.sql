@@ -72,6 +72,38 @@ end; $$;
 revoke all on function public.join_myosia_campaign(text) from public;
 grant execute on function public.join_myosia_campaign(text) to authenticated;
 
+-- Create campaigns through a validated RPC so the app can receive the new row safely.
+create or replace function public.create_myosia_campaign(p_name text, p_invite_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_campaign public.campaigns;
+begin
+  if v_user is null then raise exception 'Sign in first'; end if;
+  if p_name is null or char_length(trim(p_name)) < 1 or char_length(trim(p_name)) > 80 then
+    raise exception 'Campaign name must be between 1 and 80 characters';
+  end if;
+  if p_invite_code is null or p_invite_code !~ '^[A-Z0-9]{6,12}$' then
+    raise exception 'Invalid invite code';
+  end if;
+  insert into public.campaigns(name, owner_id, invite_code)
+    values(trim(p_name), v_user, p_invite_code)
+    returning * into v_campaign;
+  return jsonb_build_object(
+    'id', v_campaign.id,
+    'name', v_campaign.name,
+    'invite_code', v_campaign.invite_code,
+    'owner_id', v_campaign.owner_id
+  );
+end;
+$$;
+revoke all on function public.create_myosia_campaign(text, text) from public;
+grant execute on function public.create_myosia_campaign(text, text) to authenticated;
+
 create or replace function public.myosia_touch_character()
 returns trigger language plpgsql as $$ begin new.updated_at=now(); return new; end; $$;
 drop trigger if exists myosia_character_updated on public.character_sheets;
