@@ -51,3 +51,7 @@ SECURITY AND LIMITS
 - Shared audio uses a private Storage bucket and signed URLs. Browsers may require each player to click once before audio can start. Audio sync uses realtime broadcast timing and may vary slightly across networks.
 - Campaign membership is currently one active campaign at a time in this panel. Share the code only with players you want in the campaign.
 Campaign creation fix: this version creates campaigns through the authenticated create_myosia_campaign Supabase RPC. After uploading this version, run the matching create_myosia_campaign function definition from supabase-setup.sql in Supabase SQL Editor (you do not need to rerun the entire setup).
+MAP EDITING UPDATE
+- Open map.html and enter GM mode. Click an existing nation name, landmass heading, town label, or sea label to open its editor.
+- Existing labels now expose map X/Y position and label styling controls where applicable; save, then use Export notes to download your edits.
+- The map uses Eagle Lake and the coast glow has been broadened to better match the supplied original reference. The unwanted Still and Pyeonseong landmass headings have been removed.
