@@ -531,7 +531,7 @@ header { align-items: center; }
           <select id="clockSel"><option value="600">Rapid 10 min</option><option value="600+5">Rapid 10 | 5</option><option value="900+10">Rapid 15 | 10</option><option value="300">Blitz 5 min</option><option value="180+2">Blitz 3 | 2</option><option value="60">Bullet 1 min</option><option value="off">No clock</option></select>
         </label>
         <label class="field"><span class="label">Level</span>
-          <select id="level"><option value="100">~100 Elo</option><option value="200">~200 Elo</option><option value="300">~300 Elo</option><option value="400">~400 Elo</option><option value="500">~500 Elo</option><option value="600">~600 Elo</option><option value="700">~700 Elo</option><option value="800">~800 Elo</option><option value="900">~900 Elo</option><option value="1000" selected>~1000 Elo</option><option value="2000">~2000 Elo</option><option value="3000">~3000 Elo</option></select>
+          <select id="level"><option value="100">King Kondor · 100 Elo</option><option value="200">Kythmyr · 200 Elo</option><option value="300">Azraq · 300 Elo</option><option value="400">Rune · 400 Elo</option><option value="500">Gambles · 500 Elo</option><option value="600">Ameria · 600 Elo</option><option value="700">Haba · 700 Elo</option><option value="800">Zanos · 800 Elo</option><option value="900">Emperor Rasselle · 900 Elo</option><option value="1000" selected>Garan · 1000 Elo</option><option value="1250">Viviness · 1250 Elo</option><option value="1500">Deo · 1500 Elo</option><option value="1750">Annos · 1750 Elo</option><option value="2000">Savaarkrynn · 2000 Elo</option><option value="3000">Myoso · 3000 Elo</option></select>
         </label>
         <div class="btnrow">
           <button class="btn primary" id="newBtn" type="button">New game</button>
@@ -1206,6 +1206,9 @@ header { align-items: center; }
     800: { depth: 2, noise: 90, qs: false, ms: 0, pr: 0.05 },
     900: { depth: 2, noise: 60, qs: true, ms: 0, pr: 0.02 },
     1000: { depth: 2, noise: 30, qs: true, ms: 0, pr: 0 },
+    1250: { depth: 2, noise: 15, qs: true, ms: 0, pr: 0 },
+    1500: { depth: 3, noise: 0, qs: true, ms: 250, pr: 0 },
+    1750: { depth: 3, noise: 0, qs: true, ms: 350, pr: 0 },
     2000: { depth: 4, noise: 0, qs: true, ms: 450, pr: 0 },
     3000: { depth: 12, noise: 0, qs: true, ms: 1800, pr: 0 }
   };
@@ -1321,7 +1324,8 @@ header { align-items: center; }
   var START = { 1: 8, 2: 2, 3: 2, 4: 2, 5: 1 };
   var PV = { 1: 1, 2: 3, 3: 3, 4: 5, 5: 9 };
   var LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
-  [100,200,300,400,500,600,700,800,900,1000,2000,3000].forEach(function (e) { LEVEL_NAME[e] = '~' + e + ' Elo'; });
+  var BOT_NAMES = {100:'King Kondor',200:'Kythmyr',300:'Azraq',400:'Rune',500:'Gambles',600:'Ameria',700:'Haba',800:'Zanos',900:'Emperor Rasselle',1000:'Garan',1250:'Viviness',1500:'Deo',1750:'Annos',2000:'Savaarkrynn',3000:'Myoso'};
+  [100,200,300,400,500,600,700,800,900,1000,1250,1500,1750,2000,3000].forEach(function (e) { LEVEL_NAME[e] = (BOT_NAMES[e] || ('Bot')) + ' · ' + e + ' Elo'; });
   var SVGNS = 'http://www.w3.org/2000/svg';
   var GUIDE = [
     [1, 'Peasant / Goblin', '1 pt', 'Moves like a pawn, with promotion, en passant and the two-square start. Promoted pieces are plain, with no ability.'],
@@ -1908,9 +1912,32 @@ header { align-items: center; }
   var lastLine = '';
   function oppName() {
     if (online) return 'Your friend';
-    if (!variant) return 'The Warlord';
+    if (!variant) return BOT_NAMES[level] || 'The Warlord';
     var tm = teamAt(-human);
     return godKings[tm] || (tm === 'bar' ? 'Emperor Rasselle' : "High Chief S'Olakti");
+  }
+  var BOT_TALK = {
+    100:{hello:['KRAAA! Face me properly!','I am King Kondor! Try not to embarrass yourself.'],capture:['HA! Another piece falls before my royal might!','KRAK! You call that a defense?'],check:['FIRE AND FURY! Your king is cornered!'],quiet:['I am allowing you this move. Do not mistake it for mercy.']},
+    200:{hello:['Come, then. There is something to learn in every game.','Take your time. Even the coldest trail begins with one step.'],capture:['A hard lesson, but a useful one.','Like a winter hunt: patience matters.'],check:['Careful now. Your king has wandered into danger.'],quiet:['There is wisdom in a quiet move. Sometimes.']},
+    300:{hello:['Begin.','Let us see.'],capture:['The exchange was inevitable.','You overlooked a possibility.'],check:['Your king is threatened.'],quiet:['Interesting.']},
+    400:{hello:['No chains, no masters. Just the board.','Let instinct choose the course.'],capture:['That was ripe for the taking.','A clean cut.'],check:['Your king has run out of open water.'],quiet:['The wind shifts.']},
+    500:{hello:['Place your bets! Chess, regret, and absolutely no refunds.','Welcome to the table. The house has excellent odds.'],capture:['You are leaving bacon and eggs on the table!','And there goes another chip into the pot.'],check:['Your king is in a tight spot, friend. Care to double down?'],quiet:['Interesting wager. Let us see if it pays.']},
+    600:{hello:['Oh, a new game! I wonder what kind of story we shall tell.','How exciting! Every position has its own little rhythm.'],capture:['A dramatic turn! The audience gasps!','Oh! What a composition this is becoming.'],check:['A sudden crescendo: your king is in danger!'],quiet:['A delicate brushstroke. I do appreciate subtlety.']},
+    700:{hello:['The mushrooms have placed their bets. They are not optimistic.','Right. Let us get this over with before something grows on us.'],capture:['One less mouth to feed.','Well, that piece has returned to the soil.'],check:['Your king seems to have misplaced the exit.'],quiet:['A quiet move. Even the dead appreciate those.']},
+    800:{hello:['Try to do something interesting. I have better things to do.','Do impress me. Or at least avoid being tedious.'],capture:['You left that undefended. How generous.','I have seen more convincing plans from a confused imp.'],check:['Your king is in danger. Keep up.'],quiet:['Was that a plan, or did your hand slip?']},
+    900:{hello:['You have been granted an audience. Do try to make it worthwhile.','Proceed. My time is considerably more valuable than yours.'],capture:['An acceptable sacrifice. Yours, naturally.','This inconvenience will be corrected.'],check:['My opponent’s king is exposed. How undignified.'],quiet:['I shall permit that move. For now.']},
+    1000:{hello:['Ah, another mind convinced it understands the game. Delightful.','Every move is a variable in a grand design. Let us begin.'],capture:['Precisely as the plan required.','An unexpected variable. I will account for it.'],check:['The board is beginning to reveal its design.'],quiet:['Do continue. I am documenting your errors.']},
+    2000:{hello:['You face the last true dragon of the Savaar lineage. Remember that.','Titles, treasure, and legacy. Let us see what your position is worth.'],capture:['A costly loss. I trust you understand the value of what you have squandered.','Another asset acquired.'],check:['Your king’s predicament will be remembered.'],quiet:['A move with consequences. I shall consider them.']},
+    3000:{hello:['',''],capture:[''],check:[''],quiet:['']}
+  };
+  function botCommentary(ev) {
+    if (online || variant || replaying || cfg.talk === 'off') return false;
+    var b = BOT_TALK[level]; if (!b) return false;
+    if (level === 3000) { talkEl.hidden = true; return true; }
+    var choices = b[ev] || b.quiet, line = choices[Math.floor(Math.random()*choices.length)];
+    if (!line) return true;
+    talkWho.textContent = oppName(); talkTxt.textContent = line; talkEl.hidden = false;
+    talkEl.classList.remove('pop'); void talkEl.offsetWidth; talkEl.classList.add('pop'); return true;
   }
   function say(ev, o) {
     if (online || replaying || cfg.talk === 'off' || !LINES[ev]) return;
@@ -1924,6 +1951,10 @@ header { align-items: center; }
   function pn(p) { return variant ? pname(p) : NAMES[Math.abs(p)]; }
   function afterMove(m, mover) {
     var you = mover === human, pre = you ? 'you' : 'cpu', ev = null, p = '';
+    if (!variant && !you && !online) {
+      var botEvent = (m.cap || m.ep) ? 'capture' : (!over && E.inCheck(s, s.turn)) ? 'check' : 'quiet';
+      botCommentary(botEvent);
+    }
     if (m.cap) p = pn(m.cap); else if (m.ep) p = 'pawn';
     var chk = !over && E.inCheck(s, s.turn), bar = variant && teamAt(mover) === 'bar';
     if (m.act === 'blast') { sfx('blast'); ev = pre + 'Blast'; }
