@@ -37,6 +37,8 @@ svg#map.tool{cursor:crosshair}
 #coast{fill:none;stroke:#000;stroke-width:1.5;stroke-linejoin:round;pointer-events:none}
 .lbl{font-family:"Eagle Lake",Georgia,serif;pointer-events:visiblePainted;cursor:pointer;fill:#14120c;paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:2.2px;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font-weight:700}
 .lbl.dark{fill:#f1ead6;stroke:rgba(0,0,0,.6)}
+/* GM editing: labels become real hit targets only while editing is enabled. */
+#map.gm-edit .lbl,#map.gm-edit .cont,#map.gm-edit .sea{pointer-events:visiblePainted;cursor:move;}
 .cont{font-family:"Eagle Lake",Georgia,serif;fill:#e8e0c5;opacity:.55;text-anchor:middle;letter-spacing:.35em;text-transform:uppercase;cursor:pointer;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px}
 .sea{font-family:"Eagle Lake",Georgia,serif;fill:#a9c6ea;opacity:.7;text-anchor:middle;text-transform:uppercase;cursor:pointer;font-weight:700}
 .bl{font-family:"Eagle Lake",Georgia,serif;pointer-events:visiblePainted;cursor:pointer;fill:#15110a;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2.4px;font-size:12px;font-weight:700;pointer-events:none;stroke-linejoin:round}
@@ -127,6 +129,7 @@ dialog h3{margin:0 0 6px;font:700 22px "Eagle Lake",serif;color:var(--gold2)}
     </div>
     <div id="gmbar">
       <span class="t">Game Master</span>
+      <span class="t">Drag existing map/sea/landmass labels to move · click to edit</span>
       <button class="b sm" id="tPlace" type="button">+ Place</button>
       <button class="b sm" id="tLabel" type="button">+ Label</button>
       <button class="b sm" id="tRegion" type="button">✎ Draw region</button>
@@ -267,14 +270,17 @@ function flyTo(mx,my,nk,ms){
 }
 function flyToBox(b,pad){var side=$('side').classList.contains('open')&&window.innerWidth>760?360:0;var w=Math.max(1,b.width),h=Math.max(1,b.height);var nk=Math.min((W)/(w*(1+pad)),(Hh)/(h*(1+pad)));flyTo(b.x+b.width/2,b.y+b.height/2,Math.min(nk,k0*60),600);}
 
-var ptrs={},lastPinch=0,downPos=null,moved=false;
+var ptrs={},lastPinch=0,downPos=null,moved=false,activeLabelDrag=null;
+function labelHit(target){if(!target||!target.closest)return null;var el=target.closest('text[data-k]');if(!el)return null;var key=el.getAttribute('data-k');if(!key||['s','c','l'].indexOf(key[0])<0)return null;return {el:el,key:key};}
 svg.addEventListener('pointerdown',function(e){
   if(anim)cancelAnimationFrame(anim);
+  if(gmOn&&!tool&&e.button===0){var hit=labelHit(e.target);if(hit){var pos=center(hit.key)||toMap(e);activeLabelDrag={el:hit.el,key:hit.key,startX:e.clientX,startY:e.clientY,x:pos[0],y:pos[1],moved:false};svg.setPointerCapture(e.pointerId);e.preventDefault();hideTip();return;}}
   svg.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
   if(Object.keys(ptrs).length===1){downPos={x:e.clientX,y:e.clientY};moved=false;}
   if(Object.keys(ptrs).length===2)lastPinch=0;
 });
 svg.addEventListener('pointermove',function(e){
+  if(activeLabelDrag){var d=activeLabelDrag,dx=(e.clientX-d.startX)/k,dy=(e.clientY-d.startY)/k;if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>2)d.moved=true;var nx=d.x+dx,ny=d.y+dy;var tr=d.el.getAttribute('transform')||'';var rot=(/rotate\(([-+0-9.]+)/.exec(tr)||[])[1]||'0';if(d.key[0]==='c'){d.el.setAttribute('x',nx);d.el.setAttribute('y',ny);d.el.setAttribute('transform',rot==='0'?'':'rotate('+rot+' '+nx+' '+ny+')');}else d.el.setAttribute('transform','translate('+nx+' '+ny+') rotate('+rot+')');return;}
   var p=ptrs[e.pointerId];
   if(!p){hover(e);return;}
   var ids=Object.keys(ptrs);
@@ -284,6 +290,7 @@ svg.addEventListener('pointermove',function(e){
     if(lastPinch)zoomAt(d/lastPinch,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);lastPinch=d;moved=true;}
 });
 function endPtr(e){
+  if(activeLabelDrag){var d=activeLabelDrag;activeLabelDrag=null;if(d.moved){var o=ov(d.key);o.x=d.x+(e.clientX-d.startX)/k;o.y=d.y+(e.clientY-d.startY)/k;saveLocal();rebuildAll();openCard(d.key);}else{openCard(d.key);}return;}
   var had=ptrs[e.pointerId];delete ptrs[e.pointerId];svg.classList.remove('drag');lastPinch=0;
   if(had&&!moved&&Object.keys(ptrs).length===0)clickAt(e);
 }
@@ -359,7 +366,7 @@ function ent(key){
   return e;
 }
 function center(key){var t=key[0],id=key.slice(1),e;
-  if(t==='s'&&SI[id]){var so=N.ov[key]||{},pts=SI[id].lab.p;if(so.x!=null&&so.y!=null)return [+so.x,+so.y];if(pts&&pts.length){var a=pts[0],b=pts[pts.length-1];return [(a[0]+b[0])/2,(a[1]+b[1])/2];}}if(t==='b'){var bo=N.ov[key]||{},bb=BI[id];return bb&&[bo.x==null?bb.x:+bo.x,bo.y==null?bb.y:+bo.y];}if(t==='m')return [MI[id].x,MI[id].y];if(t==='c')return [CI[id].x,CI[id].y];
+  if(t==='s'&&SI[id]){var so=N.ov[key]||{},pts=SI[id].lab.p;if(so.x!=null&&so.y!=null)return [+so.x,+so.y];if(pts&&pts.length){var a=pts[0],b=pts[pts.length-1];return [(a[0]+b[0])/2,(a[1]+b[1])/2];}}if(t==='b'){var bo=N.ov[key]||{},bb=BI[id];return bb&&[bo.x==null?bb.x:+bo.x,bo.y==null?bb.y:+bo.y];}if(t==='m')return [MI[id].x,MI[id].y];if(t==='c'){var co=N.ov[key]||{};return [co.x==null?CI[id].x:+co.x,co.y==null?CI[id].y:+co.y];}
   if(t==='p'){e=N.pins.filter(function(q){return q.id==='p'+id;})[0];return e&&[e.x,e.y];}
   if(t==='l'){e=N.labels.filter(function(q){return q.id==='l'+id;})[0];return e&&[e.x,e.y];}
   return null;}
@@ -455,8 +462,8 @@ $('gmBtn').onclick=function(){
   $('pwok').onclick=function(ev){ev.preventDefault();checkPass($('pw').value).then(function(ok){if(ok){$('dlg').close();enterGM();}else $('pwerr').textContent='Wrong passcode.';});};
   $('pw').onkeydown=function(ev){if(ev.key==='Enter'){ev.preventDefault();$('pwok').click();}};
 };
-function enterGM(){gmOn=true;lsSet('myosia.map.gm','1');var loc=lsGet('myosia.map.notes');if(loc){try{var o=normNotes(JSON.parse(loc));N=o;}catch(e){}}$('gmbar').classList.add('show');$('gmBtn').classList.add('on');$('gmBtn').textContent='GM ✓';saveLocal();rebuildAll();if(curKey)openCard(curKey);}
-function exitGM(){gmOn=false;lsSet('myosia.map.gm','0');setTool(null);$('gmbar').classList.remove('show');$('gmBtn').classList.remove('on');$('gmBtn').textContent='GM';$('dirty').hidden=true;N=normNotes(JSON.parse(JSON.stringify(repoN||blankNotes())));rebuildAll();if(curKey)openCard(curKey);}
+function enterGM(){gmOn=true;svg.classList.add('gm-edit');lsSet('myosia.map.gm','1');var loc=lsGet('myosia.map.notes');if(loc){try{var o=normNotes(JSON.parse(loc));N=o;}catch(e){}}$('gmbar').classList.add('show');$('gmBtn').classList.add('on');$('gmBtn').textContent='GM ✓';saveLocal();rebuildAll();if(curKey)openCard(curKey);}
+function exitGM(){gmOn=false;svg.classList.remove('gm-edit');lsSet('myosia.map.gm','0');setTool(null);$('gmbar').classList.remove('show');$('gmBtn').classList.remove('on');$('gmBtn').textContent='GM';$('dirty').hidden=true;N=normNotes(JSON.parse(JSON.stringify(repoN||blankNotes())));rebuildAll();if(curKey)openCard(curKey);}
 $('tExit').onclick=exitGM;
 $('tExport').onclick=function(){var b=new Blob([JSON.stringify(N,null,1)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='map-notes.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
   alert('Downloaded map-notes.json.\n\nTo publish your edits for everyone: upload this file to the root of your GitHub repo (replace the old one) and commit.');};
