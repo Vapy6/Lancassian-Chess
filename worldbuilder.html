@@ -1467,6 +1467,30 @@ $c('tdPlayAudio').addEventListener('click',async function(){if(!isGM()){status('
 $c('tdPauseAudio').addEventListener('click',async function(){if(!isGM())return;$c('tdAudio').pause();await broadcastPlayback('pause',selectedTrack)});
 $c('tdStopAudio').addEventListener('click',async function(){if(!isGM())return;var a=$c('tdAudio');a.pause();a.currentTime=0;await broadcastPlayback('stop',selectedTrack)});
 $c('tdLocalVolume').value=localStorage.getItem('myosia.local.volume')||'70';$c('tdAudio').volume=(+$c('tdLocalVolume').value)/100;$c('tdLocalVolumeValue').textContent=$c('tdLocalVolume').value+'%';$c('tdLocalVolume').addEventListener('input',function(){var v=+this.value;$c('tdAudio').volume=v/100;$c('tdLocalVolumeValue').textContent=v+'%';localStorage.setItem('myosia.local.volume',String(v))});
+async function loadCharacters(){
+  var el=$c('tdCharacterList');
+  if(!el)return;
+  if(!user||!campaign){el.textContent='Sign in and join a campaign to load your characters.';return;}
+  el.textContent='Loading characters…';
+  try{
+    var r=await ensureClient().from('character_sheets').select('id,name,fields,owner_id,created_at').eq('campaign_id',campaign.id).order('created_at',{ascending:false});
+    if(r.error)throw r.error;
+    var rows=r.data||[];el.textContent='';
+    if(!rows.length){el.textContent='No saved character sheets yet.';return;}
+    rows.forEach(function(ch){
+      var row=document.createElement('div');row.className='tdcharrow';
+      var open=document.createElement('button');open.type='button';open.className='btn sm';open.textContent=ch.name||'Unnamed character';
+      open.addEventListener('click',async function(){try{
+        $c('tdCharacterSection').classList.add('pdf-fullscreen');document.body.classList.add('myosia-pdf-workspace-open');$c('tdClosePdfWorkspace').hidden=false;
+        await new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})});
+        await ensurePdfTemplate();fieldValues=Object.assign({},ch.fields||{});currentCharacterId=ch.id;$c('tdCharacterNameCloud').value=ch.name||'';await buildPdfInputs();status('tdSheetStatus','Loaded saved character sheet. Changes are private until you save.');
+      }catch(e){status('tdSheetStatus','Could not open character: '+e.message,true)}});
+      row.appendChild(open);
+      if(ch.owner_id===user.id){var del=document.createElement('button');del.type='button';del.className='btn sm';del.textContent='Delete';del.addEventListener('click',async function(){if(!confirm('Permanently delete “'+(ch.name||'Unnamed character')+'”?'))return;try{var d=await ensureClient().from('character_sheets').delete().eq('id',ch.id).eq('owner_id',user.id);if(d.error)throw d.error;if(currentCharacterId===ch.id){currentCharacterId=null;fieldValues={};$c('tdCharacterNameCloud').value='';$c('tdPdfFields').textContent=''}await loadCharacters();status('tdSheetStatus','Character deleted.')}catch(e){status('tdSheetStatus','Delete failed: '+e.message,true)}});row.appendChild(del)}
+      el.appendChild(row);
+    });
+  }catch(e){el.textContent='Could not load characters: '+e.message;status('tdSheetStatus','Could not load characters: '+e.message,true)}
+}
 async function ensurePdfTemplate(){if(pdfTemplateBytes)return pdfTemplateBytes;var r=await fetch('./assets/dnd_5e_charactersheet_formfillable.pdf');if(!r.ok)throw new Error('Could not load assets/dnd_5e_charactersheet_formfillable.pdf.');pdfTemplateBytes=await r.arrayBuffer();var doc=await PDFLib.PDFDocument.load(pdfTemplateBytes);pdfFields=doc.getForm().getFields();pdfFields.forEach(function(f){pdfFieldKinds[f.getName()]=pdfFieldKind(f)});return pdfTemplateBytes}
 function fieldLabel(name){return name.replace(/\s+/g,' ').trim()||'(unnamed field)'}
 function pdfFieldKind(f){var n=f&&f.constructor&&f.constructor.name||'';if(/PDFButton/.test(n))return 'PDFButton';if(typeof f?.isChecked==='function'&&typeof f?.check==='function')return 'PDFCheckBox';if(typeof f?.getOptions==='function'&&typeof f?.select==='function')return (typeof f?.getSelected==='function'?'PDFRadioGroup':'PDFDropdown');if(typeof f?.getText==='function'&&typeof f?.setText==='function')return 'PDFTextField';if(PDFLib.PDFTextField&&f instanceof PDFLib.PDFTextField)return 'PDFTextField';if(PDFLib.PDFCheckBox&&f instanceof PDFLib.PDFCheckBox)return 'PDFCheckBox';if(PDFLib.PDFDropdown&&f instanceof PDFLib.PDFDropdown)return 'PDFDropdown';if(PDFLib.PDFOptionList&&f instanceof PDFLib.PDFOptionList)return 'PDFOptionList';if(PDFLib.PDFRadioGroup&&f instanceof PDFLib.PDFRadioGroup)return 'PDFRadioGroup';if(PDFLib.PDFButton&&f instanceof PDFLib.PDFButton)return 'PDFButton';return n}
