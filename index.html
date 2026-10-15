@@ -3223,7 +3223,7 @@ header { align-items: center; }
     var wrap = h('div', 'menu-wrap'), mb = h('button', 'btn menubtn', '☰'), pop = h('div', 'menu-pop');
     mb.type = 'button'; mb.setAttribute('aria-label', 'Menu'); mb.setAttribute('aria-haspopup', 'true'); mb.setAttribute('aria-expanded', 'false'); pop.hidden = true;
     [netBtn, pzBtn, bdBtn, catBtn, muteBtn].forEach(function (b) { pop.appendChild(b); });
-    var wbLink = h('a', 'btn', 'Myosia Worldbuilder'); wbLink.href = new URL('./worldbuilder.html', window.location.href).href; pop.appendChild(wbLink);
+    var wbLink = h('a', 'btn', 'Myosia Worldbuilder'); wbLink.href = new URL('./worldbuilder.html', window.location.href).href; pop.appendChild(wbLink); var mapLink = h('a', 'btn', 'Myosia World Map'); mapLink.href = new URL('./map.html', window.location.href).href; pop.appendChild(mapLink);
     wrap.appendChild(mb); wrap.appendChild(pop); document.querySelector('header').appendChild(wrap);
     function shut() { pop.hidden = true; mb.setAttribute('aria-expanded', 'false'); }
     mb.addEventListener('click', function (e) { e.stopPropagation(); pop.hidden = !pop.hidden; mb.setAttribute('aria-expanded', pop.hidden ? 'false' : 'true'); });
