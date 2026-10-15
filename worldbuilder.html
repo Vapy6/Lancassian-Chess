@@ -94,8 +94,8 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
  .side{border-left:0;border-top:1px solid var(--line)}
 }
 
-/* Table tools: lighting, shared lobby, chat, music and character sheets */
-#tableDock{position:absolute;right:10px;bottom:66px;z-index:8;width:min(340px,calc(100% - 20px));max-height:min(54vh,520px);overflow:auto;background:rgba(15,19,27,.96);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 8px 30px #0008;color:var(--fg)}
+/* Table tools: lighting, shared lobby, chat and music */
+#tableDock{position:absolute;right:10px;bottom:66px;z-index:8;width:min(340px,calc(100% - 20px));max-height:min(72vh,760px);overflow:auto;background:rgba(15,19,27,.96);border:1px solid var(--line);border-radius:12px;padding:10px;box-shadow:0 8px 30px #0008;color:var(--fg)}
 #tableDock[hidden]{display:none}#tableDock h3{font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 7px}
 #tableDock .tdsec{border-bottom:1px solid var(--line);padding:7px 0;display:flex;flex-direction:column;gap:7px}#tableDock .tdsec:last-child{border:0}
 #tableDock input[type=text],#tableDock textarea{width:100%;background:#0e1319;border:1px solid var(--line);border-radius:7px;padding:7px}
@@ -108,7 +108,15 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
 #tdDrop.drag{border-color:var(--accent);color:var(--fg);background:#f0b13a18}
 #tdStatus{font-size:11px;color:var(--muted)}#tdSheet{min-height:90px}
 #lightingOverlay{position:absolute;inset:0;z-index:2;pointer-events:none;transition:background .15s}
-@media(max-width:860px){#tableDock{bottom:58px;max-height:46vh}}
+@media(max-width:860px){#tableDock{bottom:58px;max-height:65vh}}
+
+
+#campaignDock{position:absolute;right:10px;bottom:66px;z-index:9;width:min(390px,calc(100% - 20px));max-height:min(78vh,820px);overflow:auto;background:rgba(15,19,27,.98);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 8px 30px #0008;color:var(--fg)}
+#campaignDock[hidden]{display:none}#campaignDock h3{font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin:0 0 7px}
+#campaignDock .tdsec{border-bottom:1px solid var(--line);padding:8px 0;display:flex;flex-direction:column;gap:8px}#campaignDock .tdsec:last-child{border:0}
+#campaignDock input[type=text],#campaignDock textarea{width:100%;background:#0e1319;border:1px solid var(--line);border-radius:7px;padding:7px;color:var(--fg)}
+#campaignDock .tdrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#campaignDock .tdrow>*{min-width:0}
+@media(max-width:860px){#campaignDock{bottom:58px;max-height:70vh}}
 
 /* Supabase cloud tools */
 #tdCloud{display:flex;flex-direction:column;gap:8px}#tdCloud input[type=email],#tdCloud input[type=password],#tdCloud input[type=text],#tdCloud select{width:100%;background:#0e1319;border:1px solid var(--line);border-radius:7px;padding:7px;color:var(--fg)}
@@ -151,6 +159,22 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
       <div class="tdsec"><h3>Player log / chat</h3><div id="tdChatLog" aria-live="polite"></div>
         <div class="tdrow"><input id="tdChatInput" type="text" maxlength="200" placeholder="Write a message…" style="flex:1"><button class="btn primary sm" id="tdSend" type="button">Send</button></div>
       </div>
+      <div class="tdsec"><h3>Shared ambient music</h3>
+        <div class="tdnote">The GM uploads and controls tracks. Players hear the shared track and adjust only their own volume.</div>
+        <input id="tdAudioFile" type="file" accept="audio/mpeg,.mp3,audio/mp4,audio/ogg,.wav" hidden>
+        <div class="tdrow"><input id="tdTrackTitle" type="text" maxlength="100" placeholder="Track title" style="flex:1"><button class="btn sm" id="tdUploadAudio" type="button" disabled>Upload track</button></div>
+        <div id="tdMusicList"><span class="muted">Sign in and join a campaign to load tracks.</span></div>
+        <div class="tdrow"><button class="btn sm" id="tdChooseAudio" type="button" disabled>Choose audio</button><button class="btn sm" id="tdPlayAudio" type="button" disabled>Play selected</button><button class="btn sm" id="tdPauseAudio" type="button" disabled>Pause</button><button class="btn sm" id="tdStopAudio" type="button" disabled>Stop</button></div>
+        <div class="tdrow"><label for="tdLocalVolume" class="muted">Your volume</label><input id="tdLocalVolume" type="range" min="0" max="100" value="70" style="flex:1"><span id="tdLocalVolumeValue">70%</span></div>
+        <audio id="tdAudio" preload="auto"></audio>
+        <div id="tdAudioStatus" class="tdstatus">Audio is not connected to a campaign.</div>
+      </div>
+
+    </div>
+    <div id="campaignDock" hidden>
+      <div class="tdsec"><div class="tdrow"><h3 style="margin:0;flex:1">Campaign & characters</h3><button class="btn sm" id="tdCampaignClose" type="button">Hide</button></div>
+        <div class="tdnote">Manage your account and campaign here. Table controls such as lighting, chat, and shared music remain in Table.</div>
+      </div>
       <div class="tdsec"><h3>Myosia cloud account</h3>
         <div id="tdCloud">
           <div class="tdnote">Sign in to use shared music and private character sheets. Create one campaign as GM; players join with its invite code.</div>
@@ -163,18 +187,8 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
           <div id="tdCampaignStatus" class="tdstatus">Sign in to create or join a campaign.</div>
         </div>
       </div>
-      <div class="tdsec"><h3>Shared ambient music</h3>
-        <div class="tdnote">The GM uploads and controls tracks. Players hear the shared track and adjust only their own volume.</div>
-        <input id="tdAudioFile" type="file" accept="audio/mpeg,.mp3,audio/mp4,audio/ogg,.wav" hidden>
-        <div class="tdrow"><input id="tdTrackTitle" type="text" maxlength="100" placeholder="Track title" style="flex:1"><button class="btn sm" id="tdUploadAudio" type="button" disabled>Upload track</button></div>
-        <div id="tdMusicList"><span class="muted">Sign in and join a campaign to load tracks.</span></div>
-        <div class="tdrow"><button class="btn sm" id="tdChooseAudio" type="button" disabled>Choose audio</button><button class="btn sm" id="tdPlayAudio" type="button" disabled>Play selected</button><button class="btn sm" id="tdPauseAudio" type="button" disabled>Pause</button><button class="btn sm" id="tdStopAudio" type="button" disabled>Stop</button></div>
-        <div class="tdrow"><label for="tdLocalVolume" class="muted">Your volume</label><input id="tdLocalVolume" type="range" min="0" max="100" value="70" style="flex:1"><span id="tdLocalVolumeValue">70%</span></div>
-        <audio id="tdAudio" preload="auto"></audio>
-        <div id="tdAudioStatus" class="tdstatus">Audio is not connected to a campaign.</div>
-      </div>
-      <div class="tdsec"><h3>Private D&D 5e character sheets</h3>
-        <div class="tdnote">Uses the supplied fillable 5e PDF template. Your sheets are private to you and your campaign GM. Save data to Supabase or export a filled PDF.</div>
+      <div class="tdsec" id="tdCharacterSection"><h3>Private D&D 5e character sheets</h3>
+        <div class="tdnote">Create your sheet here using the supplied fillable 5e PDF. First sign in above, then create a campaign as GM or join one with the GM’s invite code. Once you are in a campaign, select New sheet. Your saved sheets are private to you and the campaign GM.</div>
         <div class="tdrow"><button class="btn sm" id="tdNewCharacter" type="button" disabled>New sheet</button><button class="btn sm" id="tdLoadPdfFields" type="button" disabled>Load PDF fields</button><button class="btn primary sm" id="tdSaveCloudSheet" type="button" disabled>Save private sheet</button><button class="btn sm" id="tdExportPdf" type="button" disabled>Export filled PDF</button></div>
         <input id="tdCharacterNameCloud" type="text" maxlength="100" placeholder="Character name">
         <input id="tdPdfSearch" type="text" placeholder="Filter fields (e.g. Strength, spells)">
@@ -183,7 +197,7 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
         <div id="tdSheetStatus" class="tdstatus"></div>
       </div>
     </div>
-    <div class="zoombar"><button class="btn sm" id="zIn" type="button" aria-label="Zoom in">+</button><button class="btn sm" id="zOut" type="button" aria-label="Zoom out">−</button><button class="btn sm" id="zFit" type="button">Fit</button><button class="btn sm" id="tdToggle" type="button">Table</button></div>
+    <div class="zoombar"><button class="btn sm" id="zIn" type="button" aria-label="Zoom in">+</button><button class="btn sm" id="zOut" type="button" aria-label="Zoom out">−</button><button class="btn sm" id="zFit" type="button">Fit</button><button class="btn sm" id="tdToggle" type="button">Table</button><button class="btn sm" id="tdCharactersToggle" type="button">Campaign</button></div>
     <div id="palette" hidden></div>
   </section>
   <aside class="side">
@@ -1371,8 +1385,10 @@ function tdRenderPeople(){var el=$('tdPeople');if(!el)return;el.textContent='';v
 function tdLightApply(broadcast){var mode=$('tdLightMode').value,level=+$('tdLightLevel').value,ov=$('lightingOverlay');$('tdLightVal').textContent=level+'%';var a=level/100;ov.style.background=mode==='normal'?'transparent':mode==='dim'?'rgba(0,0,12,'+(0.12+a*.42)+')':mode==='night'?'rgba(0,12,42,'+(0.22+a*.62)+')':mode==='blackout'?'rgba(0,0,0,'+(0.6+a*.39)+')':'radial-gradient(circle at 50% 50%, transparent '+(10+level*.5)+'%, rgba(0,0,0,'+(0.45+a*.5)+') 100%)';if(broadcast&&online&&online.role==='gm')netSend({t:'light',mode:mode,level:level})}
 function tdLoadSheet(){var all={};try{all=JSON.parse(tdGet(TD_SHEET_KEY,'{}'))||{}}catch(e){}var sh=all[tdIdentity.id];if(sh){$('tdCharName').value=sh.name||'';$('tdSheet').value=sh.body||''}}
 function tdSaveSheet(){var all={};try{all=JSON.parse(tdGet(TD_SHEET_KEY,'{}'))||{}}catch(e){}all[tdIdentity.id]={name:$('tdCharName').value.slice(0,80),body:$('tdSheet').value.slice(0,30000),updated:new Date().toISOString()};if(tdSet(TD_SHEET_KEY,JSON.stringify(all)))$('tdSheetStatus').textContent='Saved on this device.';else $('tdSheetStatus').textContent='Could not save; browser storage may be full.'}
-$('tdToggle').addEventListener('click',function(){$('tableDock').hidden=!$('tableDock').hidden;if(!$('tableDock').hidden){$('tdName').value=tdName();tdRenderPeople();}});
+$('tdToggle').addEventListener('click',function(){$('campaignDock').hidden=true;$('tableDock').hidden=!$('tableDock').hidden;if(!$('tableDock').hidden){$('tdName').value=tdName();tdRenderPeople();}});
+$('tdCharactersToggle').addEventListener('click',function(){$('tableDock').hidden=true;$('campaignDock').hidden=false;var section=$('tdCharacterSection');if(section){section.scrollIntoView({block:'start',behavior:'smooth'});}});
 $('tdClose').addEventListener('click',function(){$('tableDock').hidden=true});
+$('tdCampaignClose').addEventListener('click',function(){$('campaignDock').hidden=true});
 $('tdRename').addEventListener('click',function(){tdSetName($('tdName').value);if(online&&online.role==='gm')netSend({t:'renamegm',name:tdName()});tdChatAdd('System','Your display name is now '+tdName()+'.')});
 $('tdLightMode').addEventListener('change',function(){tdLightApply(true)});$('tdLightLevel').addEventListener('input',function(){tdLightApply(true)});
 $('tdSend').addEventListener('click',function(){var tx=$('tdChatInput').value.trim();if(!tx)return;$('tdChatInput').value='';tdChatAdd(tdName(),tx);if(online)netSend({t:'tablechat',name:tdName(),text:tx});else tdChatAdd('System','Chat is local until you join a table.')});

@@ -32,20 +32,21 @@ The chess page links to ./worldbuilder.html and the worldbuilder links back to .
 FEATURES
 - Chess engine, multiplayer room links, and spectator mode.
 - Myosia Worldbuilder (worldbuilder.html).
-- Table tools added in the enhanced version: lighting, local player identity, chat panel, local MP3 playback, and local character-sheet editor.
-- Player numbers are local to each browser. Shared MP3 hosting and durable cross-device player/sheet storage need backend support.
+- Table contains table-side controls: lighting, player identity, lobby/chat, and shared ambient music.
+- The separate Campaign button opens account sign-in, campaign setup/joining, and private D&D 5e character sheets.
 
 
 MYOSIA CLOUD FEATURES (SUPABASE)
 1. In your Supabase project, open SQL Editor > New query. Open supabase-setup.sql from this package, paste all of it, and run it.
 2. In Authentication > URL Configuration, add https://vapy6.github.io to the allowed redirect URLs (or the exact GitHub Pages URL for this repository). For email confirmation, use the link sent to each account.
 3. Upload every file and folder in this package to the repository root. Include the assets/ folder; it contains the fillable D&D 5e PDF template.
-4. Open worldbuilder.html > Table. Each person creates an account. The GM clicks Create campaign and shares the invite code. Players sign in and enter that code under Join campaign.
-5. The GM uploads music and uses Play/Pause/Stop. Players use the same campaign to hear it; the volume slider is local to each browser. Each player creates and saves their own private sheet. The GM can see sheets belonging to members of that campaign.
+4. Open worldbuilder.html. Click Campaign beside Table to sign in and manage campaign access. Each person creates an account. The GM clicks Create campaign and shares the invite code. Players sign in and enter that code under Join campaign.
+5. In Campaign, use the character-sheet section to click New sheet, fill in fields, and click Save private sheet. Export filled PDF downloads a copy. The GM can see sheets belonging to members of that campaign. Shared music remains in Table, but requires a signed-in account that has joined a campaign.
+6. The GM uploads music and uses Play/Pause/Stop. Players in the same campaign hear the shared track; the volume slider is local to each browser.
 
 SECURITY AND LIMITS
 - The Supabase publishable key is included in the browser code by design. Database and Storage access is protected by the RLS policies in supabase-setup.sql; never add a service_role or secret key to this website.
-- This package has not run the SQL against your project. The cloud features will not work until you run the setup SQL.
+- This package does not run SQL against your project automatically. The cloud features require the setup SQL to be run in the Supabase SQL Editor.
 - The supplied PDF template is included. The field editor dynamically exposes its fillable PDF fields and exports a filled PDF. Image/button fields are not editable in this browser form.
 - Shared audio uses a private Storage bucket and signed URLs. Browsers may require each player to click once before audio can start. Audio sync uses realtime broadcast timing and may vary slightly across networks.
 - Campaign membership is currently one active campaign at a time in this panel. Share the code only with players you want in the campaign.
