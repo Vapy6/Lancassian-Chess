@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Myosia · World Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Almendra:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Eagle+Lake&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0e121a;--panel:#161b26;--panel2:#1d2433;--line:#2c364b;--ink:#ece6d6;--mute:#9aa3b5;--gold:#dcb468;--gold2:#f2d089;--red:#d9625a;--ocean:#0a2347}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
-.fancy{font-family:Almendra,Georgia,serif}
+.fancy{font-family:"Eagle Lake",Georgia,serif}
 header{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);height:52px}
 header h1{margin:0;font-size:20px;letter-spacing:.5px;color:var(--gold2);white-space:nowrap}
 header .sp{flex:1}
@@ -35,11 +35,11 @@ svg#map.tool{cursor:crosshair}
 .st{stroke:rgba(0,0,0,.45);stroke-width:.7;cursor:pointer;transition:filter .12s}
 .st:hover{filter:brightness(1.13)}
 #coast{fill:none;stroke:#000;stroke-width:1.5;stroke-linejoin:round;pointer-events:none}
-.lbl{font-family:Almendra,Georgia,serif;fill:#14120c;paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:2.2px;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font-weight:700}
+.lbl{font-family:"Eagle Lake",Georgia,serif;fill:#14120c;paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:2.2px;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font-weight:700}
 .lbl.dark{fill:#f1ead6;stroke:rgba(0,0,0,.6)}
-.cont{font-family:Almendra,Georgia,serif;fill:#e8e0c5;opacity:.55;text-anchor:middle;letter-spacing:.35em;text-transform:uppercase;cursor:pointer;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px}
-.sea{font-family:Almendra,Georgia,serif;fill:#a9c6ea;opacity:.7;text-anchor:middle;text-transform:uppercase;cursor:pointer;font-weight:700}
-.bl{font-family:Almendra,Georgia,serif;fill:#15110a;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2.4px;font-size:12px;font-weight:700;pointer-events:none;stroke-linejoin:round}
+.cont{font-family:"Eagle Lake",Georgia,serif;fill:#e8e0c5;opacity:.55;text-anchor:middle;letter-spacing:.35em;text-transform:uppercase;cursor:pointer;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px}
+.sea{font-family:"Eagle Lake",Georgia,serif;fill:#a9c6ea;opacity:.7;text-anchor:middle;text-transform:uppercase;cursor:pointer;font-weight:700}
+.bl{font-family:"Eagle Lake",Georgia,serif;fill:#15110a;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2.4px;font-size:12px;font-weight:700;pointer-events:none;stroke-linejoin:round}
 .bdot{cursor:pointer}
 .mk{cursor:pointer;font-size:17px;text-anchor:middle;filter:drop-shadow(0 1px 1px #000)}
 .river{fill:none;stroke:#3d86a8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
@@ -52,7 +52,7 @@ svg#map.tool{cursor:crosshair}
 .reg{cursor:pointer;opacity:.5;stroke-dasharray:6 3;stroke-width:1.4}
 .sel{fill:none;stroke:#fff;stroke-width:2.6;pointer-events:none;filter:drop-shadow(0 0 4px #000)}
 #drawing{fill:rgba(255,215,120,.2);stroke:var(--gold2);stroke-width:2;stroke-dasharray:6 3;pointer-events:none}
-#tip{position:fixed;pointer-events:none;background:rgba(10,12,18,.92);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;z-index:50;display:none;font-family:Almendra,Georgia,serif}
+#tip{position:fixed;pointer-events:none;background:rgba(10,12,18,.92);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;z-index:50;display:none;font-family:"Eagle Lake",Georgia,serif}
 #hud{position:absolute;left:10px;bottom:10px;display:flex;gap:8px;align-items:center;pointer-events:none;flex-wrap:wrap}
 #hud .chip{background:rgba(14,18,26,.82);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px}
 #scale{display:flex;align-items:center;gap:6px}
@@ -61,14 +61,14 @@ svg#map.tool{cursor:crosshair}
 #zoomBtns button{width:38px;height:38px;font-size:18px;padding:0}
 #gmbar{position:absolute;left:10px;top:10px;display:none;flex-wrap:wrap;gap:6px;max-width:calc(100% - 20px);background:rgba(14,18,26,.9);border:1px solid var(--gold);border-radius:10px;padding:7px;z-index:10}
 #gmbar.show{display:flex}
-#gmbar .t{color:var(--gold2);font-family:Almendra,serif;align-self:center;padding:0 6px}
+#gmbar .t{color:var(--gold2);font-family:"Eagle Lake",serif;align-self:center;padding:0 6px}
 #toolhint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--gold);color:#201808;padding:6px 14px;border-radius:999px;font-weight:600;display:none;z-index:11;text-align:center}
 #layers{position:absolute;right:10px;top:10px;background:rgba(14,18,26,.92);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:none;z-index:12}
 #layers label{display:block;padding:2px 0;cursor:pointer}
 aside{width:360px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);overflow:auto;display:none;flex:none}
 aside.open{display:block}
 .card{padding:14px 16px 24px}
-.card h2{margin:0 0 2px;font:700 26px Almendra,Georgia,serif;color:var(--gold2);line-height:1.15}
+.card h2{margin:0 0 2px;font:700 26px "Eagle Lake",Georgia,serif;color:var(--gold2);line-height:1.15}
 .card .sub{color:var(--mute);margin-bottom:10px}
 .card .crest{display:block;max-width:100%;max-height:230px;margin:6px auto 12px;border-radius:8px;border:1px solid var(--line)}
 .card table{width:100%;border-collapse:collapse;margin:8px 0}
@@ -90,8 +90,8 @@ aside.open{display:block}
 dialog{background:var(--panel);color:var(--ink);border:1px solid var(--gold);border-radius:12px;padding:18px;max-width:92vw;width:380px}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:8px;font:inherit;margin:8px 0}
-dialog h3{margin:0 0 6px;font:700 22px Almendra,serif;color:var(--gold2)}
-#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:22px Almendra,serif;color:var(--gold2);background:var(--ocean);z-index:20}
+dialog h3{margin:0 0 6px;font:700 22px "Eagle Lake",serif;color:var(--gold2)}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:22px "Eagle Lake",serif;color:var(--gold2);background:var(--ocean);z-index:20}
 @media (max-width:760px){
  header h1{font-size:16px}#search input{width:110px}header .nav.hide-m{display:none}
  aside{position:fixed;left:0;right:0;bottom:0;width:100%;max-height:58vh;border-left:none;border-top:2px solid var(--gold);border-radius:14px 14px 0 0;z-index:25}
