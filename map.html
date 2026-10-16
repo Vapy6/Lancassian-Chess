@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Myosia · World Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Almendra:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Eagle+Lake&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0e121a;--panel:#161b26;--panel2:#1d2433;--line:#2c364b;--ink:#ece6d6;--mute:#9aa3b5;--gold:#dcb468;--gold2:#f2d089;--red:#d9625a;--ocean:#0a2347}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
-.fancy{font-family:Almendra,Georgia,serif}
+.fancy{font-family:"Eagle Lake",Georgia,serif}
 header{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);height:52px}
 header h1{margin:0;font-size:20px;letter-spacing:.5px;color:var(--gold2);white-space:nowrap}
 header .sp{flex:1}
@@ -35,11 +35,13 @@ svg#map.tool{cursor:crosshair}
 .st{stroke:rgba(0,0,0,.45);stroke-width:.7;cursor:pointer;transition:filter .12s}
 .st:hover{filter:brightness(1.13)}
 #coast{fill:none;stroke:#000;stroke-width:1.5;stroke-linejoin:round;pointer-events:none}
-.lbl{font-family:Almendra,Georgia,serif;fill:#14120c;paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:2.2px;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font-weight:700}
+.lbl{font-family:"Eagle Lake",Georgia,serif;pointer-events:visiblePainted;cursor:pointer;fill:#14120c;paint-order:stroke;stroke:rgba(255,255,255,.55);stroke-width:2.2px;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font-weight:700}
 .lbl.dark{fill:#f1ead6;stroke:rgba(0,0,0,.6)}
-.cont{font-family:Almendra,Georgia,serif;fill:#e8e0c5;opacity:.55;text-anchor:middle;letter-spacing:.35em;text-transform:uppercase;cursor:pointer;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px}
-.sea{font-family:Almendra,Georgia,serif;fill:#a9c6ea;opacity:.7;text-anchor:middle;text-transform:uppercase;cursor:pointer;font-weight:700}
-.bl{font-family:Almendra,Georgia,serif;fill:#15110a;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2.4px;font-size:12px;font-weight:700;pointer-events:none;stroke-linejoin:round}
+/* GM editing: labels become real hit targets only while editing is enabled. */
+#map.gm-edit .lbl,#map.gm-edit .cont,#map.gm-edit .sea{pointer-events:visiblePainted;cursor:move;}
+.cont{font-family:"Eagle Lake",Georgia,serif;fill:#e8e0c5;opacity:.55;text-anchor:middle;letter-spacing:.35em;text-transform:uppercase;cursor:pointer;font-weight:700;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px}
+.sea{font-family:"Eagle Lake",Georgia,serif;fill:#a9c6ea;opacity:.7;text-anchor:middle;text-transform:uppercase;cursor:pointer;font-weight:700}
+.bl{font-family:"Eagle Lake",Georgia,serif;pointer-events:visiblePainted;cursor:pointer;fill:#15110a;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2.4px;font-size:12px;font-weight:700;pointer-events:none;stroke-linejoin:round}
 .bdot{cursor:pointer}
 .mk{cursor:pointer;font-size:17px;text-anchor:middle;filter:drop-shadow(0 1px 1px #000)}
 .river{fill:none;stroke:#3d86a8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
@@ -52,7 +54,7 @@ svg#map.tool{cursor:crosshair}
 .reg{cursor:pointer;opacity:.5;stroke-dasharray:6 3;stroke-width:1.4}
 .sel{fill:none;stroke:#fff;stroke-width:2.6;pointer-events:none;filter:drop-shadow(0 0 4px #000)}
 #drawing{fill:rgba(255,215,120,.2);stroke:var(--gold2);stroke-width:2;stroke-dasharray:6 3;pointer-events:none}
-#tip{position:fixed;pointer-events:none;background:rgba(10,12,18,.92);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;z-index:50;display:none;font-family:Almendra,Georgia,serif}
+#tip{position:fixed;pointer-events:none;background:rgba(10,12,18,.92);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12.5px;z-index:50;display:none;font-family:"Eagle Lake",Georgia,serif}
 #hud{position:absolute;left:10px;bottom:10px;display:flex;gap:8px;align-items:center;pointer-events:none;flex-wrap:wrap}
 #hud .chip{background:rgba(14,18,26,.82);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px}
 #scale{display:flex;align-items:center;gap:6px}
@@ -61,14 +63,14 @@ svg#map.tool{cursor:crosshair}
 #zoomBtns button{width:38px;height:38px;font-size:18px;padding:0}
 #gmbar{position:absolute;left:10px;top:10px;display:none;flex-wrap:wrap;gap:6px;max-width:calc(100% - 20px);background:rgba(14,18,26,.9);border:1px solid var(--gold);border-radius:10px;padding:7px;z-index:10}
 #gmbar.show{display:flex}
-#gmbar .t{color:var(--gold2);font-family:Almendra,serif;align-self:center;padding:0 6px}
+#gmbar .t{color:var(--gold2);font-family:"Eagle Lake",serif;align-self:center;padding:0 6px}
 #toolhint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--gold);color:#201808;padding:6px 14px;border-radius:999px;font-weight:600;display:none;z-index:11;text-align:center}
 #layers{position:absolute;right:10px;top:10px;background:rgba(14,18,26,.92);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:none;z-index:12}
 #layers label{display:block;padding:2px 0;cursor:pointer}
 aside{width:360px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);overflow:auto;display:none;flex:none}
 aside.open{display:block}
 .card{padding:14px 16px 24px}
-.card h2{margin:0 0 2px;font:700 26px Almendra,Georgia,serif;color:var(--gold2);line-height:1.15}
+.card h2{margin:0 0 2px;font:700 26px "Eagle Lake",Georgia,serif;color:var(--gold2);line-height:1.15}
 .card .sub{color:var(--mute);margin-bottom:10px}
 .card .crest{display:block;max-width:100%;max-height:230px;margin:6px auto 12px;border-radius:8px;border:1px solid var(--line)}
 .card table{width:100%;border-collapse:collapse;margin:8px 0}
@@ -90,8 +92,8 @@ aside.open{display:block}
 dialog{background:var(--panel);color:var(--ink);border:1px solid var(--gold);border-radius:12px;padding:18px;max-width:92vw;width:380px}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:8px;font:inherit;margin:8px 0}
-dialog h3{margin:0 0 6px;font:700 22px Almendra,serif;color:var(--gold2)}
-#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:22px Almendra,serif;color:var(--gold2);background:var(--ocean);z-index:20}
+dialog h3{margin:0 0 6px;font:700 22px "Eagle Lake",serif;color:var(--gold2)}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:22px "Eagle Lake",serif;color:var(--gold2);background:var(--ocean);z-index:20}
 @media (max-width:760px){
  header h1{font-size:16px}#search input{width:110px}header .nav.hide-m{display:none}
  aside{position:fixed;left:0;right:0;bottom:0;width:100%;max-height:58vh;border-left:none;border-top:2px solid var(--gold);border-radius:14px 14px 0 0;z-index:25}
@@ -127,6 +129,7 @@ dialog h3{margin:0 0 6px;font:700 22px Almendra,serif;color:var(--gold2)}
     </div>
     <div id="gmbar">
       <span class="t">Game Master</span>
+      <span class="t">Drag existing map/sea/landmass labels to move · click to edit</span>
       <button class="b sm" id="tPlace" type="button">+ Place</button>
       <button class="b sm" id="tLabel" type="button">+ Label</button>
       <button class="b sm" id="tRegion" type="button">✎ Draw region</button>
@@ -179,7 +182,7 @@ var burgRank={};M.burgs.slice().sort(function(a,b){return b.pop-a.pop;}).forEach
 /* ---------- build the map ---------- */
 var svg=$('map'),vp=$('vp');
 var gDepth=S('g',{id:'gDepth'},vp);
-[[44,'#0d2c55'],[30,'#133a69'],[19,'#1e4d7d'],[10,'#33699b'],[4,'#4f85b2']].forEach(function(b){var q=S('path',{d:M.land,fill:'none',stroke:b[1],'stroke-width':b[0],'stroke-linejoin':'round','fill-rule':'evenodd'},gDepth);q.style.vectorEffect='none';q.setAttribute('pointer-events','none');});
+[[112,'#12345d',.16],[88,'#17416f',.20],[66,'#20517f',.25],[46,'#2a6390',.30],[29,'#3675a0',.32],[15,'#4c88b1',.34],[5,'#6698bb',.28]].forEach(function(b){var q=S('path',{d:M.land,fill:'none',stroke:b[1],'stroke-opacity':b[2],'stroke-width':b[0],'stroke-linejoin':'round','stroke-linecap':'round','fill-rule':'evenodd'},gDepth);q.style.vectorEffect='none';q.setAttribute('pointer-events','none');});
 S('path',{d:M.land,fill:'#f4f2ec','fill-rule':'evenodd'},vp);
 var gBorders=S('g',{id:'gBorders'},vp);
 var stEl={};
@@ -207,7 +210,7 @@ function buildStateLabels(){
     var pxArea=s.area/(M.scale*M.scale);
     if(pts.length>=2){var a=pts[0],b=pts[pts.length-1],len=Math.hypot(b[0]-a[0],b[1]-a[1]);cx=(a[0]+b[0])/2;cy=(a[1]+b[1])/2;ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;fs=Math.min(.7*len/(mx*.5),Math.sqrt(pxArea)*.55);}
     else{cx=pts[0][0];cy=pts[0][1];fs=Math.min(Math.sqrt(pxArea)*.7/(mx*.5),9);}
-    if(ang>90)ang-=180;if(ang<-90)ang+=180;fs=Math.max(1.6,Math.min(46,fs));
+    if(ang>90)ang-=180;if(ang<-90)ang+=180;fs=Math.max(1.6,Math.min(46,fs));if(o.x!=null)cx=+o.x;if(o.y!=null)cy=+o.y;if(o.rot!=null)ang=+o.rot;if(o.fs!=null)fs=+o.fs;
     var t=S('text',{'class':'lbl'+'',transform:'translate('+cx+' '+cy+') rotate('+ang+')','font-size':fs,'stroke-width':Math.max(.6,fs*.08)},gLabels);
     t.style.vectorEffect='none';
     lines.forEach(function(l,i){var ts=S('tspan',{x:0,dy:i?'1em':(-(lines.length-1)*.5+.35)+'em'},t);ts.textContent=l.trim();});
@@ -219,11 +222,11 @@ function applyStateColors(){M.states.forEach(function(s){var o=N.ov['s'+s.id];st
 /* continent + sea labels (editable by the GM) */
 function buildContinents(){
   gCont.innerHTML='';
-  M.continents.forEach(function(c){var o=N.ov['c'+c.id]||{};if(o.hide)return;var t=S('text',{'class':'cont',x:c.x,y:c.y,'font-size':26,'data-k':'c'+c.id},gCont);t.style.vectorEffect='none';t.setAttribute('stroke-width',1);t.textContent=o.name||c.name;});
+  M.continents.forEach(function(c){var o=N.ov['c'+c.id]||{};if(o.hide)return;var cx=o.x==null?c.x:o.x,cy=o.y==null?c.y:o.y;var t=S('text',{'class':'cont',x:cx,y:cy,'font-size':o.fs||26,transform:o.rot?'rotate('+o.rot+' '+cx+' '+cy+')':null,'data-k':'c'+c.id},gCont);t.style.vectorEffect='none';t.setAttribute('stroke-width',1);t.textContent=o.name||c.name;});
 }
 function buildSea(){
   gSea.innerHTML='';
-  N.labels.forEach(function(l){var t=S('text',{'class':'sea',transform:'translate('+l.x+' '+l.y+') rotate('+(l.rot||0)+')','font-size':l.fs||14,'letter-spacing':(l.sp||10)+'px','data-k':'l'+l.id.slice(1)},gSea);t.style.vectorEffect='none';t.textContent=(N.ov['l'+l.id.slice(1)]||{}).name||l.t;t.setAttribute('stroke-width',0);});
+  N.labels.forEach(function(l){var o=N.ov['l'+l.id.slice(1)]||{},x=o.x==null?l.x:o.x,y=o.y==null?l.y:o.y,rot=o.rot==null?(l.rot||0):o.rot,fs=o.fs||l.fs||14,sp=o.sp==null?(l.sp||10):o.sp;var t=S('text',{'class':'sea',transform:'translate('+x+' '+y+') rotate('+rot+')','font-size':fs,'letter-spacing':sp+'px','data-k':'l'+l.id.slice(1)},gSea);t.style.vectorEffect='none';t.textContent=o.name||l.t;t.setAttribute('stroke-width',0);});
 }
 
 /* settlements */
@@ -231,12 +234,12 @@ var burgEl={};
 function buildBurgs(){
   gBurgs.innerHTML='';burgEl={};
   M.burgs.forEach(function(b){
-    var g=S('g',{transform:'translate('+b.x+' '+b.y+')','data-k':'b'+b.id},gBurgs), in_=S('g',null,g);
+    var o=N.ov['b'+b.id]||{}, bx=o.x==null?b.x:o.x, by=o.y==null?b.y:o.y;var g=S('g',{transform:'translate('+bx+' '+by+')','data-k':'b'+b.id},gBurgs), in_=S('g',null,g);
     var r=b.cap?4.4:2.6;
     S('circle',{r:9,fill:'transparent','class':'bdot'},in_);
     if(b.cap){S('circle',{r:r+1.6,fill:'#fff',stroke:'#000','stroke-width':1.2,'class':'bdot'},in_);S('circle',{r:r-1,fill:'#c1272d',stroke:'#000','stroke-width':.8,'class':'bdot'},in_);}
     else S('circle',{r:r,fill:'#3b2a18',stroke:'#fff','stroke-width':1,'class':'bdot'},in_);
-    var t=S('text',{'class':'bl',x:r+4,y:4},in_);t.style.vectorEffect='none';t.textContent=((N.ov['b'+b.id]||{}).name)||b.name;
+    var t=S('text',{'class':'bl',x:o.tx==null?r+4:o.tx,y:o.ty==null?4:o.ty,'font-size':o.fs||12,transform:o.rot?'rotate('+o.rot+' '+(o.tx==null?r+4:o.tx)+' '+(o.ty==null?4:o.ty)+')':null},in_);t.style.vectorEffect='none';t.textContent=((N.ov['b'+b.id]||{}).name)||b.name;
     burgEl[b.id]={g:g,in:in_,cap:b.cap,rank:burgRank[b.id],t:t};
   });
 }
@@ -267,14 +270,17 @@ function flyTo(mx,my,nk,ms){
 }
 function flyToBox(b,pad){var side=$('side').classList.contains('open')&&window.innerWidth>760?360:0;var w=Math.max(1,b.width),h=Math.max(1,b.height);var nk=Math.min((W)/(w*(1+pad)),(Hh)/(h*(1+pad)));flyTo(b.x+b.width/2,b.y+b.height/2,Math.min(nk,k0*60),600);}
 
-var ptrs={},lastPinch=0,downPos=null,moved=false;
+var ptrs={},lastPinch=0,downPos=null,moved=false,activeLabelDrag=null;
+function labelHit(target){if(!target||!target.closest)return null;var el=target.closest('text[data-k]');if(!el)return null;var key=el.getAttribute('data-k');if(!key||['s','c','l'].indexOf(key[0])<0)return null;return {el:el,key:key};}
 svg.addEventListener('pointerdown',function(e){
   if(anim)cancelAnimationFrame(anim);
+  if(gmOn&&!tool&&e.button===0){var hit=labelHit(e.target);if(hit){var pos=center(hit.key)||toMap(e);activeLabelDrag={el:hit.el,key:hit.key,startX:e.clientX,startY:e.clientY,x:pos[0],y:pos[1],moved:false};svg.setPointerCapture(e.pointerId);e.preventDefault();hideTip();return;}}
   svg.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
   if(Object.keys(ptrs).length===1){downPos={x:e.clientX,y:e.clientY};moved=false;}
   if(Object.keys(ptrs).length===2)lastPinch=0;
 });
 svg.addEventListener('pointermove',function(e){
+  if(activeLabelDrag){var d=activeLabelDrag,dx=(e.clientX-d.startX)/k,dy=(e.clientY-d.startY)/k;if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>2)d.moved=true;var nx=d.x+dx,ny=d.y+dy;var tr=d.el.getAttribute('transform')||'';var rot=(/rotate\(([-+0-9.]+)/.exec(tr)||[])[1]||'0';if(d.key[0]==='c'){d.el.setAttribute('x',nx);d.el.setAttribute('y',ny);d.el.setAttribute('transform',rot==='0'?'':'rotate('+rot+' '+nx+' '+ny+')');}else d.el.setAttribute('transform','translate('+nx+' '+ny+') rotate('+rot+')');return;}
   var p=ptrs[e.pointerId];
   if(!p){hover(e);return;}
   var ids=Object.keys(ptrs);
@@ -284,6 +290,7 @@ svg.addEventListener('pointermove',function(e){
     if(lastPinch)zoomAt(d/lastPinch,(a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top);lastPinch=d;moved=true;}
 });
 function endPtr(e){
+  if(activeLabelDrag){var d=activeLabelDrag;activeLabelDrag=null;if(d.moved){var o=ov(d.key);o.x=d.x+(e.clientX-d.startX)/k;o.y=d.y+(e.clientY-d.startY)/k;saveLocal();rebuildAll();openCard(d.key);}else{openCard(d.key);}return;}
   var had=ptrs[e.pointerId];delete ptrs[e.pointerId];svg.classList.remove('drag');lastPinch=0;
   if(had&&!moved&&Object.keys(ptrs).length===0)clickAt(e);
 }
@@ -359,7 +366,7 @@ function ent(key){
   return e;
 }
 function center(key){var t=key[0],id=key.slice(1),e;
-  if(t==='b')return [BI[id].x,BI[id].y];if(t==='m')return [MI[id].x,MI[id].y];if(t==='c')return [CI[id].x,CI[id].y];
+  if(t==='s'&&SI[id]){var so=N.ov[key]||{},pts=SI[id].lab.p;if(so.x!=null&&so.y!=null)return [+so.x,+so.y];if(pts&&pts.length){var a=pts[0],b=pts[pts.length-1];return [(a[0]+b[0])/2,(a[1]+b[1])/2];}}if(t==='b'){var bo=N.ov[key]||{},bb=BI[id];return bb&&[bo.x==null?bb.x:+bo.x,bo.y==null?bb.y:+bo.y];}if(t==='m')return [MI[id].x,MI[id].y];if(t==='c'){var co=N.ov[key]||{};return [co.x==null?CI[id].x:+co.x,co.y==null?CI[id].y:+co.y];}
   if(t==='p'){e=N.pins.filter(function(q){return q.id==='p'+id;})[0];return e&&[e.x,e.y];}
   if(t==='l'){e=N.labels.filter(function(q){return q.id==='l'+id;})[0];return e&&[e.x,e.y];}
   return null;}
@@ -387,7 +394,7 @@ function openCard(key,fromSearch){
   if(lk.length){c.appendChild(H('h4',null,'Maps & links'));var r0=H('div','row');lk.forEach(function(l){var u=safeUrl(l.u);if(!u)return;var a=H('a','nav',l.t);a.href=u;a.target=/^https?:/i.test(u)?'_blank':'_self';a.rel='noopener';r0.appendChild(a);});c.appendChild(r0);}
   if(e.rel&&e.rel.length){c.appendChild(H('h4',null,'Relations'));var d=H('div');e.rel.forEach(function(r){var p=H('span','pill',r.t);if(r.k)p.onclick=function(){goTo(r.k);};d.appendChild(p);});c.appendChild(d);}
   if(e.towns&&e.towns.length){c.appendChild(H('h4',null,'Largest settlements'));var d2=H('div');e.towns.forEach(function(r){var p=H('span','pill',r.t);p.onclick=function(){goTo(r.k);};d2.appendChild(p);});c.appendChild(d2);}
-  if(gmOn){var rw=H('div','row');var eb=H('button','b pri','Edit');eb.onclick=function(){editCard(key);};rw.appendChild(eb);c.appendChild(rw);}
+  if(gmOn){var rw=H('div','row');var eb=H('button','b pri','Edit label / entry');eb.onclick=function(){editCard(key);};rw.appendChild(eb);c.appendChild(rw);}
   fitSoon();
 }
 function closeCard(){$('side').classList.remove('open');$('side').innerHTML='';curKey=null;highlight(null);fitSoon();}
@@ -401,7 +408,8 @@ function editCard(key){
   if(e.type==='s'||e.type==='r'||e.type==='z'){var ci=H('input');ci.type='color';ci.value=/^#[0-9a-f]{6}$/i.test(e.color||'')?e.color:'#ffd27a';f.color=field(c,'Colour',ci);}
   if(e.type==='s'||e.type==='b'||e.type==='p'||e.type==='r')f.ruler=field(c,e.type==='b'?'Mayor / lord':e.type==='s'?'Ruler (name & title)':'Leader / owner',tx_(e.o.ruler,''));
   if(e.type==='p'){f.icon=field(c,'Icon (emoji)',tx_((e.base.ic)||'📍'));}
-  if(e.type==='l'){var rot=H('input');rot.type='number';rot.value=e.base.rot||0;f.rot=field(c,'Rotation (degrees)',rot);var fs=H('input');fs.type='number';fs.value=e.base.fs||14;f.fs=field(c,'Size',fs);var sp=H('input');sp.type='number';sp.value=e.base.sp||10;f.sp=field(c,'Letter spacing',sp);}
+  if(e.type==='l'){var rot=H('input');rot.type='number';rot.value=e.o.rot==null?(e.base.rot||0):e.o.rot;f.rot=field(c,'Rotation (degrees)',rot);var fs=H('input');fs.type='number';fs.value=e.o.fs||e.base.fs||14;f.fs=field(c,'Size',fs);var sp=H('input');sp.type='number';sp.value=e.o.sp==null?(e.base.sp||10):e.o.sp;f.sp=field(c,'Letter spacing',sp);}
+  if(['s','b','c','l'].indexOf(e.type)>=0){var pos=center(key),px=H('input'),py=H('input');px.type=py.type='number';px.step=py.step='0.5';px.value=e.o.x==null?(pos?pos[0]:''):e.o.x;py.value=e.o.y==null?(pos?pos[1]:''):e.o.y;f.x=field(c,'Map X position',px);f.y=field(c,'Map Y position',py);if(e.type==='s'||e.type==='c'||e.type==='b'){var rot2=H('input');rot2.type='number';rot2.value=e.o.rot==null?(e.base.rot||0):e.o.rot;f.rot=field(c,'Label rotation (degrees)',rot2);var fs2=H('input');fs2.type='number';fs2.value=e.o.fs|| (e.type==='c'?26:e.type==='b'?12:14);f.fs=field(c,'Label size',fs2);}}
   var lore=H('textarea');lore.value=e.o.lore||'';f.lore=field(c,'Lore / description',lore);
   var fa=H('textarea');fa.value=e.o.facts||'';fa.placeholder='Currency: Gold crowns\nMotto: Strength in unity';f.facts=field(c,'Extra facts (one per line, “Name: value”)',fa);
   var im=tx_(e.o.img,'https://… or assets/flags/lancass.png');f.img=field(c,'Image / flag / crest (URL or upload)',im);
@@ -420,7 +428,7 @@ function editCard(key){
     var o=ov(key);['name','ruler','lore','facts','img','links'].forEach(function(n){if(f[n]){var v=f[n].value.trim();if(v)o[n]=v;else delete o[n];}});
     if(f.color){var base=e.type==='s'?SI[key.slice(1)].color:e.type==='z'?ZI[key.slice(1)].color:null;if(base&&f.color.value.toLowerCase()===base.toLowerCase())delete o.color;else o.color=f.color.value;if(e.type==='r'){e.base.color=f.color.value;}}
     if(f.icon)e.base.ic=f.icon.value.trim()||'📍';
-    if(f.rot){e.base.rot=+f.rot.value||0;e.base.fs=+f.fs.value||14;e.base.sp=+f.sp.value||10;}
+    if(f.rot){if(e.type==='l'){o.rot=+f.rot.value||0;o.fs=+f.fs.value||14;o.sp=+f.sp.value||10;}else{o.rot=+f.rot.value||0;o.fs=+f.fs.value||14;}}if(f.x&&f.y){var xx=+f.x.value,yy=+f.y.value;if(isFinite(xx)&&isFinite(yy)){o.x=xx;o.y=yy;}}if(e.type==='b'&&f.rot){o.tx=o.tx==null?(e.base.cap?8.0:6.6):o.tx;o.ty=o.ty==null?4:o.ty;}
     if(!Object.keys(o).length)delete N.ov[key];afterEdit(key);};
 }
 function afterEdit(key){saveLocal();rebuildAll();if(key&&ent(key))openCard(key);else closeCard();}
@@ -454,8 +462,8 @@ $('gmBtn').onclick=function(){
   $('pwok').onclick=function(ev){ev.preventDefault();checkPass($('pw').value).then(function(ok){if(ok){$('dlg').close();enterGM();}else $('pwerr').textContent='Wrong passcode.';});};
   $('pw').onkeydown=function(ev){if(ev.key==='Enter'){ev.preventDefault();$('pwok').click();}};
 };
-function enterGM(){gmOn=true;lsSet('myosia.map.gm','1');var loc=lsGet('myosia.map.notes');if(loc){try{var o=normNotes(JSON.parse(loc));N=o;}catch(e){}}$('gmbar').classList.add('show');$('gmBtn').classList.add('on');$('gmBtn').textContent='GM ✓';saveLocal();rebuildAll();if(curKey)openCard(curKey);}
-function exitGM(){gmOn=false;lsSet('myosia.map.gm','0');setTool(null);$('gmbar').classList.remove('show');$('gmBtn').classList.remove('on');$('gmBtn').textContent='GM';$('dirty').hidden=true;N=normNotes(JSON.parse(JSON.stringify(repoN||blankNotes())));rebuildAll();if(curKey)openCard(curKey);}
+function enterGM(){gmOn=true;svg.classList.add('gm-edit');lsSet('myosia.map.gm','1');var loc=lsGet('myosia.map.notes');if(loc){try{var o=normNotes(JSON.parse(loc));N=o;}catch(e){}}$('gmbar').classList.add('show');$('gmBtn').classList.add('on');$('gmBtn').textContent='GM ✓';saveLocal();rebuildAll();if(curKey)openCard(curKey);}
+function exitGM(){gmOn=false;svg.classList.remove('gm-edit');lsSet('myosia.map.gm','0');setTool(null);$('gmbar').classList.remove('show');$('gmBtn').classList.remove('on');$('gmBtn').textContent='GM';$('dirty').hidden=true;N=normNotes(JSON.parse(JSON.stringify(repoN||blankNotes())));rebuildAll();if(curKey)openCard(curKey);}
 $('tExit').onclick=exitGM;
 $('tExport').onclick=function(){var b=new Blob([JSON.stringify(N,null,1)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='map-notes.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
   alert('Downloaded map-notes.json.\n\nTo publish your edits for everyone: upload this file to the root of your GitHub repo (replace the old one) and commit.');};
