@@ -153,7 +153,7 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
   <a class="home" href="./index.html" id="homeLink">← Lancassian Chess</a>
   <a class="home" href="./map.html" id="mapLink">World Map</a>
   <h1>Myosia Worldbuilder</h1>
-  <span class="badge" id="roleBadge" hidden></span>
+  <span class="badge" id="roleBadge" hidden></span><span class="badge" id="syncBadge" hidden></span>
   <div class="tr">
     <select id="styleSel" aria-label="Map style" title="Map style"><option value="parch">Parchment</option><option value="dark">Dark</option><option value="blue">Blueprint</option></select>
     <button class="btn" id="panelBtn" type="button" title="Show or hide the side panel">Panel</button>
@@ -1210,8 +1210,16 @@ $('fileMap').addEventListener('change', function () {
 // ---------- online ----------
 var RELAY = (/[?&]relay=([^&]+)/.exec(location.search) || [])[1]; RELAY = RELAY ? decodeURIComponent(RELAY) : 'https://ntfy.sh';
 var peerId = Math.random().toString(36).slice(2, 10);
+var sbQ = [], sbBusy = false;
+function sbPump() {
+  if (sbBusy || !sbQ.length) return; sbBusy = true; var env = sbQ.shift();
+  Promise.resolve(window.__sbSend ? window.__sbSend(env) : null).catch(function () {}).then(function () { sbBusy = false; sbPump(); });
+}
+function syncStatus(t, bad) { var b = $('syncBadge'); if (!b) return; b.hidden = !t; b.textContent = t || ''; b.style.color = bad ? '#ff9c94' : ''; }
+window.__boardStatus = syncStatus;
 function netSend(msg) {
   if (!online || !online.out) return;
+  if (online.sb) { sbQ.push({ p: peerId, r: online.role === 'gm' ? 'h' : 'g', d: msg }); sbPump(); return; }
   var body = JSON.stringify({ p: peerId, d: msg }); if (body.length > 3900) return;
   online.q.push(body); pump();
 }
@@ -1235,6 +1243,7 @@ function openRelay(code, asGM, onOpen, onFail) {
 }
 function closeNet() {
   if (!online) return; var o = online;
+  if (o.sb) { try { if (o.role === 'player') netSend({ t: 'bye' }); } catch (e) {} online = null; return; }
   try { if (o.role === 'player') navigator.sendBeacon && navigator.sendBeacon(RELAY + '/' + o.out, JSON.stringify({ p: peerId, d: { t: 'bye' } })); else netSend({ t: 'end' }); } catch (e) {}
   try { o.es.close(); } catch (e) {} online = null;
 }
@@ -1297,7 +1306,7 @@ function newShadow() { return { map: '', tiles: null, fog: null, tok: {}, img: {
 window.__flush = function () {
   if (!online || online.role !== 'gm') return; if (!online.sh) online.sh = newShadow();
   var ops = buildOps(), cur = [], len = 0;
-  ops.forEach(function (o) { var l = JSON.stringify(o).length + 1; if (len + l > 3300 && cur.length) { netSend({ t: 'ops', ops: cur }); cur = []; len = 0; } cur.push(o); len += l; });
+  ops.forEach(function (o) { var l = JSON.stringify(o).length + 1; if (len + l > (online.sb ? 60000 : 3300) && cur.length) { netSend({ t: 'ops', ops: cur }); cur = []; len = 0; } cur.push(o); len += l; });
   if (cur.length) netSend({ t: 'ops', ops: cur });
 };
 function sendFull() { if (online && online.role === 'gm') { online.sh = newShadow(); window.__flush(); } }
@@ -1326,7 +1335,8 @@ function onMsg(p, d) {
   if (o.role === 'gm') {
     var pl = o.players[p];
     if (d.t === 'hello') {
-      var nm = cleanName(d.name), taken = pnames(), base = nm, k = 2; if (!pl) { while (taken.indexOf(nm) >= 0) nm = base + k++; o.players[p] = { name: nm }; pl = o.players[p]; addLog('·', pl.name + ' joined.'); }
+      if (d.id && !pl) Object.keys(o.players).forEach(function (q) { if (q !== p && o.players[q].id === d.id) delete o.players[q]; });
+      var nm = cleanName(d.name), taken = pnames(), base = nm, k = 2; if (!pl) { while (taken.indexOf(nm) >= 0) nm = base + k++; o.players[p] = { name: nm, id: d.id || '' }; pl = o.players[p]; addLog('·', pl.name + ' joined.'); }
       netSend({ t: 'welcome', to: p, name: pl.name }); netSend({ t: 'who', names: [tdName()].concat(pnames()) }); sendFull(); renderNetInfo(); renderPanel();
     } else if (d.t === 'rename') { if(pl){pl.name=cleanName(d.name);netSend({t:'who',names:[tdName()].concat(pnames())});tdChatAdd('System',pl.name+' changed their name.');tdRenderPeople();renderNetInfo();} } else if (d.t === 'renamegm') { if(pl){/* names are host-controlled */} } else if (d.t === 'tablechat') { if(pl){var tx=String(d.text||'').slice(0,200);tdChatAdd(pl.name,tx);netSend({t:'tablechat',name:pl.name,text:tx});} } else if (d.t === 'light') { if(pl){/* players cannot control shared lighting */} } else if (d.t === 'bye') { if (pl) { addLog('·', pl.name + ' left.'); delete o.players[p]; netSend({ t: 'who', names: pnames() }); renderNetInfo(); renderPanel(); } }
     else if (!pl) return;
@@ -1342,7 +1352,8 @@ function onMsg(p, d) {
     } else if (d.t === 'say') { var tx = String(d.text || '').slice(0, 200); addLog(pl.name, tx); netSend({ t: 'log', who: pl.name, text: tx }); }
     else if (d.t === 'ping') { addPing(+d.x, +d.y); netSend({ t: 'ping', x: +d.x, y: +d.y }); }
   } else {
-    if (d.t === 'welcome' && d.to === peerId) { if (!o.joined) { o.joined = true; me.name = d.name; S = newState(40, 30); S.fogOn = true; selId = null; imgCache = {}; applyRole(); $('netDlg').hidden = true; } }
+    if (d.t === 'gmhere') { if (o.sb) netSend({ t: 'hello', name: tdName(), id: tdIdentity.id }); return; }
+    if (d.t === 'welcome' && d.to === peerId) { if (!o.joined) { o.joined = true; me.name = d.name; S = newState(40, 30); S.fogOn = true; selId = null; imgCache = {}; applyRole(); $('netDlg').hidden = true; if (o.sb) syncStatus('Joined the GM\u2019s board'); } }
     else if (!o.joined) return;
     else if (d.t === 'ops') applyOps(d.ops);
     else if (d.t === 'log') addLog(d.who, d.text);
@@ -1350,7 +1361,7 @@ function onMsg(p, d) {
      else if (d.t === 'tablechat') { tdChatAdd(d.name||'Player',d.text||''); }
      else if (d.t === 'light') { $('tdLightMode').value=d.mode||'normal';$('tdLightLevel').value=+d.level||45;tdLightApply(false); }
     else if (d.t === 'ping') addPing(+d.x, +d.y);
-    else if (d.t === 'end') { addLog('·', 'The Game Master closed the table.'); leave(true); }
+    else if (d.t === 'end') { if (!o.sb) { addLog('·', 'The Game Master closed the table.'); leave(true); } }
   }
 }
 function leave(silent) {
@@ -1394,6 +1405,31 @@ $('netJoin').addEventListener('click', function () {
 });
 
 
+// ---------- campaign table: shared board over the Supabase campaign channel ----------
+window.__boardRecv = function (env) {
+  var o = online; if (!o || !o.sb || !env || env.p === peerId || !env.d) return;
+  if (o.role === 'gm' ? env.r !== 'g' : env.r !== 'h') return;
+  onMsg(env.p, env.d);
+};
+window.__boardAttach = function (info) {
+  if (online && !online.sb) return;
+  var gm = info.role === 'gm';
+  if (online && online.sb && online.role === (gm ? 'gm' : 'player')) {
+    if (gm) netSend({ t: 'gmhere' }); else netSend({ t: 'hello', name: tdName(), id: tdIdentity.id }); return;
+  }
+  if (online) closeNet();
+  var o = { role: gm ? 'gm' : 'player', code: info.code || 'CAMPAIGN', out: 'sb', sb: true, q: [], busy: false, players: {}, sh: null, es: null, joined: false };
+  online = o;
+  if (gm) {
+    role = 'gm'; applyRole(); renderNetInfo(); tdRenderPeople(); syncStatus('Board live \u00b7 campaign players join automatically');
+    tdChatAdd('System', 'Campaign table is live. Players in this campaign now share this board.'); netSend({ t: 'gmhere' });
+  } else {
+    role = 'player'; me.name = tdName(); applyRole(); syncStatus('Waiting for the GM to open the board\u2026'); var n = 0;
+    (function hello() { if (online !== o) return; netSend({ t: 'hello', name: tdName(), id: tdIdentity.id }); n++; setTimeout(hello, o.joined ? 30000 : 3000); })();
+  }
+};
+window.__boardDetach = function () { if (online && online.sb) leave(true); syncStatus(''); };
+
 // ---------- persistent identity and table tools ----------
 var TD_ID_KEY='myosia.player.identity.v1', TD_NUM_KEY='myosia.player.sequence.v1', TD_SHEET_KEY='myosia.character.sheets.v1';
 function tdGet(k, fallback){try{var v=localStorage.getItem(k);return v===null?fallback:v}catch(e){return fallback}}
@@ -1414,7 +1450,7 @@ $('tdClose').addEventListener('click',function(){$('tableDock').hidden=true});
 $('tdCampaignClose').addEventListener('click',function(){$('campaignDock').hidden=true});
 $('tdRename').addEventListener('click',function(){tdSetName($('tdName').value);if(online&&online.role==='gm')netSend({t:'renamegm',name:tdName()});tdChatAdd('System','Your display name is now '+tdName()+'.')});
 $('tdLightMode').addEventListener('change',function(){tdLightApply(true)});$('tdLightLevel').addEventListener('input',function(){tdLightApply(true)});
-$('tdSend').addEventListener('click',function(){var tx=$('tdChatInput').value.trim();if(!tx)return;$('tdChatInput').value='';tdChatAdd(tdName(),tx);if(online)netSend({t:'tablechat',name:tdName(),text:tx});else tdChatAdd('System','Chat is local until you join a table.')});
+$('tdSend').addEventListener('click',function(){var tx=$('tdChatInput').value.trim();if(!tx)return;$('tdChatInput').value='';if(!(online&&online.role==='player'))tdChatAdd(tdName(),tx);if(online)netSend({t:'tablechat',name:tdName(),text:tx});else tdChatAdd('System','Chat is local until you join a table.')});
 $('tdChatInput').addEventListener('keydown',function(e){if(e.key==='Enter')$('tdSend').click()});
 $('tdName').value=tdName();tdRenderPeople();tdLightApply(false);
 // Cloud audio and PDF-backed character sheets are initialized in the Supabase module below.
@@ -1437,7 +1473,7 @@ $('tdName').value=tdName();tdRenderPeople();tdLightApply(false);
 'use strict';
 var SUPABASE_URL='https://tgergwstqmcllneskrcw.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='sb_publishable_Q27ONCiXF-_9dGz7ZNmNqA_gTH18NOK';
-var client=null, user=null, campaign=null, membership=null, channel=null, tracks=[], selectedTrack=null, pendingAudioFile=null, currentCharacterId=null, pdfTemplateBytes=null, pdfFields=[], pdfFieldKinds={}, fieldValues={}, playbackState=null, playbackTimer=null;
+var client=null, user=null, campaign=null, membership=null, channel=null, upChannel=null, tracks=[], selectedTrack=null, pendingAudioFile=null, currentCharacterId=null, pdfTemplateBytes=null, pdfFields=[], pdfFieldKinds={}, fieldValues={}, playbackState=null, playbackTimer=null;
 var $c=function(id){return document.getElementById(id)};
 function status(id,msg,bad){var el=$c(id);if(el){el.textContent=msg||'';el.style.color=bad?'var(--bad)':'var(--muted)'}}
 function isGM(){return !!(membership&&membership.role==='gm')}
@@ -1448,8 +1484,16 @@ function refreshControlState(){var signed=!!user, joined=!!campaign&&!!membershi
 function ensureClient(){if(client)return client;if(!window.supabase||!window.supabase.createClient){throw new Error('Supabase client library did not load. Check your connection and refresh.')}client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return client}
 async function refreshUser(){try{var c=ensureClient(),res=await c.auth.getUser();user=res.data.user||null;status('tdAuthStatus',user?'Signed in as '+user.email:'Not signed in.');refreshControlState();if(user){await loadCampaignsFromSession()}else{await detachCampaign();} }catch(e){status('tdAuthStatus',e.message||String(e),true)}}
 async function loadCampaignsFromSession(){if(!user)return;try{var c=ensureClient();var r=await c.from('campaign_members').select('campaign_id,role,campaigns(id,name,invite_code,owner_id)').eq('user_id',user.id).limit(1);if(r.error)throw r.error;if(r.data&&r.data.length){membership={role:r.data[0].role};campaign=r.data[0].campaigns; $c('tdCampaignCode').value=campaign.invite_code||'';status('tdCampaignStatus','Campaign: '+campaign.name+' · role: '+membership.role+' · invite code: '+campaign.invite_code);await attachCampaign();}else{campaign=null;membership=null;status('tdCampaignStatus','No campaign joined yet. Create one as GM or enter an invite code.');refreshControlState()}}catch(e){status('tdCampaignStatus','Setup needed: '+e.message,true);refreshControlState()}}
-async function detachCampaign(){if(channel){try{await ensureClient().removeChannel(channel)}catch(e){}channel=null}campaign=null;membership=null;tracks=[];selectedTrack=null;refreshControlState()}
-async function attachCampaign(){if(!campaign||!membership)return;var c=ensureClient();if(channel){try{await c.removeChannel(channel)}catch(e){}channel=null}channel=c.channel('campaign:'+campaign.id,{config:{private:true,broadcast:{ack:true,self:false}}});channel.on('broadcast',{event:'playback'},function(msg){handlePlayback(msg.payload||msg)});channel.subscribe(async function(state){if(state==='SUBSCRIBED'){status('tdCampaignStatus','Campaign: '+campaign.name+' · '+membership.role+' · invite code: '+campaign.invite_code);await loadTracks();await loadCharacters();}});refreshControlState()}
+async function detachCampaign(){if(window.__boardDetach)window.__boardDetach();if(upChannel){try{await ensureClient().removeChannel(upChannel)}catch(e){}upChannel=null}if(channel){try{await ensureClient().removeChannel(channel)}catch(e){}channel=null}campaign=null;membership=null;tracks=[];selectedTrack=null;refreshControlState()}
+async function attachCampaign(){if(!campaign||!membership)return;var c=ensureClient();if(channel){try{await c.removeChannel(channel)}catch(e){}channel=null}if(upChannel){try{await c.removeChannel(upChannel)}catch(e){}upChannel=null}
+var ready={d:false,u:false};function maybe(){if(ready.d&&ready.u&&window.__boardAttach)window.__boardAttach({role:membership.role,code:campaign.invite_code})}
+function boardErr(what,state,err){if(window.__boardStatus)window.__boardStatus('Board sync problem ('+what+': '+state+(err&&err.message?' - '+err.message:'')+'). Run the board-sync SQL from the README.',true)}
+channel=c.channel('campaign:'+campaign.id,{config:{private:true,broadcast:{ack:true,self:false}}});channel.on('broadcast',{event:'playback'},function(msg){handlePlayback(msg.payload||msg)});channel.on('broadcast',{event:'board'},function(msg){if(window.__boardRecv&&membership&&membership.role!=='gm')window.__boardRecv(msg.payload||msg)});
+channel.subscribe(async function(state,err){if(state==='SUBSCRIBED'){status('tdCampaignStatus','Campaign: '+campaign.name+' · '+membership.role+' · invite code: '+campaign.invite_code);ready.d=true;maybe();await loadTracks();await loadCharacters();}else if(state==='CHANNEL_ERROR'||state==='TIMED_OUT'){boardErr('campaign channel',state,err)}});
+upChannel=c.channel('campaignup:'+campaign.id,{config:{private:true,broadcast:{ack:false,self:false}}});upChannel.on('broadcast',{event:'board'},function(msg){if(window.__boardRecv&&membership&&membership.role==='gm')window.__boardRecv(msg.payload||msg)});
+upChannel.subscribe(function(state,err){if(state==='SUBSCRIBED'){ready.u=true;maybe()}else if(state==='CHANNEL_ERROR'||state==='TIMED_OUT'){boardErr('player channel',state,err)}});
+refreshControlState()}
+window.__sbSend=function(env){var ch=(membership&&membership.role==='gm')?channel:upChannel;if(!ch)return Promise.resolve();return ch.send({type:'broadcast',event:'board',payload:env}).then(function(r){if(r&&r!=='ok'&&window.__boardStatus)window.__boardStatus('Board message not delivered ('+r+')',true)}).catch(function(){})};
 async function signIn(signup){try{var c=ensureClient(),email=$c('tdAuthEmail').value.trim(),password=$c('tdAuthPassword').value;if(!email||!password)throw new Error('Enter your email and password.');if(password.length<6)throw new Error('Use a password with at least 6 characters.');var r=signup?await c.auth.signUp({email:email,password:password}):await c.auth.signInWithPassword({email:email,password:password});if(r.error)throw r.error;if(signup&&!r.data.session){status('tdAuthStatus','Account created. Check your email to confirm it, then sign in.');return}user=r.data.user||null;status('tdAuthStatus',signup?'Account created and signed in.':'Signed in as '+email);await refreshUser()}catch(e){status('tdAuthStatus',e.message||String(e),true)}}
 $c('tdSignIn').addEventListener('click',function(){signIn(false)});$c('tdSignUp').addEventListener('click',function(){signIn(true)});$c('tdSignOut').addEventListener('click',async function(){try{await ensureClient().auth.signOut();await detachCampaign();user=null;status('tdAuthStatus','Signed out.');status('tdCampaignStatus','Sign in to create or join a campaign.');$c('tdMusicList').textContent='Sign in and join a campaign to load tracks.';$c('tdCharacterList').textContent='Sign in and join a campaign to load your characters.';refreshControlState()}catch(e){status('tdAuthStatus',e.message,true)}});
 ensureClient().auth.onAuthStateChange(function(event,session){if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'){user=session&&session.user||null;setTimeout(function(){refreshUser()},0)}else if(event==='SIGNED_OUT'){user=null;setTimeout(function(){detachCampaign()},0)}});

@@ -51,3 +51,9 @@ SECURITY AND LIMITS
 - Shared audio uses a private Storage bucket and signed URLs. Browsers may require each player to click once before audio can start. Audio sync uses realtime broadcast timing and may vary slightly across networks.
 - Campaign membership is currently one active campaign at a time in this panel. Share the code only with players you want in the campaign.
 Campaign creation fix: this version creates campaigns through the authenticated create_myosia_campaign Supabase RPC. After uploading this version, run the matching create_myosia_campaign function definition from supabase-setup.sql in Supabase SQL Editor (you do not need to rerun the entire setup).
+
+SHARED BOARD (ONE-TIME SQL STEP)
+The campaign now shares the GM's board with every campaign member automatically (walls, doors, fog, tokens, initiative, lighting, table chat).
+You must run board-sync.sql ONCE in Supabase > SQL Editor > New query (paste the file, click Run).
+Then: GM signs in and opens the Campaign; players sign in, join with the invite code, and open the Worldbuilder. The header shows
+"Board live" for the GM and "Joined the GM's board" for players. If it shows a red "Board sync problem", the SQL has not been run yet.

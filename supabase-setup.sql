@@ -166,3 +166,13 @@ drop policy if exists "campaign GM can broadcast playback" on realtime.messages;
 create policy "campaign GM can broadcast playback" on realtime.messages for insert to authenticated with check (
   split_part(realtime.topic(),':',1)='campaign' and public.myosia_is_gm((split_part(realtime.topic(),':',2))::uuid)
 );
+-- Shared board sync: members may send player input (moves, chat, hello) to the GM on topic campaignup:<campaign id>.
+
+drop policy if exists "campaign members can receive board input" on realtime.messages;
+create policy "campaign members can receive board input" on realtime.messages for select to authenticated using (
+  split_part(realtime.topic(),':',1)='campaignup' and public.myosia_is_member((split_part(realtime.topic(),':',2))::uuid)
+);
+drop policy if exists "campaign members can send board input" on realtime.messages;
+create policy "campaign members can send board input" on realtime.messages for insert to authenticated with check (
+  split_part(realtime.topic(),':',1)='campaignup' and public.myosia_is_member((split_part(realtime.topic(),':',2))::uuid)
+);
