@@ -76,6 +76,14 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
 .box h2{margin:0;font-size:1.1rem}
 .code{font:700 2rem 'IBM Plex Mono',monospace;letter-spacing:.2em;color:var(--accent)}
 #texDlg .box{width:min(760px,100%)}
+#astDlg .box{width:min(620px,100%)}
+.ast-main{display:flex;justify-content:center}
+#astCv{width:min(512px,100%);aspect-ratio:1;background:conic-gradient(#3a3f4a 25%,#4a505c 0 50%,#3a3f4a 0 75%,#4a505c 0) 0 0/20px 20px;border:1px solid rgba(255,255,255,.25);border-radius:8px;touch-action:none;cursor:crosshair}
+.alib{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px;margin:6px 0}
+.alibit{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface2);border:2px solid transparent;border-radius:9px;padding:4px;cursor:pointer;color:var(--muted);font-size:10.5px}
+.alibit[aria-pressed=true]{border-color:var(--accent);color:var(--fg)}
+.alibit img{width:54px;height:54px;object-fit:contain;background:conic-gradient(#2c313b 25%,#383e4a 0 50%,#2c313b 0 75%,#383e4a 0) 0 0/10px 10px;border-radius:5px}
+.alibit span{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tex-wrap{display:flex;gap:16px;flex-wrap:wrap}
 .tex-main{display:flex;flex-direction:column;gap:8px}
 #texPx{width:min(320px,80vw);height:min(320px,80vw);image-rendering:pixelated;border:2px solid var(--line);border-radius:8px;cursor:crosshair;touch-action:none;background:#fff}
@@ -250,6 +258,16 @@ input[type=color]{width:38px;height:30px;padding:0;border:1px solid var(--line);
   <b>Saving</b>: maps save in this browser automatically. Use Export to send a map file to a friend.
   </div>
 </div></div>
+<div class="ovl" id="astDlg" hidden><div class="box">
+  <div class="row"><h2 id="astTitle">Draw an object</h2><button class="btn sm" id="astX" type="button" style="margin-left:auto">Close</button></div>
+  <div class="muted">Draw on the transparent canvas, then save it to your library. Empty space around the drawing is trimmed automatically.</div>
+  <div class="ast-main"><canvas id="astCv" width="256" height="256"></canvas></div>
+  <div class="row tight" id="astTools"></div>
+  <div class="row tight"><input type="color" id="astColor" value="#3b2a18" aria-label="Colour"><div class="row tight" id="astPal"></div></div>
+  <div class="row tight"><span class="muted">Size</span><input type="range" id="astSize" min="1" max="48" value="6"><span class="muted" id="astSizeV">6</span><label class="row tight"><input type="checkbox" id="astFill"><span class="muted">Filled shapes</span></label></div>
+  <div class="row tight"><button class="btn sm" id="astUndo" type="button">Undo</button><button class="btn sm" id="astClear" type="button">Clear</button><select id="astRes"><option value="128">128 px</option><option value="256" selected>256 px</option><option value="512">512 px</option></select><button class="btn sm" id="astImport" type="button">Import image…</button></div>
+  <div class="row"><input type="text" id="astName" placeholder="Name (e.g. Oak tree)" maxlength="30" style="flex:1"><button class="btn primary" id="astSave" type="button">Save to library</button><button class="btn" id="astSavePlace" type="button">Save &amp; place</button></div>
+</div></div>
 <div class="ovl" id="texDlg" hidden><div class="box">
   <div class="row"><h2>Texture editor</h2><button class="btn sm" id="texX" type="button" style="margin-left:auto">Close</button></div>
   <div class="muted">Draw your own terrain tile with pixels or simple lines. The preview on the right shows how it repeats across the floor.</div>
@@ -319,7 +337,7 @@ function texImg(i) {
 function newState(w, h2) {
   return { name: 'Untitled map', w: w, h: h2, tiles: new Uint8Array(w * h2), fog: new Uint8Array(w * h2), fogOn: false, grid: 1,
     tokens: [], init: { on: false, turn: 0, round: 1, list: [] }, bg: { w: 20, x: 0, y: 0, hash: '' }, nextId: 1, custom: [],
-    eh: new Uint8Array(w * (h2 + 1)), ev: new Uint8Array((w + 1) * h2) };
+    eh: new Uint8Array(w * (h2 + 1)), ev: new Uint8Array((w + 1) * h2), assets: [] };
 }
 var S = newState(40, 30), role = 'gm', online = null;
 var view = { ox: 30, oy: 30, z: 34 };
@@ -355,7 +373,7 @@ function changed(opts) {
 }
 function serialize() {
   return { v: 2, eh: rleEnc(S.eh, 0, S.eh.length), ev: rleEnc(S.ev, 0, S.ev.length), name: S.name, w: S.w, h: S.h, tiles: rleEnc(S.tiles, 0, S.tiles.length), fog: rleEnc(S.fog, 0, S.fog.length), fogOn: S.fogOn, grid: S.grid, custom: S.custom,
-    tokens: S.tokens, init: S.init, bg: S.bg, nextId: S.nextId };
+    tokens: S.tokens, init: S.init, bg: S.bg, nextId: S.nextId, assets: S.assets, lib: usedLib() };
 }
 function deserialize(o) {
   var n = newState(clamp(o.w | 0, 4, MAXW), clamp(o.h | 0, 4, MAXW));
@@ -364,6 +382,8 @@ function deserialize(o) {
   if ((o.v || 1) < 2) for (var q = 0; q < n.tiles.length; q++) if (n.tiles[q] >= 17) n.tiles[q] += CB - 17;
   n.fogOn = !!o.fogOn; n.grid = typeof o.grid === 'number' ? o.grid : (o.grid === false ? 0 : 1); n.custom = Array.isArray(o.custom) ? o.custom : []; n.tokens = Array.isArray(o.tokens) ? o.tokens : []; n.init = o.init || n.init; n.bg = o.bg || n.bg; n.nextId = o.nextId || (n.tokens.length + 1);
   n.tokens.forEach(function (t) { t.cond = t.cond || []; });
+  n.assets = Array.isArray(o.assets) ? o.assets.filter(function (a) { return a && a.l && isFinite(a.x) && isFinite(a.y) && a.w > 0 && a.h > 0; }) : [];
+  if (o.lib) { var chg = 0; Object.keys(o.lib).forEach(function (k) { if (!LIB[k] && o.lib[k] && o.lib[k].d) { LIB[k] = o.lib[k]; chg = 1; } }); if (chg) saveLib(); }
   return n;
 }
 function autosave() { store('myosia.autosave', JSON.stringify(serialize())); if (bgData && bgData.length < 2500000) store('myosia.autosavebg', bgData); else if (!bgData) { try { localStorage.removeItem('myosia.autosavebg'); } catch (e) {} } }
@@ -471,6 +491,7 @@ function draw() {
   }
   drawEdges(vr, th);
   ctx.strokeStyle = th.frame; ctx.lineWidth = 2 / view.z; ctx.strokeRect(0, 0, S.w, S.h);
+  drawAssets(vr, isGM());
   // tokens
   S.tokens.forEach(function (tk) {
     if (drag && drag.type === 'token' && drag.id === tk.id) return;
@@ -553,10 +574,10 @@ function tokenAt(cx, cy) {
   return null;
 }
 function canMove(t) { return isGM() || (t.owner && t.owner === me.name); }
-function pushUndo() { undoStack.push({ tiles: new Uint8Array(S.tiles), fog: new Uint8Array(S.fog), eh: new Uint8Array(S.eh), ev: new Uint8Array(S.ev), fogOn: S.fogOn, w: S.w, h: S.h }); if (undoStack.length > 30) undoStack.shift(); }
+function pushUndo() { undoStack.push({ as: JSON.stringify(S.assets), tiles: new Uint8Array(S.tiles), fog: new Uint8Array(S.fog), eh: new Uint8Array(S.eh), ev: new Uint8Array(S.ev), fogOn: S.fogOn, w: S.w, h: S.h }); if (undoStack.length > 30) undoStack.shift(); }
 function undo() {
   if (!isGM() || !undoStack.length) return; var u = undoStack.pop();
-  if (u.w !== S.w || u.h !== S.h) return; S.tiles = u.tiles; S.fog = u.fog; S.eh = u.eh; S.ev = u.ev; S.fogOn = u.fogOn; changed(); if (tab === 'map') renderPanel();
+  if (u.w !== S.w || u.h !== S.h) return; S.tiles = u.tiles; S.fog = u.fog; S.eh = u.eh; S.ev = u.ev; S.fogOn = u.fogOn; if (u.as !== undefined) { S.assets = JSON.parse(u.as); if (!assetById(selAsset)) selAsset = null; } changed(); if (tab === 'map') renderPanel();
 }
 function paintCells(cx, cy) {
   var o = Math.floor(brush / 2), dx, dy, X, Y, i;
@@ -570,8 +591,14 @@ function moveToken(t, x, y) {
   x = clamp(x, 0, S.w - t.size); y = clamp(y, 0, S.h - t.size);
   if (t.x === x && t.y === y) return;
   if (isGM()) { t.x = x; t.y = y; changed(); }
-  else if (online) { t.x = x; t.y = y; netSend({ t: 'mv', id: t.id, x: x, y: y }); redraw(); }
+  else if (online) {
+    t.x = x; t.y = y; pendingMv[t.id] = { x: x, y: y, ts: Date.now() }; redraw();
+    var now = Date.now(), pm = pendingMv[t.id]; clearTimeout(pm.tm);
+    if (now - (lastMvSend[t.id] || 0) >= 90) { lastMvSend[t.id] = now; netSend({ t: 'mv', id: t.id, x: x, y: y }); }
+    else pm.tm = setTimeout(function () { lastMvSend[t.id] = Date.now(); netSend({ t: 'mv', id: t.id, x: pm.x, y: pm.y }); }, 90);
+  }
 }
+var pendingMv = {}, lastMvSend = {};
 function select(id) { selId = id; if (tab === 'token') renderPanel(); redraw(); }
 
 // ---------- edge walls ----------
@@ -632,6 +659,8 @@ cv.addEventListener('pointerdown', function (e) {
     pushUndo(); drag = { type: 'paint' }; paintCells(cx, cy); changed();
   } else if (gm && tool === 'rect') {
     pushUndo(); drag = { type: 'rect', x0: clamp(cx, 0, S.w - 1), y0: clamp(cy, 0, S.h - 1), x1: clamp(cx, 0, S.w - 1), y1: clamp(cy, 0, S.h - 1) }; redraw();
+  } else if (gm && tool === 'asset') {
+    assetDown(c, e);
   } else if (tool === 'ruler') {
     var rx = Math.floor(c.x) + .5, ry = Math.floor(c.y) + .5; ruler = { x0: rx, y0: ry, x1: rx, y1: ry }; drag = { type: 'ruler' }; redraw();
   } else if (tool === 'ping') {
@@ -650,6 +679,7 @@ cv.addEventListener('pointermove', function (e) {
   if (!drag) { redraw(); updateHint(c); return; }
   if (drag.type === 'pan') { userMoved = true; view.ox = drag.ox + c.px - drag.sx; view.oy = drag.oy + c.py - drag.sy; }
   else if (drag.type === 'token') { drag.fx = c.x - drag.offx; drag.fy = c.y - drag.offy; }
+  else if (drag.type === 'amove' || drag.type === 'ascale' || drag.type === 'arot') { assetDrag(c, e); changed(); return; }
   else if (drag.type === 'paint') { paintCells(Math.floor(c.x), Math.floor(c.y)); changed(); return; }
   else if (drag.type === 'rect') { drag.x1 = clamp(Math.floor(c.x), 0, S.w - 1); drag.y1 = clamp(Math.floor(c.y), 0, S.h - 1); }
   else if (drag.type === 'ruler') { ruler.x1 = Math.floor(c.x) + .5; ruler.y1 = Math.floor(c.y) + .5; }
@@ -669,6 +699,7 @@ function endPtr(e) {
     var rx0 = Math.min(drag.x0, drag.x1), rx1 = Math.max(drag.x0, drag.x1), ry0 = Math.min(drag.y0, drag.y1), ry1 = Math.max(drag.y0, drag.y1), q;
     if (rx1 > rx0 && ry1 > ry0) { for (q = rx0; q < rx1; q++) { S.eh[ry0 * S.w + q] = 1; S.eh[ry1 * S.w + q] = 1; } for (q = ry0; q < ry1; q++) { S.ev[q * (S.w + 1) + rx0] = 1; S.ev[q * (S.w + 1) + rx1] = 1; } changed(); }
   } else if (drag.type === 'paint' || drag.type === 'edge') changed();
+  else if (drag.type === 'amove' || drag.type === 'ascale' || drag.type === 'arot') { changed(); if (tab === 'assets') renderPanel(); }
   drag = null; redraw();
 }
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
@@ -678,12 +709,13 @@ cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 function addPing(x, y) { pings.push({ x: x, y: y, t: Date.now() }); redraw(); }
 function updateHint(c) { $('hint').textContent = hintFor(tool) + (c && c.x >= 0 && c.y >= 0 && c.x < S.w && c.y < S.h ? '  ·  ' + String.fromCharCode(65 + (Math.floor(c.x) % 26)) + (Math.floor(c.y) + 1) : ''); }
 function hintFor(t) {
-  return ({ wall: 'Drag along grid lines to draw walls', room: 'Drag a rectangle to wall in a room', door: 'Click a wall or grid line to add or remove a door', unwall: 'Drag along walls to remove them', bucket: 'Click inside a room to fill it with the chosen floor', select: 'Drag tokens · drag empty space to pan', paint: 'Paint the chosen terrain', rect: 'Drag a rectangle to fill', erase: 'Erase terrain', reveal: 'Reveal fogged cells', hide: 'Hide cells under fog', ruler: 'Drag to measure (5 ft per square)', ping: 'Click to ping everyone' })[t];
+  return ({ asset: 'Click to place · drag to move · handles resize/rotate · Esc stops', wall: 'Drag along grid lines to draw walls', room: 'Drag a rectangle to wall in a room', door: 'Click a wall or grid line to add or remove a door', unwall: 'Drag along walls to remove them', bucket: 'Click inside a room to fill it with the chosen floor', select: 'Drag tokens · drag empty space to pan', paint: 'Paint the chosen terrain', rect: 'Drag a rectangle to fill', erase: 'Erase terrain', reveal: 'Reveal fogged cells', hide: 'Hide cells under fog', ruler: 'Drag to measure (5 ft per square)', ping: 'Click to ping everyone' })[t];
 }
 document.addEventListener('keydown', function (e) {
   var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT') return;
   if (e.code === 'Space') { space = true; e.preventDefault(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+  else if (isGM() && tool === 'asset' && assetKey(e)) { e.preventDefault(); }
   else if (e.key === 'Escape') { select(null); ruler = null; redraw(); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && selId && isGM()) { removeToken(selId); }
   else if (e.key.indexOf('Arrow') === 0 && selId) {
@@ -699,12 +731,13 @@ window.addEventListener('resize', function () { resize(); if (!userMoved) fit();
 if (window.ResizeObserver) new ResizeObserver(function () { resize(); if (!userMoved) fit(); }).observe($('stage'));
 
 // ---------- toolbar ----------
-var TOOLS = [['select', 'Move', 0], ['wall', 'Wall', 1], ['room', 'Room', 1], ['door', 'Door', 1], ['unwall', 'Un-wall', 1], ['paint', 'Paint', 1], ['rect', 'Rectangle', 1], ['bucket', 'Fill room', 1], ['erase', 'Erase', 1], ['reveal', 'Reveal', 1], ['hide', 'Hide', 1], ['ruler', 'Ruler', 0], ['ping', 'Ping', 0]];
+var TOOLS = [['select', 'Move', 0], ['wall', 'Wall', 1], ['room', 'Room', 1], ['door', 'Door', 1], ['unwall', 'Un-wall', 1], ['paint', 'Paint', 1], ['rect', 'Rectangle', 1], ['bucket', 'Fill room', 1], ['asset', 'Assets', 1], ['erase', 'Erase', 1], ['reveal', 'Reveal', 1], ['hide', 'Hide', 1], ['ruler', 'Ruler', 0], ['ping', 'Ping', 0]];
 var ICONS = {
   wall: '<path d="M4 18V6h8v8h8"/>', room: '<path d="M5 5h14v14H5z" stroke-width="3"/>', door: '<path d="M4 12h4M16 12h4"/><rect x="8" y="9" width="8" height="6" rx="1"/>', unwall: '<path d="M4 18V6h8v8h8" stroke-dasharray="2 3"/><path d="M16 16l5 5M21 16l-5 5"/>', bucket: '<path d="M5 12l7-7 7 7-7 7z"/><path d="M19 14s2 2.5 2 4a2 2 0 01-4 0c0-1.500 2-4 2-4z"/>',
   select: '<path d="M5 3l14 8-6 2-3 6z"/>', paint: '<path d="M4 20l1-5L16 4l4 4L9 19z"/><path d="M14 6l4 4"/>', rect: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
   erase: '<path d="M4 16l9-10 7 7-6 7H8z"/><path d="M8 20h12"/>', reveal: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   hide: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><path d="M4 4l16 16"/>', ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M8 12l2 2M11 9l2 2M14 6l2 2"/>',
+  asset: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
   ping: '<circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="10"/>'
 };
 var toolBtns = {}, palBtns = [];
@@ -748,6 +781,7 @@ function buildPalette() {
 }
 function setTool(t) {
   tool = t; ruler = (t === 'ruler') ? ruler : null;
+  if (t === 'asset' && isGM() && tab !== 'assets') { tab = 'assets'; renderTabs(); renderPanel(); }
   Object.keys(toolBtns).forEach(function (k) { toolBtns[k].setAttribute('aria-pressed', k === t ? 'true' : 'false'); });
   var pal = $('palette'); pal.hidden = !(isGM() && (t === 'paint' || t === 'rect' || t === 'bucket'));
   Array.prototype.forEach.call(pal.children, function (b) { if (b.dataset.t != null) b.setAttribute('aria-pressed', +b.dataset.t === tile ? 'true' : 'false'); });
@@ -760,6 +794,7 @@ function applyRole() {
   Object.keys(toolBtns).forEach(function (k) { toolBtns[k].hidden = !gm && toolBtns[k].dataset.gm === '1'; });
   var b = $('roleBadge'); b.hidden = !online; b.textContent = online ? (gm ? 'Game Master' : 'Player · ' + me.name) : '';
   if (!gm && (tool !== 'select' && tool !== 'ruler' && tool !== 'ping')) tool = 'select';
+  if (!gm && tab === 'assets') tab = 'token';
   setTool(tool); renderTabs(); renderPanel();
 }
 
@@ -804,10 +839,10 @@ function squareToken(file, cb) {
 }
 
 // ---------- panel ----------
-var TABS = [['token', 'Tokens'], ['init', 'Initiative'], ['dice', 'Dice'], ['map', 'Map']];
+var TABS = [['token', 'Tokens'], ['init', 'Initiative'], ['dice', 'Dice'], ['map', 'Map'], ['assets', 'Assets']];
 function renderTabs() {
   var tb = $('tabs'); tb.textContent = '';
-  TABS.forEach(function (t) { var b = h('button', '', t[1]); b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', tab === t[0] ? 'true' : 'false'); b.addEventListener('click', function () { tab = t[0]; renderTabs(); renderPanel(); }); tb.appendChild(b); });
+  TABS.filter(function (t) { return t[0] !== 'assets' || isGM(); }).forEach(function (t) { var b = h('button', '', t[1]); b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', tab === t[0] ? 'true' : 'false'); b.addEventListener('click', function () { tab = t[0]; renderTabs(); renderPanel(); }); tb.appendChild(b); });
 }
 function sec(parent, title) { var s = h('div', 'sec'); if (title) s.appendChild(h('h3', '', title)); parent.appendChild(s); return s; }
 function fld(label, el) { var l = h('label', '', label); l.appendChild(el); return l; }
@@ -821,7 +856,7 @@ function selEl(opts, val, onchange) {
 function btn(text, cls, fn) { var b = h('button', 'btn ' + (cls || ''), text); b.type = 'button'; b.addEventListener('click', fn); return b; }
 function renderPanel() {
   var b = $('tabbody'); b.textContent = '';
-  if (tab === 'token') panelToken(b); else if (tab === 'init') panelInit(b); else if (tab === 'dice') panelDice(b); else panelMap(b);
+  if (tab === 'token') panelToken(b); else if (tab === 'init') panelInit(b); else if (tab === 'dice') panelDice(b); else if (tab === 'assets' && isGM()) panelAssets(b); else panelMap(b);
 }
 function panelToken(b) {
   var gm = isGM();
@@ -1266,8 +1301,9 @@ function pview() {
     if ((t.kind === 'pc' || t.showHp) && t.hp != null && t.max) { o.hp = t.hp; o.max = t.max; }
     toks.push(o); ids[t.id] = 1;
   });
+  var vas = S.assets.filter(function (a) { if (!S.fogOn) return true; return fog[idx(clamp(Math.floor(a.x), 0, S.w - 1), clamp(Math.floor(a.y), 0, S.h - 1))]; });
   var init = { on: S.init.on, turn: S.init.turn, round: S.init.round, list: S.init.list.map(function (e) { return ids[e.id] ? { id: e.id, roll: e.roll } : { id: '', name: '???', roll: e.roll }; }) };
-  return { fog: fog, tiles: tiles, toks: toks, init: init, eh: eh, ev: ev };
+  return { fog: fog, tiles: tiles, toks: toks, init: init, eh: eh, ev: ev, as: vas };
 }
 function ranges(a, b) {
   var out = [], i = 0, n = a.length;
@@ -1300,9 +1336,12 @@ function buildOps() {
   });
   Object.keys(sh.tok).forEach(function (id) { if (!seen[id]) { ops.push({ k: 'rm', id: id }); delete sh.tok[id]; delete sh.img[id]; } });
   var ij = JSON.stringify(v.init); if (ij !== sh.init) { ops.push({ k: 'init', i: v.init }); sh.init = ij; }
+  sh.lib = sh.lib || {}; var usedL = {}; v.as.forEach(function (a) { usedL[a.l] = 1; });
+  Object.keys(usedL).forEach(function (id) { var e = LIB[id]; if (e && e.d && sh.lib[id] !== e.d) { ops.push({ k: 'lib', id: id, n: e.n, d: e.d }); sh.lib[id] = e.d; } });
+  var aj = JSON.stringify(v.as); if (aj !== sh.as) { ops.push({ k: 'as', a: v.as }); sh.as = aj; }
   return ops;
 }
-function newShadow() { return { map: '', tiles: null, fog: null, tok: {}, img: {}, init: '' }; }
+function newShadow() { return { map: '', tiles: null, fog: null, tok: {}, img: {}, init: '', lib: {}, as: '' }; }
 window.__flush = function () {
   if (!online || online.role !== 'gm') return; if (!online.sh) online.sh = newShadow();
   var ops = buildOps(), cur = [], len = 0;
@@ -1322,11 +1361,15 @@ function applyOps(ops) {
     else if (o.k === 'eh') rleDec(o.r, S.eh, o.a);
     else if (o.k === 'ev') rleDec(o.r, S.ev, o.a);
     else if (o.k === 'tok') {
-      var ex = tokById(o.t.id), nt = o.t; nt.img = ex ? ex.img : (pendingImg[nt.id] || ''); if (!nt.i) nt.img = '';
+      var ex = tokById(o.t.id), nt = o.t, pm = pendingMv[nt.id];
+      if (pm) { if (nt.x === pm.x && nt.y === pm.y) delete pendingMv[nt.id]; else if (Date.now() - pm.ts < 2500 || (drag && drag.type === 'token' && drag.id === nt.id)) { nt.x = pm.x; nt.y = pm.y; } else delete pendingMv[nt.id]; }
+      nt.img = ex ? ex.img : (pendingImg[nt.id] || ''); if (!nt.i) nt.img = '';
       if (ex) S.tokens[S.tokens.indexOf(ex)] = nt; else S.tokens.push(nt);
     } else if (o.k === 'img') { var tt = tokById(o.id); if (tt) tt.img = o.d; else pendingImg[o.id] = o.d; }
     else if (o.k === 'rm') { S.tokens = S.tokens.filter(function (t) { return t.id !== o.id; }); if (selId === o.id) selId = null; }
     else if (o.k === 'init') S.init = o.i;
+    else if (o.k === 'lib') { RLIB[o.id] = { n: o.n, d: o.d }; }
+    else if (o.k === 'as') { S.assets = Array.isArray(o.a) ? o.a : []; }
   });
   redraw(); var a = document.activeElement; if (!(a && $('tabbody').contains(a) && a.tagName === 'INPUT')) renderPanel();
 }
@@ -1338,11 +1381,11 @@ function onMsg(p, d) {
       if (d.id && !pl) Object.keys(o.players).forEach(function (q) { if (q !== p && o.players[q].id === d.id) delete o.players[q]; });
       var nm = cleanName(d.name), taken = pnames(), base = nm, k = 2; if (!pl) { while (taken.indexOf(nm) >= 0) nm = base + k++; o.players[p] = { name: nm, id: d.id || '' }; pl = o.players[p]; addLog('·', pl.name + ' joined.'); }
       netSend({ t: 'welcome', to: p, name: pl.name }); netSend({ t: 'who', names: [tdName()].concat(pnames()) }); sendFull(); renderNetInfo(); renderPanel();
-    } else if (d.t === 'rename') { if(pl){pl.name=cleanName(d.name);netSend({t:'who',names:[tdName()].concat(pnames())});tdChatAdd('System',pl.name+' changed their name.');tdRenderPeople();renderNetInfo();} } else if (d.t === 'renamegm') { if(pl){/* names are host-controlled */} } else if (d.t === 'tablechat') { if(pl){var tx=String(d.text||'').slice(0,200);tdChatAdd(pl.name,tx);netSend({t:'tablechat',name:pl.name,text:tx});} } else if (d.t === 'light') { if(pl){/* players cannot control shared lighting */} } else if (d.t === 'bye') { if (pl) { addLog('·', pl.name + ' left.'); delete o.players[p]; netSend({ t: 'who', names: pnames() }); renderNetInfo(); renderPanel(); } }
+    } else if (d.t === 'rename') { if(pl){var oldNm=pl.name;pl.name=cleanName(d.name);if(oldNm!==pl.name){S.tokens.forEach(function(tk){if(tk.owner===oldNm)tk.owner=pl.name});changed();}netSend({t:'who',names:[tdName()].concat(pnames())});tdChatAdd('System',pl.name+' changed their name.');tdRenderPeople();renderNetInfo();} } else if (d.t === 'renamegm') { if(pl){/* names are host-controlled */} } else if (d.t === 'tablechat') { if(pl){var tx=String(d.text||'').slice(0,200);tdChatAdd(pl.name,tx);netSend({t:'tablechat',name:pl.name,text:tx});} } else if (d.t === 'light') { if(pl){/* players cannot control shared lighting */} } else if (d.t === 'bye') { if (pl) { addLog('·', pl.name + ' left.'); delete o.players[p]; netSend({ t: 'who', names: pnames() }); renderNetInfo(); renderPanel(); } }
     else if (!pl) return;
     else if (d.t === 'mv') {
       var t = tokById(d.id);
-      if (t && t.owner === pl.name && !t.hidden && isFinite(d.x) && isFinite(d.y)) { t.x = clamp(d.x | 0, 0, S.w - t.size); t.y = clamp(d.y | 0, 0, S.h - t.size); changed(); }
+      if (t && t.owner === pl.name && !t.hidden && isFinite(d.x) && isFinite(d.y)) { t.x = clamp(d.x | 0, 0, S.w - t.size); t.y = clamp(d.y | 0, 0, S.h - t.size); changed(); clearTimeout(netT); window.__flush(); }
       else if (t && o.sh) { delete o.sh.tok[t.id]; window.__flush(); }
     } else if (d.t === 'tokset') {
       var tk = tokById(d.id); if (!tk || tk.owner !== pl.name) return;
@@ -1425,7 +1468,7 @@ window.__boardAttach = function (info) {
     tdChatAdd('System', 'Campaign table is live. Players in this campaign now share this board.'); netSend({ t: 'gmhere' });
   } else {
     role = 'player'; me.name = tdName(); applyRole(); syncStatus('Waiting for the GM to open the board\u2026'); var n = 0;
-    (function hello() { if (online !== o) return; netSend({ t: 'hello', name: tdName(), id: tdIdentity.id }); n++; setTimeout(hello, o.joined ? 30000 : 3000); })();
+    (function hello() { if (online !== o || o.joined) return; netSend({ t: 'hello', name: tdName(), id: tdIdentity.id }); n++; setTimeout(hello, 3000); })();
   }
 };
 window.__boardDetach = function () { if (online && online.sb) leave(true); syncStatus(''); };
@@ -1455,6 +1498,235 @@ $('tdChatInput').addEventListener('keydown',function(e){if(e.key==='Enter')$('td
 $('tdName').value=tdName();tdRenderPeople();tdLightApply(false);
 // Cloud audio and PDF-backed character sheets are initialized in the Supabase module below.
 
+
+// ---------- assets: placeable PNG objects ----------
+var LIB = {}, RLIB = {}, aimg = {}, selAsset = null, placeLib = null, assetSnap = true, astLock = true;
+try { LIB = JSON.parse(load('myosia.assetlib') || '{}') || {}; } catch (e) { LIB = {}; }
+function saveLib() { if (!store('myosia.assetlib', JSON.stringify(LIB))) alert('Your browser storage is full, so this object may be lost when you close the page. Export the map to keep a copy.'); }
+function usedLib() { var o = {}; (S.assets || []).forEach(function (a) { var e = LIB[a.l] || RLIB[a.l]; if (e && e.d) o[a.l] = e; }); return o; }
+function assetData(id) { var e = RLIB[id] || LIB[id]; return e && e.d; }
+function aImg(id) {
+  var d = assetData(id); if (!d) return null; var c = aimg[id];
+  if (!c || c.d !== d) { var im = new Image(); im.onload = function () { redraw(); }; im.src = d; c = aimg[id] = { d: d, im: im }; }
+  return c.im.complete && c.im.naturalWidth ? c.im : null;
+}
+function assetById(id) { if (!id) return null; for (var i = 0; i < S.assets.length; i++) if (S.assets[i].id === id) return S.assets[i]; return null; }
+function newAssetId() { return 'a' + Math.random().toString(36).slice(2, 9); }
+function snapV(v) { return assetSnap ? Math.round(v * 2) / 2 : v; }
+function toLocal(a, px, py) { var dx = px - a.x, dy = py - a.y, r = -a.r * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return { x: dx * c - dy * s, y: dx * s + dy * c }; }
+function fromLocal(a, lx, ly) { var r = a.r * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return { x: a.x + lx * c - ly * s, y: a.y + lx * s + ly * c }; }
+function assetAt(px, py) {
+  for (var i = S.assets.length - 1; i >= 0; i--) { var a = S.assets[i], p = toLocal(a, px, py); if (Math.abs(p.x) <= a.w / 2 && Math.abs(p.y) <= a.h / 2) return a; }
+  return null;
+}
+var HANDLES = [['nw', -1, -1], ['ne', 1, -1], ['se', 1, 1], ['sw', -1, 1], ['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]];
+function handlePos(a, n) {
+  if (n === 'rot') return fromLocal(a, 0, -a.h / 2 - 30 / view.z);
+  for (var i = 0; i < HANDLES.length; i++) if (HANDLES[i][0] === n) return fromLocal(a, HANDLES[i][1] * a.w / 2, HANDLES[i][2] * a.h / 2);
+}
+function handleAt(a, px, py) {
+  var tol = Math.max(11 / view.z, 0.12), names = ['rot'].concat(HANDLES.map(function (q) { return q[0]; }));
+  for (var i = 0; i < names.length; i++) { var p = handlePos(a, names[i]); if (Math.hypot(p.x - px, p.y - py) <= tol) return names[i]; }
+  return null;
+}
+function drawAssets(vr, gm) {
+  var i;
+  for (i = 0; i < S.assets.length; i++) {
+    var a = S.assets[i], rad = Math.hypot(a.w, a.h) / 2;
+    if (a.x + rad < vr.x0 || a.x - rad > vr.x1 || a.y + rad < vr.y0 || a.y - rad > vr.y1) continue;
+    var im = aImg(a.l), al = a.o == null ? 1 : a.o;
+    if (gm && S.fogOn && !S.fog[idx(clamp(Math.floor(a.x), 0, S.w - 1), clamp(Math.floor(a.y), 0, S.h - 1))]) al *= 0.55;
+    ctx.save(); ctx.globalAlpha = al; ctx.translate(a.x, a.y); ctx.rotate(a.r * Math.PI / 180); if (a.fx) ctx.scale(-1, 1);
+    if (im) ctx.drawImage(im, -a.w / 2, -a.h / 2, a.w, a.h);
+    else { ctx.strokeStyle = 'rgba(128,128,128,.7)'; ctx.lineWidth = 1 / view.z; ctx.setLineDash([4 / view.z, 3 / view.z]); ctx.strokeRect(-a.w / 2, -a.h / 2, a.w, a.h); }
+    ctx.restore();
+  }
+  if (gm && tool === 'asset') {
+    var s = assetById(selAsset); if (!s) return;
+    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.r * Math.PI / 180);
+    ctx.lineWidth = 2 / view.z; ctx.strokeStyle = '#ffb100'; ctx.setLineDash([6 / view.z, 4 / view.z]); ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h); ctx.setLineDash([]);
+    var hr = 5 / view.z; ctx.fillStyle = '#fff';
+    HANDLES.forEach(function (q) { var x = q[1] * s.w / 2, y = q[2] * s.h / 2; ctx.beginPath(); ctx.rect(x - hr, y - hr, 2 * hr, 2 * hr); ctx.fill(); ctx.stroke(); });
+    var ry = -s.h / 2 - 30 / view.z; ctx.beginPath(); ctx.moveTo(0, -s.h / 2); ctx.lineTo(0, ry); ctx.stroke(); ctx.beginPath(); ctx.arc(0, ry, hr * 1.2, 0, 6.3); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+}
+function placeAsset(x, y) {
+  var e = LIB[placeLib]; if (!e) return null;
+  var ar = e.pw && e.ph ? e.pw / e.ph : 1, w = ar >= 1 ? 2 : 2 * ar, hh = ar >= 1 ? 2 / ar : 2;
+  var a = { id: newAssetId(), l: placeLib, x: snapV(x), y: snapV(y), w: Math.round(w * 100) / 100, h: Math.round(hh * 100) / 100, r: 0, fx: 0, o: 1 };
+  S.assets.push(a); selAsset = a.id; return a;
+}
+function assetDown(c, e) {
+  var a = assetById(selAsset), hn;
+  if (a && (hn = handleAt(a, c.x, c.y))) { pushUndo(); drag = { type: hn === 'rot' ? 'arot' : 'ascale', id: a.id, h: hn, w0: a.w, h0: a.h }; return; }
+  var hit = assetAt(c.x, c.y);
+  if (hit && !(placeLib && e.altKey)) { selAsset = hit.id; pushUndo(); drag = { type: 'amove', id: hit.id, ox: hit.x - c.x, oy: hit.y - c.y }; if (tab === 'assets') renderPanel(); redraw(); return; }
+  if (placeLib) { pushUndo(); var n = placeAsset(c.x, c.y); if (n) { drag = { type: 'amove', id: n.id, ox: n.x - c.x, oy: n.y - c.y }; changed(); if (tab === 'assets') renderPanel(); } return; }
+  selAsset = null; if (tab === 'assets') renderPanel(); redraw();
+}
+function assetDrag(c, e) {
+  var a = assetById(drag.id); if (!a) return;
+  if (drag.type === 'amove') { var nx = c.x + drag.ox, ny = c.y + drag.oy; if (e.altKey) { a.x = nx; a.y = ny; } else { a.x = snapV(nx); a.y = snapV(ny); } }
+  else if (drag.type === 'arot') { var ang = Math.atan2(c.y - a.y, c.x - a.x) * 180 / Math.PI + 90; if (e.shiftKey) ang = Math.round(ang / 15) * 15; a.r = Math.round((((ang % 360) + 360) % 360) * 10) / 10; }
+  else {
+    var p = toLocal(a, c.x, c.y), n = drag.h, mn = 0.25;
+    if (n === 'e' || n === 'w') a.w = Math.max(mn, Math.abs(p.x) * 2);
+    else if (n === 'n' || n === 's') a.h = Math.max(mn, Math.abs(p.y) * 2);
+    else if (astLock) { var f = Math.max(Math.abs(p.x) / (drag.w0 / 2), Math.abs(p.y) / (drag.h0 / 2)); a.w = Math.max(mn, drag.w0 * f); a.h = a.w * drag.h0 / drag.w0; }
+    else { a.w = Math.max(mn, Math.abs(p.x) * 2); a.h = Math.max(mn, Math.abs(p.y) * 2); }
+    a.w = Math.round(a.w * 100) / 100; a.h = Math.round(a.h * 100) / 100;
+  }
+}
+function assetKey(e) {
+  var a = assetById(selAsset);
+  if (e.key === 'Escape') { if (a || placeLib) { selAsset = null; placeLib = null; if (tab === 'assets') renderPanel(); redraw(); return true; } return false; }
+  if (!a) return false;
+  if (e.key === 'Delete' || e.key === 'Backspace') { pushUndo(); S.assets = S.assets.filter(function (q) { return q !== a; }); selAsset = null; changed(); if (tab === 'assets') renderPanel(); return true; }
+  if (e.key.indexOf('Arrow') === 0) { var st = e.shiftKey ? 1 : 0.25; pushUndo(); a.x += ((e.key === 'ArrowRight') - (e.key === 'ArrowLeft')) * st; a.y += ((e.key === 'ArrowDown') - (e.key === 'ArrowUp')) * st; changed(); return true; }
+  if (e.key === '[' || e.key === ']') { pushUndo(); a.r = ((a.r + (e.key === ']' ? 15 : -15)) % 360 + 360) % 360; changed(); if (tab === 'assets') renderPanel(); return true; }
+  return false;
+}
+function libCount() { return Object.keys(LIB).length; }
+function addToLib(name, url, pw, ph, id) {
+  id = id || ('L' + Math.random().toString(36).slice(2, 8)); LIB[id] = { n: name || 'Object', d: url, pw: pw, ph: ph }; delete aimg[id]; saveLib(); return id;
+}
+function uploadAssets(files) {
+  var list = Array.prototype.slice.call(files || []), last = null, pend = list.length; if (!pend) return;
+  list.forEach(function (f) {
+    var fr = new FileReader();
+    fr.onload = function () {
+      var im = new Image();
+      im.onload = function () {
+        var sc = Math.min(1, 512 / Math.max(im.width, im.height)), w = Math.max(1, Math.round(im.width * sc)), hh = Math.max(1, Math.round(im.height * sc)), url, k = 0;
+        do { var cn = document.createElement('canvas'); cn.width = w; cn.height = hh; cn.getContext('2d').drawImage(im, 0, 0, w, hh); url = cn.toDataURL('image/png'); if (url.length > 450000 && w > 64) { w = Math.round(w * 0.75); hh = Math.round(hh * 0.75); } else break; } while (++k < 6);
+        last = addToLib(f.name.replace(/\.[^.]+$/, '').slice(0, 30), url, w, hh);
+        if (--pend === 0) { placeLib = last; setTool('asset'); renderPanel(); redraw(); }
+      };
+      im.onerror = function () { if (--pend === 0 && last) { placeLib = last; renderPanel(); } };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(f);
+  });
+}
+function panelAssets(b) {
+  var s = sec(b, 'Object library'), grid = h('div', 'alib'), ids = Object.keys(LIB);
+  if (!ids.length) s.appendChild(h('div', 'muted', 'No objects yet. Draw one or upload PNG files (trees, furniture, rubble, anything).'));
+  ids.forEach(function (id) {
+    var e = LIB[id], it = h('button', 'alibit'); it.type = 'button'; it.setAttribute('aria-pressed', placeLib === id ? 'true' : 'false'); it.title = e.n;
+    var im = document.createElement('img'); im.src = e.d; im.alt = ''; it.appendChild(im); it.appendChild(h('span', '', e.n));
+    it.addEventListener('click', function () { placeLib = placeLib === id ? null : id; if (placeLib) { setTool('asset'); } renderPanel(); redraw(); }); grid.appendChild(it);
+  });
+  s.appendChild(grid);
+  var r = h('div', 'row'); r.appendChild(btn('Draw new…', 'primary sm', function () { openAst(null); }));
+  r.appendChild(btn('Upload PNG…', 'sm', function () { var fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*'; fi.multiple = true; fi.addEventListener('change', function () { uploadAssets(fi.files); }); fi.click(); })); s.appendChild(r);
+  if (placeLib && LIB[placeLib]) {
+    s.appendChild(h('div', 'muted', 'Placing “' + LIB[placeLib].n + '”. Click the map to drop it. Esc to stop.'));
+    var r2 = h('div', 'row');
+    r2.appendChild(btn('Edit drawing', 'sm', function () { openAst(placeLib); }));
+    r2.appendChild(btn('Rename', 'sm', function () { var n = prompt('Name', LIB[placeLib].n); if (n) { LIB[placeLib].n = n.slice(0, 30); saveLib(); renderPanel(); } }));
+    r2.appendChild(btn('Delete', 'sm', function () { if (!confirm('Delete “' + LIB[placeLib].n + '” from your library and remove every copy on this map?')) return; var id = placeLib; delete LIB[id]; delete aimg[id]; saveLib(); S.assets = S.assets.filter(function (a) { return a.l !== id; }); placeLib = null; selAsset = null; changed(); renderPanel(); }));
+    s.appendChild(r2);
+  } else if (ids.length) s.appendChild(h('div', 'muted', 'Pick an object, then click the map. Or click a placed object to move, resize or rotate it.'));
+  var o = h('label', 'row tight'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = assetSnap; cb.addEventListener('change', function () { assetSnap = cb.checked; }); o.appendChild(cb); o.appendChild(h('span', 'muted', 'Snap position to half squares (hold Alt to drag freely)')); s.appendChild(o);
+  var a = assetById(selAsset);
+  if (a) {
+    var s2 = sec(b, 'Selected object'), e2 = LIB[a.l] || RLIB[a.l] || {};
+    s2.appendChild(h('div', 'muted', (e2.n || 'Object') + '  ·  drag to move, corner handles resize, round handle rotates (Shift = 15° steps)'));
+    function num(label, key, step, mn, mx, fn) { var i = inp('number', Math.round(a[key] * 100) / 100, function (x) { var v = parseFloat(x.value); if (!isFinite(v)) return; pushUndo(); a[key] = clamp(v, mn, mx); if (fn) fn(v); changed(); renderPanel(); }, { step: step, min: mn, max: mx }); s2.appendChild(fld(label, i)); }
+    num('Width (squares)', 'w', 0.25, 0.25, 80, function (v) { if (astLock) a.h = Math.round(v * (a.h / (a.w || 1)) * 100) / 100; });
+    num('Height (squares)', 'h', 0.25, 0.25, 80, function (v) { if (astLock) a.w = Math.round(v * (a.w / (a.h || 1)) * 100) / 100; });
+    num('Rotation (degrees)', 'r', 5, 0, 360);
+    var op = inp('range', a.o == null ? 1 : a.o, function (x) { a.o = parseFloat(x.value); changed(); }, { min: 0.1, max: 1, step: 0.05 }); op.addEventListener('input', function () { a.o = parseFloat(op.value); redraw(); }); s2.appendChild(fld('Opacity', op));
+    var l1 = h('label', 'row tight'), c1 = document.createElement('input'); c1.type = 'checkbox'; c1.checked = astLock; c1.addEventListener('change', function () { astLock = c1.checked; }); l1.appendChild(c1); l1.appendChild(h('span', 'muted', 'Keep proportions when resizing')); s2.appendChild(l1);
+    var l2 = h('label', 'row tight'), c2 = document.createElement('input'); c2.type = 'checkbox'; c2.checked = !!a.fx; c2.addEventListener('change', function () { pushUndo(); a.fx = c2.checked ? 1 : 0; changed(); }); l2.appendChild(c2); l2.appendChild(h('span', 'muted', 'Flip left/right')); s2.appendChild(l2);
+    var r3 = h('div', 'row');
+    r3.appendChild(btn('Duplicate', 'sm', function () { pushUndo(); var c = JSON.parse(JSON.stringify(a)); c.id = newAssetId(); c.x += 0.5; c.y += 0.5; S.assets.push(c); selAsset = c.id; changed(); renderPanel(); }));
+    r3.appendChild(btn('To front', 'sm', function () { pushUndo(); S.assets = S.assets.filter(function (q) { return q !== a; }); S.assets.push(a); changed(); }));
+    r3.appendChild(btn('To back', 'sm', function () { pushUndo(); S.assets = S.assets.filter(function (q) { return q !== a; }); S.assets.unshift(a); changed(); }));
+    r3.appendChild(btn('Delete', 'sm', function () { pushUndo(); S.assets = S.assets.filter(function (q) { return q !== a; }); selAsset = null; changed(); renderPanel(); }));
+    s2.appendChild(r3);
+  }
+  b.appendChild(h('div', 'muted', 'Placed objects are saved with the map and shown to every player at the table (hidden under fog until revealed). Objects sync to players through the campaign table; the free “Play online” relay is too small to carry images.'));
+}
+
+// ----- drawing editor -----
+var AE = { tool: 'pen', color: '#3b2a18', size: 6, fill: false, stack: [], editing: null, down: false, sx: 0, sy: 0, snap: null, lx: 0, ly: 0 };
+var AE_TOOLS = [['pen', 'Pen'], ['erase', 'Eraser'], ['line', 'Line'], ['rect', 'Box'], ['oval', 'Oval'], ['fill', 'Fill'], ['pick', 'Pick']];
+var AE_COLORS = ['#000000', '#3b2a18', '#7a4a21', '#b8803f', '#e6d3a3', '#ffffff', '#8a8a8a', '#c1272d', '#e0792b', '#e8c53a', '#4c9a3b', '#1f6f3a', '#2f78c9', '#6a3fb5', '#c24a9a'];
+(function () {
+  var cvA = $('astCv'), c2 = cvA.getContext('2d', { willReadFrequently: true });
+  AE_TOOLS.forEach(function (t) { var b = h('button', 'btn sm', t[1]); b.type = 'button'; b.dataset.t = t[0]; b.addEventListener('click', function () { AE.tool = t[0]; astMark(); }); $('astTools').appendChild(b); });
+  AE_COLORS.forEach(function (c) { var b = h('button', 'btn sm'); b.type = 'button'; b.style.cssText = 'width:22px;height:22px;padding:0;background:' + c; b.addEventListener('click', function () { AE.color = c; $('astColor').value = c; }); $('astPal').appendChild(b); });
+  function astMark() { Array.prototype.forEach.call($('astTools').children, function (b) { b.style.borderColor = b.dataset.t === AE.tool ? '#ffb100' : ''; }); }
+  astMark();
+  $('astColor').addEventListener('input', function () { AE.color = this.value; });
+  $('astSize').addEventListener('input', function () { AE.size = +this.value; $('astSizeV').textContent = this.value; });
+  $('astFill').addEventListener('change', function () { AE.fill = this.checked; });
+  function push() { AE.stack.push(c2.getImageData(0, 0, cvA.width, cvA.height)); if (AE.stack.length > 25) AE.stack.shift(); }
+  window.openAst = function (id) {
+    if (!isGM()) return; AE.editing = id; AE.stack = []; $('astDlg').hidden = false; $('astTitle').textContent = id ? 'Edit object' : 'Draw an object';
+    var e = id && LIB[id], res = e ? Math.min(512, Math.max(128, Math.max(e.pw || 256, e.ph || 256) > 256 ? 512 : (Math.max(e.pw || 256, e.ph || 256) > 128 ? 256 : 128))) : +$('astRes').value;
+    cvA.width = cvA.height = res; $('astRes').value = String(res); c2.clearRect(0, 0, res, res); $('astName').value = e ? e.n : '';
+    if (e) { var im = new Image(); im.onload = function () { var sc = Math.min(1, res / Math.max(im.width, im.height)), w = im.width * sc, hh = im.height * sc; c2.drawImage(im, (res - w) / 2, (res - hh) / 2, w, hh); }; im.src = e.d; }
+  };
+  $('astRes').addEventListener('change', function () { var r = +this.value; push(); var old = document.createElement('canvas'); old.width = cvA.width; old.height = cvA.height; old.getContext('2d').drawImage(cvA, 0, 0); cvA.width = cvA.height = r; c2.drawImage(old, 0, 0, r, r); });
+  $('astX').addEventListener('click', function () { $('astDlg').hidden = true; });
+  $('astUndo').addEventListener('click', function () { var s = AE.stack.pop(); if (s) { if (s.width !== cvA.width) return; c2.putImageData(s, 0, 0); } });
+  $('astClear').addEventListener('click', function () { push(); c2.clearRect(0, 0, cvA.width, cvA.height); });
+  $('astImport').addEventListener('click', function () {
+    var fi = document.createElement('input'); fi.type = 'file'; fi.accept = 'image/*';
+    fi.addEventListener('change', function () { var f = fi.files[0]; if (!f) return; var fr = new FileReader(); fr.onload = function () { var im = new Image(); im.onload = function () { push(); var sc = Math.min(cvA.width / im.width, cvA.height / im.height), w = im.width * sc, hh = im.height * sc; c2.drawImage(im, (cvA.width - w) / 2, (cvA.height - hh) / 2, w, hh); }; im.src = fr.result; }; fr.readAsDataURL(f); });
+    fi.click();
+  });
+  function pt(e) { var r = cvA.getBoundingClientRect(); return { x: (e.clientX - r.left) * cvA.width / r.width, y: (e.clientY - r.top) * cvA.height / r.height }; }
+  function hex(c) { var n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function floodFill(x, y) {
+    x = Math.floor(x); y = Math.floor(y); var w = cvA.width, hh = cvA.height; if (x < 0 || y < 0 || x >= w || y >= hh) return;
+    var img = c2.getImageData(0, 0, w, hh), d = img.data, i0 = (y * w + x) * 4, t = [d[i0], d[i0 + 1], d[i0 + 2], d[i0 + 3]], f = hex(AE.color);
+    if (t[3] === 255 && t[0] === f[0] && t[1] === f[1] && t[2] === f[2]) return;
+    function ok(i) { return Math.abs(d[i] - t[0]) + Math.abs(d[i + 1] - t[1]) + Math.abs(d[i + 2] - t[2]) + Math.abs(d[i + 3] - t[3]) < 60; }
+    var seen = new Uint8Array(w * hh), st = [x, y];
+    while (st.length) { var yy = st.pop(), xx = st.pop(), k = yy * w + xx; if (xx < 0 || yy < 0 || xx >= w || yy >= hh || seen[k] || !ok(k * 4)) continue; seen[k] = 1; var i = k * 4; d[i] = f[0]; d[i + 1] = f[1]; d[i + 2] = f[2]; d[i + 3] = 255; st.push(xx + 1, yy, xx - 1, yy, xx, yy + 1, xx, yy - 1); }
+    c2.putImageData(img, 0, 0);
+  }
+  function stroke(x0, y0, x1, y1) {
+    c2.lineCap = 'round'; c2.lineJoin = 'round'; c2.lineWidth = AE.size; c2.strokeStyle = AE.color; c2.fillStyle = AE.color;
+    c2.globalCompositeOperation = AE.tool === 'erase' ? 'destination-out' : 'source-over';
+    c2.beginPath();
+    if (AE.tool === 'pen' || AE.tool === 'erase' || AE.tool === 'line') { c2.moveTo(x0, y0); c2.lineTo(x1 + 0.01, y1); c2.stroke(); }
+    else if (AE.tool === 'rect') { if (AE.fill) c2.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); else c2.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); }
+    else if (AE.tool === 'oval') { c2.ellipse((x0 + x1) / 2, (y0 + y1) / 2, Math.abs(x1 - x0) / 2 + 0.01, Math.abs(y1 - y0) / 2 + 0.01, 0, 0, 6.3); if (AE.fill) c2.fill(); else c2.stroke(); }
+    c2.globalCompositeOperation = 'source-over';
+  }
+  cvA.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); try { cvA.setPointerCapture(e.pointerId); } catch (x) {} var p = pt(e);
+    if (AE.tool === 'pick') { var d = c2.getImageData(Math.floor(p.x), Math.floor(p.y), 1, 1).data; if (d[3]) { AE.color = '#' + [d[0], d[1], d[2]].map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join(''); $('astColor').value = AE.color; } return; }
+    push(); if (AE.tool === 'fill') { floodFill(p.x, p.y); return; }
+    AE.down = true; AE.sx = AE.lx = p.x; AE.sy = AE.ly = p.y; AE.snap = null;
+    if (AE.tool === 'pen' || AE.tool === 'erase') stroke(p.x, p.y, p.x, p.y); else AE.snap = c2.getImageData(0, 0, cvA.width, cvA.height);
+  });
+  cvA.addEventListener('pointermove', function (e) {
+    if (!AE.down) return; var p = pt(e);
+    if (AE.tool === 'pen' || AE.tool === 'erase') { stroke(AE.lx, AE.ly, p.x, p.y); AE.lx = p.x; AE.ly = p.y; }
+    else { c2.putImageData(AE.snap, 0, 0); stroke(AE.sx, AE.sy, p.x, p.y); }
+  });
+  function up() { AE.down = false; AE.snap = null; }
+  cvA.addEventListener('pointerup', up); cvA.addEventListener('pointercancel', up);
+  function save(andPlace) {
+    var w = cvA.width, hh = cvA.height, d = c2.getImageData(0, 0, w, hh).data, x0 = w, y0 = hh, x1 = -1, y1 = -1, x, y;
+    for (y = 0; y < hh; y++) for (x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) { alert('The canvas is empty. Draw something first.'); return; }
+    x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(w - 1, x1 + 2); y1 = Math.min(hh - 1, y1 + 2);
+    var cw = x1 - x0 + 1, ch = y1 - y0 + 1, out = document.createElement('canvas'); out.width = cw; out.height = ch; out.getContext('2d').drawImage(cvA, x0, y0, cw, ch, 0, 0, cw, ch);
+    var id = addToLib($('astName').value.trim() || 'Object ' + (libCount() + 1), out.toDataURL('image/png'), cw, ch, AE.editing);
+    $('astDlg').hidden = true; placeLib = id; if (AE.editing) { S.assets.forEach(function (a) { if (a.l === id) { /* keep size; image content changed */ } }); changed(); }
+    if (andPlace || !AE.editing) setTool('asset'); renderPanel(); redraw();
+  }
+  $('astSave').addEventListener('click', function () { save(false); });
+  $('astSavePlace').addEventListener('click', function () { save(true); });
+  document.addEventListener('keydown', function (e) { if (!$('astDlg').hidden && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); $('astUndo').click(); } });
+})();
 
 // ---------- start ----------
 (function () {
