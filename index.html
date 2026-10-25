@@ -2474,6 +2474,7 @@ header { align-items: center; }
       var x = h('button', 'ob-b', b[0]); x.type = 'button'; x.addEventListener('click', b[1]); revBar.appendChild(x);
     });
     revBar.appendChild(h('span', 'rv-n', 'Move ' + s.hist.length + ' of ' + total));
+    if (!variant) { var anb = h('button', 'ob-b', 'Analyze'); anb.type = 'button'; anb.addEventListener('click', function () { runAnalysis(); }); revBar.appendChild(anb); }
   }
   document.addEventListener('keydown', function (e) {
     if (!over || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
@@ -2527,6 +2528,112 @@ header { align-items: center; }
   saveBtn.addEventListener('click', function () { saveDlg.hidden = false; svSt.textContent = ''; svText.value = ''; });
   saveDlg.querySelector('.sv-x').addEventListener('click', function () { saveDlg.hidden = true; });
   saveDlg.addEventListener('click', function (e) { if (e.target === saveDlg) saveDlg.hidden = true; });
+  // --- move analysis (post-game review: classifies every move like chess.com) ---
+  var AN_VAL = { 1: 100, 2: 300, 3: 320, 4: 500, 5: 900, 6: 0 };
+  var AN_LBL = { brilliant: ['Brilliant', '!!', '#1baca6'], great: ['Great', '!', '#5c8bb0'], best: ['Best', '★', '#81b64c'], good: ['Good', '✓', '#95b776'],
+    inacc: ['Inaccuracy', '?!', '#f7c631'], mistake: ['Mistake', '?', '#e58f2a'], miss: ['Miss', '✗', '#ee6b6b'], blunder: ['Blunder', '??', '#ca3431'] };
+  var anBtn = h('button', 'btn openbtn', 'Analyze'); anBtn.type = 'button'; anBtn.style.marginLeft = '8px';
+  saveBtn.parentNode.insertBefore(anBtn, saveBtn.nextSibling);
+  var anDlg = document.createElement('div'); anDlg.id = 'anDlg'; anDlg.className = 'ovl'; anDlg.hidden = true;
+  anDlg.innerHTML = '<div class="nd-box" style="max-width:560px"><div class="cat-head"><h2>Game analysis</h2><button type="button" class="btn an-x">Close</button></div>' +
+    '<div class="an-st nd-status"></div><div class="an-body"></div></div>';
+  document.body.appendChild(anDlg);
+  var anSt = anDlg.querySelector('.an-st'), anBody = anDlg.querySelector('.an-body'), anBusy = false, anRun = 0;
+  anDlg.querySelector('.an-x').addEventListener('click', function () { anRun++; anBusy = false; anDlg.hidden = true; });
+  anDlg.addEventListener('click', function (e) { if (e.target === anDlg) { anRun++; anBusy = false; anDlg.hidden = true; } });
+  function anWp(cp) { cp = Math.max(-1500, Math.min(1500, cp)); return 1 / (1 + Math.exp(-0.004 * cp)); }
+  function anSac(st, m) { // after m is made on st: does the mover give up material on the destination square?
+    if (Math.abs(m.piece) < 2 || Math.abs(m.piece) === 6) return false;
+    var pv = AN_VAL[Math.abs(m.piece)], reps = E.legalMoves(st).filter(function (x) { return x.to === m.to && x.cap; });
+    if (!reps.length) return false;
+    var low = Infinity; reps.forEach(function (x) { low = Math.min(low, AN_VAL[Math.abs(x.piece)] || 0); });
+    var lowM = reps.filter(function (x) { return (AN_VAL[Math.abs(x.piece)] || 0) === low; })[0];
+    E.make(st, lowM); var def = E.legalMoves(st).some(function (x) { return x.to === m.to && x.cap; }); E.unmake(st);
+    var loss = def ? pv - Math.min(low, 900) : pv, gain = m.cap ? AN_VAL[Math.abs(m.cap)] || 0 : 0;
+    return loss - gain >= 200;
+  }
+  function runAnalysis() {
+    if (anBusy) return;
+    anDlg.hidden = false; anBody.textContent = '';
+    if (variant) { anSt.textContent = 'Analysis covers standard chess. Peasants & Goblins moves involve dice and abilities, so they are not judged.'; return; }
+    if (online) { anSt.textContent = 'Leave the online game first.'; return; }
+    var played = s.hist.map(function (u) { return u.m; }).concat(reviewStack.slice().reverse());
+    if (played.length < 2) { anSt.textContent = 'Play a few moves first.'; return; }
+    anBusy = true; var my = ++anRun;
+    var st = E.newGame({ fen: curFen }), out = [], ply = 0, DEPTH = 3, prevLoss = 0;
+    (function step() {
+      if (my !== anRun) return;
+      if (ply >= played.length) { anBusy = false; showAnalysis(out); return; }
+      var m = played[ply], legal = E.legalMoves(st), mk = E.moveKey(m), mover = st.turn;
+      var an = E.analyze(st, DEPTH), cap = function (x) { return Math.max(-2000, Math.min(2000, x)); };
+      var best = an[0], pe = an.filter(function (x) { return E.moveKey(x.m) === mk; })[0];
+      var bScore = cap(best.score), pScore = pe ? cap(pe.score) : bScore;
+      var isBest = E.moveKey(best.m) === mk, second = an.length > 1 ? cap(an[1].score) : -2000;
+      var loss = Math.max(0, anWp(bScore) - anWp(pScore)), san = E.san(st, m, legal), bsan = E.san(st, best.m, legal);
+      E.make(st, m);
+      var cls;
+      if (isBest || loss <= 0.01) cls = 'best';
+      else if (loss <= 0.04) cls = 'good';
+      else if (loss <= 0.09) cls = 'inacc';
+      else if (loss <= 0.18) cls = 'mistake';
+      else cls = 'blunder';
+      if ((cls === 'mistake' || cls === 'blunder') && prevLoss >= 0.09 && bScore >= 150) cls = 'miss';
+      if (cls === 'best' && pScore >= -150) {
+        if (pScore <= 500 && anSac(st, m)) cls = 'brilliant';
+        else if (isBest && bScore - second >= 180 && pScore <= 600 && an.length > 1 && !m.cap) cls = 'great';
+      }
+      out.push({ ply: ply, san: san, best: bsan, cls: cls, loss: loss, white: mover === 1 ? pScore : -pScore, acc: 103.1668 * Math.exp(-4.354 * loss) - 3.1669, mover: mover });
+      prevLoss = loss; ply++;
+      anSt.textContent = 'Analyzing… ' + ply + ' / ' + played.length;
+      setTimeout(step, 0);
+    })();
+  }
+  function showAnalysis(out) {
+    anSt.textContent = ''; anBody.textContent = '';
+    var side = function (c) {
+      var r = out.filter(function (x) { return x.mover === c; }), a = r.length ? r.reduce(function (t, x) { return t + Math.max(0, x.acc); }, 0) / r.length : 0, n = {};
+      r.forEach(function (x) { n[x.cls] = (n[x.cls] || 0) + 1; }); return { acc: a, n: n };
+    };
+    var W = side(1), B = side(-1);
+    var top = h('div', 'an-top'); top.style.cssText = 'display:flex;gap:12px;margin:8px 0';
+    [['White', W], ['Black', B]].forEach(function (p) {
+      var d = h('div', 'an-side'); d.style.cssText = 'flex:1;padding:8px;border:1px solid rgba(128,128,128,.4);border-radius:8px;text-align:center';
+      d.appendChild(h('div', '', p[0])); var big = h('div', '', p[1].acc.toFixed(1) + '%'); big.style.cssText = 'font-size:1.6em;font-weight:700'; d.appendChild(big);
+      d.appendChild(h('div', '', 'accuracy')); top.appendChild(d);
+    });
+    anBody.appendChild(top);
+    // eval graph (White's view)
+    var NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'), w = 520, ht = 90;
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + ht); svg.style.cssText = 'width:100%;height:auto;background:#222;border-radius:6px';
+    var n = out.length, pts = out.map(function (x, i) { return [(i + 1) / n * w, ht - anWp(x.white) * ht]; });
+    var pa = document.createElementNS(NS, 'path'); pa.setAttribute('d', 'M0,' + ht / 2 + ' ' + pts.map(function (p) { return 'L' + p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + ' L' + w + ',' + ht + ' L0,' + ht + ' Z');
+    pa.setAttribute('fill', '#ddd'); pa.setAttribute('opacity', '.85'); svg.appendChild(pa);
+    var ml = document.createElementNS(NS, 'line'); ml.setAttribute('x1', 0); ml.setAttribute('x2', w); ml.setAttribute('y1', ht / 2); ml.setAttribute('y2', ht / 2); ml.setAttribute('stroke', '#888'); svg.appendChild(ml);
+    out.forEach(function (x, i) { if (x.cls === 'blunder' || x.cls === 'brilliant' || x.cls === 'miss') { var c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', pts[i][0]); c.setAttribute('cy', pts[i][1]); c.setAttribute('r', 3.5); c.setAttribute('fill', AN_LBL[x.cls][2]); svg.appendChild(c); } });
+    anBody.appendChild(svg);
+    // counts
+    var tb = h('div', 'an-counts'); tb.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:2px 14px;margin:10px 0;font-size:.95em';
+    ['brilliant', 'great', 'best', 'good', 'inacc', 'mistake', 'miss', 'blunder'].forEach(function (k) {
+      var l = h('span', '', AN_LBL[k][1] + '  ' + AN_LBL[k][0]); l.style.color = AN_LBL[k][2]; tb.appendChild(l);
+      var a = h('span', '', String(W.n[k] || 0)), b = h('span', '', String(B.n[k] || 0)); a.style.textAlign = b.style.textAlign = 'right'; tb.appendChild(a); tb.appendChild(b);
+    });
+    var hd = h('span', '', 'White / Black'); hd.style.cssText = 'grid-column:1/4;text-align:right;opacity:.6'; tb.insertBefore(hd, tb.firstChild);
+    anBody.appendChild(tb);
+    // move list
+    var list = h('div', 'an-list'); list.style.cssText = 'max-height:240px;overflow:auto;font-size:.95em';
+    out.forEach(function (x, i) {
+      var row = h('div', 'an-row'); row.style.cssText = 'display:flex;gap:8px;padding:2px 4px;border-bottom:1px solid rgba(128,128,128,.2);cursor:' + (over ? 'pointer' : 'default');
+      row.appendChild(h('span', '', (x.mover === 1 ? Math.floor(i / 2) + 1 + '.' : Math.floor(i / 2) + 1 + '…')));
+      row.appendChild(h('strong', '', x.san));
+      var bd = h('span', '', AN_LBL[x.cls][1] + ' ' + AN_LBL[x.cls][0]); bd.style.cssText = 'color:' + AN_LBL[x.cls][2] + ';flex:1'; row.appendChild(bd);
+      if (x.cls === 'inacc' || x.cls === 'mistake' || x.cls === 'miss' || x.cls === 'blunder') { var bt = h('span', '', 'better: ' + x.best); bt.style.opacity = '.75'; row.appendChild(bt); }
+      if (over) row.addEventListener('click', function () { revTo(i + 1); anDlg.hidden = true; });
+      list.appendChild(row);
+    });
+    anBody.appendChild(list);
+    var nt = h('p', 'nd-p', 'Moves are judged by the Warlord engine searching three moves ahead, so treat labels as a guide, not a verdict.'); nt.style.opacity = '.7'; anBody.appendChild(nt);
+  }
+  anBtn.addEventListener('click', runAnalysis);
   saveDlg.querySelector('.sv-copy').addEventListener('click', function () {
     var c = makeSave(); svText.value = c; svText.select();
     try { navigator.clipboard.writeText(c).then(function () { svSt.textContent = 'Copied. Paste it anywhere to keep it.'; }, function () { svSt.textContent = 'Select the text above and copy it.'; }); } catch (e) { svSt.textContent = 'Select the text above and copy it.'; }
