@@ -37,10 +37,10 @@ canvas:active{cursor:grabbing}
   var msg = document.getElementById('msg');
   if (!gl) { msg.textContent = 'This browser cannot do WebGL, so the 3D view will not run here.'; return; }
   function loadImg(u) { return new Promise(function (ok, no) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { no(new Error(u)); }; i.src = u; }); }
-  Promise.all([loadImg('world3d-height.png'), loadImg('world3d-color.png'), fetch('world3d-places.json').then(function (r) { return r.json(); }), loadImg('world3d-mask.png')]).then(function (a) { start(a[0], a[1], a[2], a[3]); })
+  Promise.all([loadImg('world3d-height.png'), loadImg('world3d-color.png'), fetch('world3d-places.json').then(function (r) { return r.json(); }), loadImg('world3d-mask.png'), loadImg('world3d-biome.png')]).then(function (a) { start(a[0], a[1], a[2], a[3], a[4]); })
     .catch(function (e) { msg.textContent = 'Could not load ' + e.message + '. Make sure world3d-height.png, world3d-color.png and world3d-places.json are in the same folder as this page.'; });
 
-  function start(himg, cimg, meta, mimg) {
+  function start(himg, cimg, meta, mimg, bimg) {
     var W = meta.w, H = meta.h, MI = meta.mi, EXP = meta.exp;
     document.getElementById('ttl').textContent = meta.name + ' in 3D';
     // ---- decode heights: y in map pixels (1 px = MI miles), unexaggerated ----
@@ -81,7 +81,7 @@ canvas:active{cursor:grabbing}
       'if(m.r<0.5){float dp=clamp((20.0-hh)/20.0,0.0,1.0);col=mix(vec3(0.275,0.404,0.510),vec3(0.165,0.286,0.408),sqrt(dp));' +
       'vec3 n=normalize(vec3(sin(vXZ.x*60.0+uT)*0.03+sin(vXZ.y*43.0-uT*1.3)*0.02,1.0,cos(vXZ.y*57.0+uT*0.8)*0.03));float sp=pow(max(dot(reflect(-L,n),normalize(vec3(0.0,0.7,0.7))),0.0),24.0);col+=vec3(sp*0.18);}' +
       'else{vec3 b=mix(ramp(hh),texture2D(uC,vUV).rgb,uBio);vec3 nn=normalize(vN);float k=1.0-smoothstep(uDR*0.6,uDR*2.4,vD);' +
-      'if(k>0.0){float n1=vn(vXZ*150.0),n2=vn(vXZ*600.0),n3=vn(vXZ*1800.0),n0=vn(vXZ*30.0);vec3 g=b*(0.68+0.5*n0)*(0.8+0.34*n1)*(0.84+0.3*n2)*(0.9+0.2*n3);' +
+      'if(k>0.0){b=mix(b,mix(b,texture2D(uC,vUV).rgb,0.85),k*(1.0-uBio));float n1=vn(vXZ*150.0),n2=vn(vXZ*600.0),n3=vn(vXZ*1800.0),n0=vn(vXZ*30.0);vec3 g=b*(0.68+0.5*n0)*(0.8+0.34*n1)*(0.84+0.3*n2)*(0.9+0.2*n3);' +
       'float sl=1.0-nn.y;float rk=smoothstep(0.32,0.55,sl+(n1-0.5)*0.25);g=mix(g,vec3(0.43,0.40,0.36)*(0.75+0.5*n2),rk*0.85);b=mix(b,g,k);}' +
       'float df=max(dot(nn,L),0.0);col=b*(0.5+0.7*df);}' +
       'float ln=(1.0-smoothstep(0.0,0.2,abs(m.r-0.5)))*(1.0-smoothstep(25.0,140.0,vD));col=mix(col,vec3(0.02),ln*0.85);' +
@@ -121,7 +121,7 @@ canvas:active{cursor:grabbing}
       var y = (Y[iz * W + ix] * (1 - tx_) + Y[iz * W + ix + 1] * tx_) * (1 - tz) + (Y[(iz + 1) * W + ix] * (1 - tx_) + Y[(iz + 1) * W + ix + 1] * tx_) * tz;
       return y;
     }
-    function groundAt(x, z) { var y = baseAt(x, z); return y > 0 ? Math.max(0.0003, y * EX + detail(x, z, 0.004)) : 0; }
+    function groundAt(x, z) { var y = baseAt(x, z); return y > 0 ? Math.max(0.0003, y * EX + detail(x, z, 0.002)) : 0; }
     function mul(a, b) { var r = new Float32Array(16); for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) { var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; }
     function persp(fov, asp, n, f) { var t = 1 / Math.tan(fov / 2), r = new Float32Array(16); r[0] = t / asp; r[5] = t; r[10] = (f + n) / (n - f); r[11] = -1; r[14] = 2 * f * n / (n - f); return r; }
     function view() {
@@ -262,12 +262,292 @@ canvas:active{cursor:grabbing}
       gl.disableVertexAttribArray(PP.a[0]); gl.disableVertexAttribArray(PP.a[1]); gl.disable(gl.POLYGON_OFFSET_FILL);
       return R;
     }
+    // ---- vegetation: instanced low-poly trees, shrubs, rocks and grass that follow the biome map ----
+    var VX = gl.getExtension('ANGLE_instanced_arrays'), VEG = null;
+    var bc2 = document.createElement('canvas'); bc2.width = W; bc2.height = H; var bcx = bc2.getContext('2d'); bcx.drawImage(bimg, 0, 0);
+    var BD = bcx.getImageData(0, 0, W, H).data;
+    function landAt(x, z) { var xx = Math.max(0, Math.min(W - 1, x)), zz = Math.max(0, Math.min(H - 1, z)); return MD[(((zz * SC) | 0) * MW + ((xx * SC) | 0)) * 4] > 127; }
+    function landSafe(x, z) { return landAt(x, z) && landAt(x + 0.6, z) && landAt(x - 0.6, z) && landAt(x, z + 0.6) && landAt(x, z - 0.6); }
+    function biomeAt(x, z) {
+      var wx = x + (vnz(x * 2.5, z * 2.5) - 0.5) * 1.6, wz = z + (vnz(x * 2.5 + 31, z * 2.5 + 17) - 0.5) * 1.6;
+      wx = Math.max(0, Math.min(W - 1, Math.round(wx))); wz = Math.max(0, Math.min(H - 1, Math.round(wz)));
+      return BD[(wz * W + wx) * 4];
+    }
+    if (VX) (function () {
+      var FT = 1 / 5280 / MI;                      // one foot in map pixels
+      function lerp3(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+      function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+      function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+      function norm(a) { var l = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+      function MB(seed) { this.d = []; this.s = seed || 1; }
+      MB.prototype.r = function () { this.s = (this.s * 16807) % 2147483647; return (this.s - 1) / 2147483646; };
+      MB.prototype.tri = function (P, Q, R, cP, cQ, cR, wP, wQ, wR, t) {
+        var n = norm(cross(sub(Q, P), sub(R, P))), V = [P, Q, R], C = [cP, cQ, cR], Wv = [wP, wQ, wR];
+        for (var i = 0; i < 3; i++) this.d.push(V[i][0], V[i][1], V[i][2], n[0], n[1], n[2], C[i][0], C[i][1], C[i][2], Wv[i], t);
+      };
+      // tapered tube from a to b
+      MB.prototype.tube = function (a, b, ra, rb, n, ca, cb, wa, wb, t) {
+        var ax = norm(sub(b, a)), up = Math.abs(ax[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0], u = norm(cross(ax, up)), v = cross(ax, u), i, k1, k2;
+        for (i = 0; i < n; i++) {
+          var a1 = i / n * 6.2832, a2 = (i + 1) / n * 6.2832;
+          var p1 = [Math.cos(a1) * u[0] + Math.sin(a1) * v[0], Math.cos(a1) * u[1] + Math.sin(a1) * v[1], Math.cos(a1) * u[2] + Math.sin(a1) * v[2]];
+          var p2 = [Math.cos(a2) * u[0] + Math.sin(a2) * v[0], Math.cos(a2) * u[1] + Math.sin(a2) * v[1], Math.cos(a2) * u[2] + Math.sin(a2) * v[2]];
+          var A1 = [a[0] + p1[0] * ra, a[1] + p1[1] * ra, a[2] + p1[2] * ra], A2 = [a[0] + p2[0] * ra, a[1] + p2[1] * ra, a[2] + p2[2] * ra];
+          var B1 = [b[0] + p1[0] * rb, b[1] + p1[1] * rb, b[2] + p1[2] * rb], B2 = [b[0] + p2[0] * rb, b[1] + p2[1] * rb, b[2] + p2[2] * rb];
+          this.tri(A1, A2, B1, ca, ca, cb, wa, wa, wb, t);
+          if (rb > 1e-5) this.tri(A2, B2, B1, ca, cb, cb, wa, wb, wb, t);
+        }
+      };
+      // lumpy ellipsoid (icosphere, one subdivision) coloured bottom to top
+      var ICO = (function () {
+        var g = (1 + Math.sqrt(5)) / 2, v = [[-1, g, 0], [1, g, 0], [-1, -g, 0], [1, -g, 0], [0, -1, g], [0, 1, g], [0, -1, -g], [0, 1, -g], [g, 0, -1], [g, 0, 1], [-g, 0, -1], [-g, 0, 1]].map(norm);
+        var f = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+        return { v: v, f: f };
+      })();
+      function icoFaces(sub1) {
+        var out = [];
+        ICO.f.forEach(function (f) {
+          var a = ICO.v[f[0]], b = ICO.v[f[1]], c = ICO.v[f[2]];
+          if (!sub1) { out.push([a, b, c]); return; }
+          var ab = norm([a[0] + b[0], a[1] + b[1], a[2] + b[2]]), bc = norm([b[0] + c[0], b[1] + c[1], b[2] + c[2]]), ca = norm([c[0] + a[0], c[1] + a[1], c[2] + a[2]]);
+          out.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+        });
+        return out;
+      }
+      MB.prototype.blob = function (c, rad, cb, ct, jit, w, t, sub1) {
+        var self = this, faces = icoFaces(sub1 !== false);
+        function dsp(p) { var h = Math.sin(p[0] * 91.7 + p[1] * 47.3 + p[2] * 131.1 + self.s * 0.013) * 43758.5453; h = h - Math.floor(h); return 1 + (h - 0.5) * 2 * jit; }
+        function P(p) { var k = dsp(p); return [c[0] + p[0] * rad[0] * k, c[1] + p[1] * rad[1] * k, c[2] + p[2] * rad[2] * k]; }
+        function C(p) { var tt = Math.max(0, Math.min(1, p[1] * 0.5 + 0.55)); return lerp3(cb, ct, tt); }
+        faces.forEach(function (f) { self.tri(P(f[0]), P(f[1]), P(f[2]), C(f[0]), C(f[1]), C(f[2]), w, w, w, t); });
+      };
+      // bundle of curved blades
+      MB.prototype.blades = function (n, h, wd, spread, cb, ct, lean) {
+        for (var i = 0; i < n; i++) {
+          var ang = this.r() * 6.2832, rr = Math.sqrt(this.r()) * spread, bx = Math.cos(ang) * rr, bz = Math.sin(ang) * rr, la = this.r() * 6.2832, ln = lean * (0.5 + this.r() * 0.7);
+          var hh = h * (0.65 + this.r() * 0.5), dx = Math.cos(la), dz = Math.sin(la), px = -dz * wd, pz = dx * wd;
+          var b0 = [bx - px, 0, bz - pz], b1 = [bx + px, 0, bz + pz];
+          var m0 = [bx + dx * ln * hh * 0.25 - px * 0.6, hh * 0.55, bz + dz * ln * hh * 0.25 - pz * 0.6], m1 = [m0[0] + px * 1.2, m0[1], m0[2] + pz * 1.2];
+          var tp = [bx + dx * ln * hh, hh, bz + dz * ln * hh], cm = lerp3(cb, ct, 0.55);
+          this.tri(b0, b1, m0, cb, cb, cm, 0, 0, 0.45, 1); this.tri(b1, m1, m0, cb, cm, cm, 0, 0.45, 0.45, 1); this.tri(m0, m1, tp, cm, cm, ct, 0.45, 0.45, 1, 1);
+        }
+      };
+      MB.prototype.rock = function (sx, sy, sz, cb, ct, jit, flat) {
+        var self = this, faces = icoFaces(false), ymax = 0;
+        function P(p) { var h1 = Math.sin(p[0] * 71.3 + p[1] * 12.9 + p[2] * 91.1 + self.s) * 43758.5453; h1 -= Math.floor(h1); var k = 1 + (h1 - 0.5) * 2 * jit; return [p[0] * sx * k, Math.max(p[1], flat ? -0.15 : -0.35) * sy * k, p[2] * sz * k]; }
+        var tris = faces.map(function (f) { return [P(f[0]), P(f[1]), P(f[2])]; }); tris.forEach(function (t3) { t3.forEach(function (p) { ymax = Math.max(ymax, p[1]); }); });
+        tris.forEach(function (t3) { var sc = 1 / (ymax || 1), q = t3.map(function (p) { return [p[0] * sc, p[1] * sc, p[2] * sc]; }), br = 0.85 + self.r() * 0.3;
+          var cs = q.map(function (p) { var c = lerp3(cb, ct, Math.max(0, Math.min(1, p[1] + 0.2))); return [c[0] * br, c[1] * br, c[2] * br]; }); self.tri(q[0], q[1], q[2], cs[0], cs[1], cs[2], 0, 0, 0, 0); });
+      };
+      var BARK = [0.30, 0.22, 0.14], BARK2 = [0.20, 0.14, 0.09], PALEB = [0.80, 0.78, 0.70];
+      var MESH = {};
+      function def(name, fn, seed) { var m = new MB(seed); fn(m); MESH[name] = { data: new Float32Array(m.d), n: m.d.length / 11 }; }
+      function cone(m, y0, y1, rad, n, cb, ct, jit) { var apex = [0, y1, 0], i; for (i = 0; i < n; i++) { var a1 = i / n * 6.2832 + jit, a2 = (i + 1) / n * 6.2832 + jit; m.tri([Math.cos(a1) * rad, y0, Math.sin(a1) * rad], [Math.cos(a2) * rad, y0, Math.sin(a2) * rad], apex, cb, cb, ct, 0.15, 0.15, 0.3, 1); } }
+      function conifer(m, tiers, wide, trunkTop, c0, c1) {
+        m.tube([0, 0, 0], [0, trunkTop + 0.05, 0], 0.028, 0.012, 6, BARK, BARK2, 0, 0, 0);
+        for (var k = 0; k < tiers; k++) { var f = k / tiers, y0 = trunkTop * 0.7 + f * (1 - trunkTop * 0.7 - 0.2), rad = wide * (1 - f * 0.82); cone(m, y0, y0 + (1 - y0) * 0.5 + 0.08, rad, 8, lerp3(c0, c1, 0.1 + f * 0.1), lerp3(c0, c1, 0.7 + f * 0.3), k * 0.4); }
+      }
+      def('spruce', function (m) { conifer(m, 6, 0.2, 0.12, [0.07, 0.22, 0.13], [0.16, 0.36, 0.20]); }, 11);
+      def('fir', function (m) { conifer(m, 4, 0.3, 0.15, [0.10, 0.27, 0.12], [0.22, 0.42, 0.18]); }, 12);
+      def('pine', function (m) {
+        m.tube([0, 0, 0], [0.03, 0.72, 0], 0.035, 0.02, 7, BARK, BARK2, 0, 0.1, 0);
+        m.blob([0.04, 0.8, 0], [0.26, 0.11, 0.26], [0.12, 0.30, 0.12], [0.25, 0.46, 0.18], 0.18, 0.2, 1);
+        m.blob([-0.12, 0.7, 0.05], [0.18, 0.08, 0.18], [0.12, 0.30, 0.12], [0.22, 0.42, 0.16], 0.18, 0.2, 1);
+        m.blob([0.14, 0.92, -0.04], [0.16, 0.08, 0.16], [0.14, 0.32, 0.12], [0.26, 0.48, 0.2], 0.18, 0.2, 1);
+      }, 13);
+      def('oak', function (m) {
+        m.tube([0, 0, 0], [0, 0.38, 0], 0.05, 0.03, 7, BARK, BARK2, 0, 0, 0);
+        m.tube([0, 0.3, 0], [0.18, 0.52, 0.04], 0.025, 0.012, 5, BARK, BARK2, 0, 0.05, 0);
+        m.blob([0, 0.68, 0], [0.36, 0.27, 0.34], [0.12, 0.28, 0.08], [0.32, 0.50, 0.18], 0.16, 0.25, 1);
+        m.blob([0.2, 0.56, 0.06], [0.24, 0.2, 0.24], [0.14, 0.30, 0.09], [0.30, 0.48, 0.17], 0.16, 0.25, 1);
+        m.blob([-0.18, 0.58, -0.1], [0.22, 0.18, 0.22], [0.14, 0.30, 0.09], [0.30, 0.48, 0.17], 0.16, 0.25, 1);
+      }, 14);
+      def('birch', function (m) {
+        m.tube([0, 0, 0], [0.02, 0.6, 0], 0.025, 0.012, 6, PALEB, [0.55, 0.52, 0.46], 0, 0.05, 0);
+        m.blob([0.02, 0.72, 0], [0.17, 0.3, 0.17], [0.28, 0.45, 0.14], [0.50, 0.66, 0.24], 0.14, 0.3, 1);
+        m.blob([-0.08, 0.5, 0.05], [0.11, 0.16, 0.11], [0.28, 0.44, 0.14], [0.46, 0.62, 0.22], 0.14, 0.3, 1);
+      }, 15);
+      def('trop', function (m) {
+        m.tube([0, 0, 0], [0, 0.66, 0], 0.075, 0.035, 7, BARK2, BARK, 0, 0, 0);
+        for (var i = 0; i < 4; i++) { var a = i * 1.57 + 0.4; m.tube([Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1], [0, 0.22, 0], 0.012, 0.03, 4, BARK2, BARK, 0, 0, 0); }
+        m.blob([0, 0.82, 0], [0.46, 0.18, 0.44], [0.06, 0.24, 0.07], [0.20, 0.46, 0.14], 0.16, 0.2, 1);
+        m.blob([0.26, 0.74, 0.1], [0.28, 0.14, 0.26], [0.06, 0.24, 0.07], [0.18, 0.42, 0.13], 0.16, 0.2, 1);
+        m.blob([-0.24, 0.76, -0.12], [0.26, 0.13, 0.26], [0.06, 0.24, 0.07], [0.18, 0.42, 0.13], 0.16, 0.2, 1);
+      }, 16);
+      def('acacia', function (m) {
+        m.tube([0, 0, 0], [0.04, 0.5, 0], 0.035, 0.02, 6, [0.36, 0.28, 0.2], BARK, 0, 0.05, 0);
+        m.tube([0.04, 0.45, 0], [0.3, 0.66, 0.05], 0.02, 0.012, 5, BARK, BARK2, 0, 0.05, 0);
+        m.tube([0.04, 0.45, 0], [-0.24, 0.62, -0.06], 0.02, 0.012, 5, BARK, BARK2, 0, 0.05, 0);
+        m.blob([0.0, 0.76, 0], [0.5, 0.1, 0.45], [0.28, 0.40, 0.14], [0.46, 0.56, 0.22], 0.15, 0.2, 1);
+        m.blob([0.3, 0.7, 0.05], [0.26, 0.07, 0.24], [0.28, 0.40, 0.14], [0.44, 0.54, 0.2], 0.15, 0.2, 1);
+      }, 17);
+      def('palm', function (m) {
+        var p0 = [0, 0, 0], p1 = [0.05, 0.4, 0], p2 = [0.12, 0.78, 0.02];
+        m.tube(p0, p1, 0.035, 0.028, 6, [0.46, 0.38, 0.26], [0.40, 0.33, 0.22], 0, 0.05, 0); m.tube(p1, p2, 0.028, 0.02, 6, [0.40, 0.33, 0.22], [0.36, 0.29, 0.2], 0.05, 0.15, 0);
+        for (var i = 0; i < 9; i++) { var a = i / 9 * 6.2832, dx = Math.cos(a), dz = Math.sin(a), px = -dz * 0.045, pz = dx * 0.045, o = [0.12, 0.8, 0.02];
+          var A = [o[0] + px, o[1], o[2] + pz], B = [o[0] - px, o[1], o[2] - pz], Mm = [o[0] + dx * 0.24 + px * 1.4, o[1] + 0.12, o[2] + dz * 0.24 + pz * 1.4], Mn = [o[0] + dx * 0.24 - px * 1.4, o[1] + 0.12, o[2] + dz * 0.24 - pz * 1.4], T = [o[0] + dx * 0.46, o[1] - 0.04, o[2] + dz * 0.46];
+          var c0 = [0.12, 0.34, 0.1], c1 = [0.28, 0.52, 0.18]; m.tri(A, B, Mm, c0, c0, c1, 0.1, 0.1, 0.6, 1); m.tri(B, Mn, Mm, c0, c1, c1, 0.1, 0.6, 0.6, 1); m.tri(Mm, Mn, T, c1, c1, c1, 0.6, 0.6, 1, 1); }
+      }, 18);
+      def('mangrove', function (m) {
+        for (var i = 0; i < 7; i++) { var a = i / 7 * 6.2832 + 0.3, r = 0.3 + (i % 3) * 0.05; m.tube([Math.cos(a) * r, 0, Math.sin(a) * r], [Math.cos(a) * 0.04, 0.4, Math.sin(a) * 0.04], 0.012, 0.02, 4, BARK2, BARK, 0, 0, 0); }
+        m.tube([0, 0.3, 0], [0, 0.6, 0], 0.045, 0.035, 6, BARK, BARK2, 0, 0, 0);
+        m.blob([0, 0.76, 0], [0.34, 0.24, 0.34], [0.07, 0.22, 0.1], [0.18, 0.42, 0.20], 0.18, 0.2, 1);
+        m.blob([0.2, 0.66, 0.1], [0.2, 0.16, 0.2], [0.07, 0.22, 0.1], [0.16, 0.38, 0.18], 0.18, 0.2, 1);
+      }, 19);
+      def('dead', function (m) {
+        var G = [0.34, 0.30, 0.26], G2 = [0.22, 0.19, 0.16];
+        m.tube([0, 0, 0], [0.02, 0.75, 0], 0.04, 0.012, 6, G, G2, 0, 0.1, 0);
+        [[0.3, 0.38, 0.5], [0.4, -0.35, 0.6], [0.52, 0.1, -0.4], [0.62, -0.3, -0.3], [0.7, 0.2, 0.1]].forEach(function (b) { var s = [0.02, b[0], 0]; m.tube(s, [s[0] + b[1] * 0.35, b[0] + 0.26, b[2] * 0.3], 0.016, 0.005, 4, G, G2, 0.1, 0.5, 0); });
+      }, 20);
+      def('bush', function (m) {
+        m.blob([0, 0.38, 0], [0.5, 0.38, 0.5], [0.10, 0.26, 0.09], [0.28, 0.46, 0.17], 0.22, 0.3, 1);
+        m.blob([0.28, 0.26, 0.1], [0.3, 0.24, 0.3], [0.10, 0.26, 0.09], [0.26, 0.44, 0.16], 0.22, 0.3, 1);
+      }, 21);
+      def('sage', function (m) {
+        m.blob([0, 0.3, 0], [0.55, 0.3, 0.5], [0.34, 0.40, 0.30], [0.58, 0.64, 0.50], 0.22, 0.25, 1);
+        m.blob([0.3, 0.22, 0.12], [0.34, 0.2, 0.3], [0.34, 0.40, 0.30], [0.54, 0.60, 0.46], 0.22, 0.25, 1);
+        m.blob([-0.28, 0.24, -0.1], [0.3, 0.22, 0.3], [0.34, 0.40, 0.30], [0.54, 0.60, 0.46], 0.22, 0.25, 1);
+      }, 22);
+      def('deadbush', function (m) {
+        for (var i = 0; i < 12; i++) { var a = i / 12 * 6.2832 + m.r(), up = 0.45 + m.r() * 0.5, out = 0.28 + m.r() * 0.35; m.tube([0, 0, 0], [Math.cos(a) * out, up, Math.sin(a) * out], 0.03, 0.004, 3, [0.36, 0.28, 0.18], [0.52, 0.42, 0.28], 0, 0.8, 0); }
+      }, 23);
+      def('reed', function (m) { m.blades(14, 1, 0.025, 0.22, [0.22, 0.34, 0.12], [0.62, 0.64, 0.30], 0.3); }, 24);
+      def('rockA', function (m) { m.rock(1, 0.78, 0.92, [0.30, 0.29, 0.28], [0.58, 0.56, 0.52], 0.22, false); }, 31);
+      def('rockB', function (m) { m.rock(1.3, 0.5, 1.0, [0.34, 0.32, 0.30], [0.62, 0.60, 0.55], 0.2, true); }, 32);
+      def('rockC', function (m) { m.rock(0.62, 1.0, 0.7, [0.26, 0.25, 0.25], [0.54, 0.52, 0.5], 0.26, false); }, 33);
+      def('tuft', function (m) { m.blades(7, 1, 0.07, 0.35, [0.14, 0.28, 0.08], [0.46, 0.64, 0.22], 0.35); }, 41);
+      def('tall', function (m) { m.blades(7, 1, 0.045, 0.3, [0.30, 0.34, 0.12], [0.76, 0.70, 0.34], 0.4); }, 42);
+      def('dry', function (m) { m.blades(6, 1, 0.06, 0.32, [0.30, 0.24, 0.12], [0.66, 0.56, 0.30], 0.45); }, 43);
+      Object.keys(MESH).forEach(function (k) { MESH[k].buf = buf(gl.ARRAY_BUFFER, MESH[k].data); });
+      // ---- habitat tables: [mesh, probability per cell, min ft, max ft, tint rgb] indexed by Azgaar biome id ----
+      var G1 = [1, 1, 1];
+      var TREES = {
+        2: [['dead', 0.002, 14, 28, G1]],
+        3: [['acacia', 0.016, 22, 42, [1.0, 0.98, 0.9]], ['dead', 0.002, 16, 30, G1]],
+        4: [['oak', 0.008, 30, 55, G1], ['birch', 0.004, 28, 45, G1]],
+        5: [['oak', 0.20, 35, 70, [1.0, 1.0, 0.95]], ['birch', 0.11, 30, 55, G1], ['fir', 0.035, 35, 65, G1]],
+        6: [['trop', 0.11, 70, 130, [1.0, 1.0, 0.9]], ['acacia', 0.05, 25, 45, [1, 1, 0.85]], ['oak', 0.08, 35, 60, [1.1, 1.0, 0.8]], ['palm', 0.015, 28, 50, G1]],
+        7: [['trop', 0.30, 80, 160, [0.85, 1.05, 0.85]], ['palm', 0.07, 35, 70, G1], ['oak', 0.05, 40, 70, [0.8, 1.0, 0.8]]],
+        8: [['fir', 0.22, 60, 140, [0.9, 1.0, 0.95]], ['spruce', 0.12, 70, 150, G1], ['oak', 0.10, 45, 85, [0.85, 1.0, 0.85]]],
+        9: [['spruce', 0.40, 40, 90, G1], ['fir', 0.14, 32, 70, G1], ['pine', 0.05, 50, 95, G1], ['birch', 0.03, 25, 45, [0.9, 0.95, 0.8]], ['dead', 0.01, 25, 50, G1]],
+        10: [['spruce', 0.012, 12, 26, [1, 1, 0.9]], ['dead', 0.004, 10, 22, G1]],
+        12: [['mangrove', 0.20, 18, 38, G1], ['dead', 0.03, 16, 34, G1], ['oak', 0.02, 28, 45, [0.8, 0.95, 0.7]]],
+        14: [['dead', 0.004, 12, 26, G1]],
+        15: [['palm', 0.10, 30, 62, G1], ['acacia', 0.05, 22, 40, G1], ['oak', 0.04, 28, 48, G1]]
+      };
+      var SHRUBS = {
+        1: [['sage', 0.05, 2, 4, G1], ['deadbush', 0.05, 1.5, 3.2, G1]], 2: [['sage', 0.10, 2, 4.5, G1], ['deadbush', 0.025, 1.5, 3, G1]],
+        3: [['bush', 0.03, 3, 6, [1.2, 1.15, 0.7]]], 4: [['bush', 0.015, 2.5, 5, [1.1, 1.1, 0.8]]], 5: [['bush', 0.10, 3, 7, G1]],
+        6: [['bush', 0.12, 3, 7, [1.1, 1.05, 0.8]]], 7: [['bush', 0.20, 3.5, 8, [0.7, 1.0, 0.7]]], 8: [['bush', 0.20, 3, 8, [0.8, 1.0, 0.85]]],
+        9: [['bush', 0.05, 2.5, 5, [0.7, 0.85, 0.7]]], 10: [['bush', 0.08, 1.2, 2.6, [1.2, 1.0, 0.6]]],
+        12: [['reed', 0.25, 4.5, 8, G1], ['bush', 0.05, 3, 6, [0.8, 1, 0.8]]], 14: [['deadbush', 0.05, 1.5, 3.4, G1], ['sage', 0.04, 2, 4, [1.1, 1, 0.9]]],
+        15: [['bush', 0.08, 3, 6, G1], ['reed', 0.05, 4.5, 7, G1]]
+      };
+      var ROCKP = { 1: 0.02, 2: 0.03, 3: 0.008, 4: 0.01, 5: 0.008, 6: 0.008, 7: 0.006, 8: 0.01, 9: 0.02, 10: 0.04, 11: 0.05, 12: 0.003, 13: 0.04, 14: 0.07, 15: 0.02 };
+      var ROCKT = { 1: [1.15, 1.0, 0.85], 2: [1.0, 0.98, 0.92], 14: [1.25, 0.95, 0.75], 11: [0.95, 1.0, 1.08], 13: [0.9, 0.8, 1.1] };
+      var GRASS = { 1: [['dry', 0.02]], 2: [['dry', 0.10]], 3: [['tall', 0.55, [1.15, 1.05, 0.7]], ['tuft', 0.15, [1.2, 1.1, 0.7]]], 4: [['tuft', 0.80], ['tall', 0.12]], 5: [['tuft', 0.55]],
+        6: [['tuft', 0.5, [1.1, 1.05, 0.8]], ['tall', 0.12, [1.1, 1.0, 0.7]]], 7: [['tuft', 0.35, [0.7, 1.0, 0.75]]], 8: [['tuft', 0.45, [0.8, 1.0, 0.85]]], 9: [['tuft', 0.25, [0.7, 0.85, 0.7]]],
+        10: [['tuft', 0.30, [1.0, 0.95, 0.65]], ['dry', 0.1]], 12: [['tall', 0.55, [0.8, 1.0, 0.6]], ['tuft', 0.2, [0.8, 1, 0.7]]], 14: [['dry', 0.03]], 15: [['tuft', 0.55], ['tall', 0.1]] };
+      var GRASSH = { tuft: [0.9, 1.7], tall: [2.2, 3.8], dry: [0.8, 1.5] };
+      // ---- shader ----
+      var VVS = 'attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;attribute vec2 aS;attribute vec4 iP;attribute vec4 iR;uniform mat4 uVPr;uniform vec3 uRel;uniform float uT;uniform float uFadeR;uniform float uGF;varying vec3 vC;varying vec3 vNn;varying float vD;' +
+        'void main(){vec3 c=uRel+iP.xyz;float f=(1.0-smoothstep(uFadeR*0.7,uFadeR,length(c.xz)))*uGF;float s=iP.w*f;float cs=cos(iR.x),sn=sin(iR.x);vec3 lp=aP*s;' +
+        'float ph=uT*1.6+iP.x*61.0+iP.z*43.0;lp.x+=sin(ph)*aS.x*0.14*s;lp.z+=cos(ph*0.8)*aS.x*0.09*s;vec3 r=vec3(lp.x*cs+lp.z*sn,lp.y,-lp.x*sn+lp.z*cs);vec3 rel=c+r;' +
+        'vNn=vec3(aN.x*cs+aN.z*sn,aN.y,-aN.x*sn+aN.z*cs);vC=aC*mix(vec3(1.0),iR.yzw,aS.y);vD=length(rel);gl_Position=uVPr*vec4(rel,1.0);}';
+      var VFS = 'precision mediump float;varying vec3 vC;varying vec3 vNn;varying float vD;uniform float uFog;uniform vec3 uSky;void main(){vec3 L=normalize(vec3(-0.45,0.62,-0.38));vec3 n=normalize(vNn);float d=dot(n,L);float df=abs(d)*0.3+max(d,0.0)*0.7;' +
+        'vec3 amb=mix(vec3(0.34,0.35,0.29),vec3(0.50,0.55,0.62),n.y*0.5+0.5);vec3 col=vC*(amb+df*0.9);gl_FragColor=vec4(mix(col,uSky,clamp(1.0-exp(-vD*uFog),0.0,1.0)),1.0);}';
+      var VP = gl.createProgram(); gl.attachShader(VP, sh(gl.VERTEX_SHADER, VVS)); gl.attachShader(VP, sh(gl.FRAGMENT_SHADER, VFS));
+      ['aP', 'aN', 'aC', 'aS', 'iP', 'iR'].forEach(function (nm, i) { gl.bindAttribLocation(VP, i, nm); }); gl.linkProgram(VP);
+      if (!gl.getProgramParameter(VP, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(VP));
+      VP.u = {}; ['uVPr', 'uRel', 'uT', 'uFadeR', 'uGF', 'uFog', 'uSky'].forEach(function (nm) { VP.u[nm] = gl.getUniformLocation(VP, nm); });
+      // ---- layers (each rebuilds only when you have moved a good way, then reuses fixed positions) ----
+      function sstep2(a, b, x) { return sstep(a, b, x); }
+      var LAYERS = [
+        { name: 'trees', M: 128, R: function (alt) { return alt < 0.02 ? 0.1 : alt < 0.05 ? 0.2 : 0.4; }, gf: function (alt) { return 1 - sstep(0.08, 0.2, alt); }, seed: 3.1 },
+        { name: 'shrubs', M: 96, R: function () { return 0.04; }, gf: function (alt) { return 1 - sstep(0.02, 0.05, alt); }, seed: 7.7 },
+        { name: 'rocks', M: 64, R: function () { return 0.08; }, gf: function (alt) { return 1 - sstep(0.04, 0.1, alt); }, seed: 11.3 },
+        { name: 'grass', M: 128, R: function () { return 0.0125; }, gf: function (alt) { return 1 - sstep(0.004, 0.01, alt); }, seed: 17.9 }
+      ];
+      LAYERS.forEach(function (L) { L.key = ''; L.cx = 0; L.cz = 0; L.cur = 0; L.parts = []; });
+      function pick(tab, r) { var acc = 0; for (var i = 0; i < tab.length; i++) { acc += tab[i][1]; if (r < acc) return tab[i]; } return null; }
+      function hr(a, b, s) { var v = Math.sin(a * 12.9898 + b * 78.233 + s * 37.719) * 43758.5453; return v - Math.floor(v); }
+      function buildLayer(L, alt) { var T0 = performance.now();
+        var R = L.R(alt), M = L.M, cell = 2 * R / M, cix = Math.round(cam.x / cell), ciz = Math.round(cam.z / cell);
+        L.cx = cix * cell; L.cz = ciz * cell; L.cur = R; L.key = R + '|' + EX; L.built = true;
+        var buckets = {}, i, j, tmp = [0, 0]; var DB = window.__db = { oob: 0, nob: 0, nosp: 0, water: 0, low: 0, ok: 0, b: {} };
+        for (j = 0; j < M; j++) for (i = 0; i < M; i++) {
+          var ix = cix + i - M / 2, iz = ciz + j - M / 2, r0 = hr(ix, iz, L.seed), x = (ix + 0.1 + 0.8 * hr(ix, iz, L.seed + 1)) * cell, z = (iz + 0.1 + 0.8 * hr(ix, iz, L.seed + 2)) * cell;
+          if (x < 2 || z < 2 || x > W - 3 || z > H - 3) continue;
+          var b = biomeAt(x, z), sp = null, ft = 0, tint = null, mesh;
+          if (L.name === 'rocks') {
+            var pr = ROCKP[b]; if (!pr) continue; var s0 = 0; // slope boosts rock chance, computed below
+            if (r0 > pr * 6) continue;
+          } else {
+            var tab = L.name === 'trees' ? TREES[b] : L.name === 'shrubs' ? SHRUBS[b] : GRASS[b]; if (!tab) continue;
+            var cl = 0.3 + 1.5 * vnz(x / 0.03 + L.seed, z / 0.03 - L.seed); if (L.name === 'grass') cl = 0.6 + 0.8 * vnz(x / 0.012 + L.seed, z / 0.012);
+            sp = pick(tab, r0 / cl); if (!sp) continue;
+          }
+          var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z)) continue;
+          var hg = hG(x, z), sl = EX * Math.hypot(baseAt(x + 1, z) - baseAt(x - 1, z), baseAt(x, z + 1) - baseAt(x, z - 1)) / 2;
+          if (L.name === 'rocks') {
+            if (r0 > ROCKP[b] * (1 + sl * 5)) continue;
+            var u = hr(ix, iz, L.seed + 3); ft = 1.0 + Math.pow(u, 3) * 9 + (hr(ix, iz, 9) > 0.985 ? 8 : 0);
+            var k = hr(ix, iz, L.seed + 4); mesh = k < 0.45 ? 'rockA' : k < 0.75 ? 'rockB' : 'rockC'; tint = ROCKT[b] || G1;
+          } else {
+            if (L.name === 'trees') { if (sl > 1.2 || hg > 78) continue; var tl = 1 - sstep(60, 78, hg); if (hr(ix, iz, L.seed + 5) > tl) continue; if (sl > 0.5 && hr(ix, iz, L.seed + 6) < (sl - 0.5) / 0.7) continue; }
+            else if (sl > 1.6 && L.name === 'grass') continue; else if (sl > 1.2 && hr(ix, iz, L.seed + 6) < (sl - 1.2)) continue;
+            mesh = sp[0]; tint = sp[4] || G1;
+            if (L.name === 'grass') { var gh = GRASSH[mesh]; ft = gh[0] + hr(ix, iz, 5) * (gh[1] - gh[0]); }
+            else ft = sp[2] + hr(ix, iz, 6) * (sp[3] - sp[2]);
+          }
+          var jt = 0.9 + 0.2 * hr(ix, iz, 8), y = Math.max(0.0003, by * EX + detail(x, z, 0.002)) - ft * FT * 0.08;
+          var arr = buckets[mesh] || (buckets[mesh] = []);
+          arr.push(x - L.cx, y, z - L.cz, ft * FT, hr(ix, iz, 12) * 6.2832, tint[0] * (0.88 + 0.24 * hr(ix, iz, 13)) * jt, tint[1] * (0.9 + 0.2 * hr(ix, iz, 14)) * jt, tint[2] * (0.88 + 0.24 * hr(ix, iz, 15)) * jt);
+        }
+        var names = Object.keys(buckets);
+        names.forEach(function (nm) {
+          var p = L.parts.filter(function (q) { return q.name === nm; })[0];
+          if (!p) { p = { name: nm, buf: gl.createBuffer(), n: 0 }; L.parts.push(p); }
+          var data = new Float32Array(buckets[nm]); gl.bindBuffer(gl.ARRAY_BUFFER, p.buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW); p.n = data.length / 8;
+        });
+        L.parts.forEach(function (p) { if (names.indexOf(p.name) < 0) p.n = 0; }); window.__bt = window.__bt || {}; window.__bt[L.name] = Math.round(performance.now() - T0);
+      }
+      VEG = {
+        draw: function (proj, far, alt, t) {
+          var drew = false, built = false;
+          for (var li = 0; li < LAYERS.length; li++) {
+            var L = LAYERS[li], gf = L.gf(alt); if (gf <= 0.001) continue;
+            var R = L.R(alt), moved = Math.hypot(cam.x - L.cx, cam.z - L.cz) > R * 0.3;
+            if (!L.built || L.key !== R + '|' + EX || moved) { if (built) continue; buildLayer(L, alt); built = true; }
+          }
+          var m = view(); m[12] = 0; m[13] = 0; m[14] = 0; var vpr = mul(proj, m);
+          gl.useProgram(VP); gl.disable(gl.CULL_FACE);
+          gl.uniformMatrix4fv(VP.u.uVPr, false, vpr); gl.uniform1f(VP.u.uT, t / 1000); gl.uniform1f(VP.u.uFog, 1.5 / far * 2.2); gl.uniform3f(VP.u.uSky, SKY[0], SKY[1], SKY[2]);
+          for (var l2 = 0; l2 < LAYERS.length; l2++) {
+            var Ly = LAYERS[l2], g2 = Ly.gf(alt); if (g2 <= 0.001 || !Ly.built) continue;
+            gl.uniform3f(VP.u.uRel, Ly.cx - cam.x, -cam.y, Ly.cz - cam.z); gl.uniform1f(VP.u.uFadeR, Ly.cur); gl.uniform1f(VP.u.uGF, g2);
+            for (var pi2 = 0; pi2 < Ly.parts.length; pi2++) {
+              var pt = Ly.parts[pi2]; if (!pt.n) continue; var me = MESH[pt.name];
+              gl.bindBuffer(gl.ARRAY_BUFFER, me.buf);
+              gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 44, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 44, 12);
+              gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 44, 24); gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 44, 36);
+              gl.bindBuffer(gl.ARRAY_BUFFER, pt.buf); gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 32, 0); gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 4, gl.FLOAT, false, 32, 16);
+              VX.vertexAttribDivisorANGLE(4, 1); VX.vertexAttribDivisorANGLE(5, 1);
+              VX.drawArraysInstancedANGLE(gl.TRIANGLES, 0, me.n, pt.n);
+              VX.vertexAttribDivisorANGLE(4, 0); VX.vertexAttribDivisorANGLE(5, 0); drew = true;
+            }
+          }
+          for (var d = 0; d < 6; d++) gl.disableVertexAttribArray(d);
+          gl.enable(gl.CULL_FACE);
+        }
+      };
+    })();
     // ---- loop ----
     var last = performance.now(), frame = 0;
     function loop(t) {
       var dt = Math.min(0.1, (t - last) / 1000); last = t;
       var gnd = groundAt(cam.x, cam.z), alt = Math.max(0.0005, cam.y - gnd);
-      var v = Math.max(alt, 0.05) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+      var v = Math.max(alt, 0.0015) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
       if (keys.w || keys.arrowup) { cam.x += f[0] * v; cam.y += f[1] * v; cam.z += f[2] * v; }
       if (keys.s || keys.arrowdown) { cam.x -= f[0] * v; cam.y -= f[1] * v; cam.z -= f[2] * v; }
       if (keys.d || keys.arrowright) { cam.x += r[0] * v; cam.z += r[2] * v; }
@@ -288,7 +568,7 @@ canvas:active{cursor:grabbing}
       gl.bindBuffer(gl.ARRAY_BUFFER, bXZ); gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bD); gl.enableVertexAttribArray(aD); gl.vertexAttribPointer(aD, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bI); gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0);
-      drawPatch(persp(1.0, cv.width / cv.height, near, far), far, alt);
+      var projM = persp(1.0, cv.width / cv.height, near, far); drawPatch(projM, far, alt); if (VEG) VEG.draw(projM, far, alt, t);
       if (FP) {
         gl.useProgram(FP); gl.disable(gl.CULL_FACE);
         gl.uniformMatrix4fv(FP.u.uVP, false, vp); gl.uniform1f(FP.u.uEx, EX); gl.uniform3f(FP.u.uCam, cam.x, cam.y, cam.z); gl.uniform1f(FP.u.uFog, 1.5 / far * 2.2); gl.uniform3f(FP.u.uSky, SKY[0], SKY[1], SKY[2]);
