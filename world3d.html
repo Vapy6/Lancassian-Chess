@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Myosia in 3D</title>
+<style>
+html,body{margin:0;height:100%;background:#0e1318;color:#e8ecef;font:14px system-ui,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+#hud{position:fixed;left:12px;top:12px;max-width:300px;background:rgba(14,19,24,.78);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px 12px;line-height:1.45}
+#hud h1{margin:0 0 4px;font-size:16px}
+#hud .k{opacity:.7;font-size:12px}
+#hud label{display:block;margin-top:6px;font-size:12px}
+#hud input[type=range]{width:100%}
+#hud a{color:#9cc7ff}
+#info{position:fixed;right:12px;top:12px;background:rgba(14,19,24,.78);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px 12px;text-align:right;min-width:150px}
+#mini{position:fixed;left:12px;bottom:12px;width:300px;border:1px solid rgba(255,255,255,.3);border-radius:6px;cursor:crosshair;background:#000}
+#mini canvas{position:static;width:100%;height:auto;cursor:crosshair}
+#mdot{position:absolute;width:10px;height:10px;margin:-5px;border-radius:50%;background:#ffd34d;border:2px solid #000;pointer-events:none}
+.lb{position:fixed;transform:translate(-50%,-100%);pointer-events:none;font:12px/1 Georgia,serif;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000,0 0 5px #000;white-space:nowrap;display:none}
+.lb.cap{font-weight:700;font-size:13px;color:#ffe9a8}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0e1318;font-size:16px;z-index:5}
+@media(max-width:700px){#hud{max-width:200px;font-size:12px}#mini{width:200px}}
+</style></head><body>
+<canvas id="gl"></canvas>
+<div id="msg">Loading the world…</div>
+<div id="hud"><h1 id="ttl">Myosia in 3D</h1>
+<div class="k">Drag to look · W A S D to fly · Q / E down / up · Shift to go faster · mouse wheel changes speed · click the small map to jump</div>
+<label>Mountain height ×<span id="exv">25</span><input id="ex" type="range" min="1" max="120" value="25"></label>
+<label><input id="lbt" type="checkbox" checked> City names</label>
+<div class="k" style="margin-top:6px"><a href="map.html">← 2D map</a> · <a href="index.html">Chess</a></div></div>
+<div id="info"><div id="place" style="font-weight:600">—</div><div class="k" id="alt"></div><div class="k" id="pos"></div></div>
+<div id="mini"><canvas id="mc"></canvas><div id="mdot"></div></div>
+<script>
+(function () {
+  'use strict';
+  var cv = document.getElementById('gl'), gl = cv.getContext('webgl', { antialias: true });
+  var msg = document.getElementById('msg');
+  if (!gl) { msg.textContent = 'This browser cannot do WebGL, so the 3D view will not run here.'; return; }
+  function loadImg(u) { return new Promise(function (ok, no) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { no(new Error(u)); }; i.src = u; }); }
+  Promise.all([loadImg('world3d-height.png'), loadImg('world3d-color.png'), fetch('world3d-places.json').then(function (r) { return r.json(); })]).then(function (a) { start(a[0], a[1], a[2]); })
+    .catch(function (e) { msg.textContent = 'Could not load ' + e.message + '. Make sure world3d-height.png, world3d-color.png and world3d-places.json are in the same folder as this page.'; });
+
+  function start(himg, cimg, meta) {
+    var W = meta.w, H = meta.h, MI = meta.mi, EXP = meta.exp;
+    document.getElementById('ttl').textContent = meta.name + ' in 3D';
+    // ---- decode heights: y in map pixels (1 px = MI miles), unexaggerated ----
+    var tc = document.createElement('canvas'); tc.width = W; tc.height = H; var tx = tc.getContext('2d'); tx.drawImage(himg, 0, 0);
+    var px = tx.getImageData(0, 0, W, H).data, Y = new Float32Array(W * H), i, n = W * H;
+    for (i = 0; i < n; i++) {
+      var hv = ((px[i * 4] << 8) | px[i * 4 + 1]) / 65535 * 100, y;
+      if (hv >= 20) y = Math.pow(Math.max(hv - 18, 0), EXP) / 5280 / MI; else y = -(20 - hv) * 0.03;
+      Y[i] = y;
+    }
+    // ---- mesh ----
+    var STEP = 2, GW = Math.ceil((W - 1) / STEP) + 1, GH = Math.ceil((H - 1) / STEP) + 1;
+    var xz = new Float32Array(GW * GH * 2), dd = new Float32Array(GW * GH * 3), gx, gz, o;
+    function Yat(x, z) { x = x < 0 ? 0 : x > W - 1 ? W - 1 : x; z = z < 0 ? 0 : z > H - 1 ? H - 1 : z; return Y[z * W + x]; }
+    for (gz = 0; gz < GH; gz++) for (gx = 0; gx < GW; gx++) {
+      var X = Math.min(gx * STEP, W - 1), Z = Math.min(gz * STEP, H - 1); o = gz * GW + gx;
+      xz[o * 2] = X; xz[o * 2 + 1] = Z; var yy = Y[Z * W + X]; dd[o * 3] = yy;
+      if (yy >= 0) { dd[o * 3 + 1] = (Yat(X + 1, Z) - Yat(X - 1, Z)) / 2; dd[o * 3 + 2] = (Yat(X, Z + 1) - Yat(X, Z - 1)) / 2; }
+    }
+    var idx = new Uint32Array((GW - 1) * (GH - 1) * 6), k = 0;
+    for (gz = 0; gz < GH - 1; gz++) for (gx = 0; gx < GW - 1; gx++) {
+      var a = gz * GW + gx, b = a + 1, c = a + GW, d = c + 1; idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d;
+    }
+    if (!gl.getExtension('OES_element_index_uint')) { msg.textContent = 'This browser is missing a 3D feature needed for the full-size world.'; return; }
+    function buf(t, data) { var b = gl.createBuffer(); gl.bindBuffer(t, b); gl.bufferData(t, data, gl.STATIC_DRAW); return b; }
+    var bXZ = buf(gl.ARRAY_BUFFER, xz), bD = buf(gl.ARRAY_BUFFER, dd), bI = buf(gl.ELEMENT_ARRAY_BUFFER, idx);
+    // ---- shaders ----
+    var VS = 'attribute vec2 axz;attribute vec3 ad;uniform mat4 uVP;uniform float uEx;uniform vec3 uCam;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;' +
+      'void main(){float y=ad.x;float yy=y>=0.0?y*uEx:y;vec3 p=vec3(axz.x,yy,axz.y);vY=y;vXZ=axz;vUV=vec2((axz.x+0.5)/' + W + '.0,(axz.y+0.5)/' + H + '.0);' +
+      'vN=normalize(vec3(-ad.y*uEx,1.0,-ad.z*uEx));vD=length(p-uCam);gl_Position=uVP*vec4(p,1.0);}';
+    var FS = 'precision mediump float;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;uniform sampler2D uC;uniform float uT;uniform float uFog;uniform vec3 uSky;' +
+      'void main(){vec3 L=normalize(vec3(-0.45,0.62,-0.38));vec3 col;' +
+      'if(vY<0.0){float dp=clamp(-vY/0.6,0.0,1.0);col=mix(vec3(0.20,0.46,0.60),vec3(0.03,0.11,0.26),sqrt(dp));' +
+      'vec3 n=normalize(vec3(sin(vXZ.x*60.0+uT)*0.03+sin(vXZ.y*43.0-uT*1.3)*0.02,1.0,cos(vXZ.y*57.0+uT*0.8)*0.03));float sp=pow(max(dot(reflect(-L,n),normalize(vec3(0.0,0.7,0.7))),0.0),24.0);col+=vec3(sp*0.25);' +
+      'col=mix(col,vec3(0.78,0.9,0.95),smoothstep(-0.02,0.0,vY)*0.55);}' +
+      'else{vec3 b=texture2D(uC,vUV).rgb;float df=max(dot(normalize(vN),L),0.0);col=b*(0.38+0.85*df);}' +
+      'float f=1.0-exp(-vD*uFog);gl_FragColor=vec4(mix(col,uSky,clamp(f,0.0,1.0)),1.0);}';
+    function sh(t, s) { var x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; }
+    var pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+    gl.useProgram(pr);
+    var aXZ = gl.getAttribLocation(pr, 'axz'), aD = gl.getAttribLocation(pr, 'ad'), U = {};
+    ['uVP', 'uEx', 'uCam', 'uC', 'uT', 'uFog', 'uSky'].forEach(function (nm) { U[nm] = gl.getUniformLocation(pr, nm); });
+    var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, cimg);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    var SKY = [0.62, 0.74, 0.86]; gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
+    // ---- camera ----
+    var cam = { x: W * 0.5, y: 330, z: H * 0.75, yaw: 0, pitch: -0.75 }, EX = 25, speed = 1, keys = {};
+    function groundAt(x, z) {
+      var fx = Math.max(0, Math.min(W - 1.001, x)), fz = Math.max(0, Math.min(H - 1.001, z)), ix = fx | 0, iz = fz | 0, tx_ = fx - ix, tz = fz - iz;
+      var y = (Y[iz * W + ix] * (1 - tx_) + Y[iz * W + ix + 1] * tx_) * (1 - tz) + (Y[(iz + 1) * W + ix] * (1 - tx_) + Y[(iz + 1) * W + ix + 1] * tx_) * tz;
+      return y > 0 ? y * EX : 0;
+    }
+    function mul(a, b) { var r = new Float32Array(16); for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) { var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; }
+    function persp(fov, asp, n, f) { var t = 1 / Math.tan(fov / 2), r = new Float32Array(16); r[0] = t / asp; r[5] = t; r[10] = (f + n) / (n - f); r[11] = -1; r[14] = 2 * f * n / (n - f); return r; }
+    function view() {
+      var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      // rotation: first yaw about Y, then pitch about X; view = R^T * T(-pos)
+      var r = [cy, sy * sp, -sy * cp, 0, 0, cp, sp, 0, sy, -cy * sp, cy * cp, 0, 0, 0, 0, 1];
+      var m = new Float32Array(16);
+      m[0] = r[0]; m[1] = r[4]; m[2] = r[8]; m[4] = r[1]; m[5] = r[5]; m[6] = r[9]; m[8] = r[2]; m[9] = r[6]; m[10] = r[10]; m[15] = 1;
+      m[12] = -(m[0] * cam.x + m[4] * cam.y + m[8] * cam.z); m[13] = -(m[1] * cam.x + m[5] * cam.y + m[9] * cam.z); m[14] = -(m[2] * cam.x + m[6] * cam.y + m[10] * cam.z);
+      return m;
+    }
+    function fwd() { return [-Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), -Math.cos(cam.yaw) * Math.cos(cam.pitch)]; }
+    // forward dir with yaw=0 is -Z: check against the matrix above (third column of r negated)
+    // ---- input ----
+    var drag = false, lx = 0, ly = 0;
+    cv.addEventListener('pointerdown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointerup', function () { drag = false; });
+    cv.addEventListener('pointermove', function (e) { if (!drag) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
+    cv.addEventListener('wheel', function (e) { e.preventDefault(); speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
+    window.addEventListener('keydown', function (e) { if (/INPUT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
+    var exEl = document.getElementById('ex'), exv = document.getElementById('exv');
+    exEl.addEventListener('input', function () { EX = +exEl.value; exv.textContent = EX; });
+    var lbt = document.getElementById('lbt');
+    // ---- minimap ----
+    var mc = document.getElementById('mc'); mc.width = 300; mc.height = Math.round(300 * H / W);
+    var mx = mc.getContext('2d'); mx.drawImage(cimg, 0, 0, mc.width, mc.height);
+    var mdot = document.getElementById('mdot'), mini = document.getElementById('mini');
+    function tele(e) { var r = mc.getBoundingClientRect(); cam.x = (e.clientX - r.left) / r.width * W; cam.z = (e.clientY - r.top) / r.height * H; cam.y = Math.max(cam.y, groundAt(cam.x, cam.z) + 20); }
+    mini.addEventListener('pointerdown', function (e) { tele(e); mini.setPointerCapture(e.pointerId); mini._d = true; });
+    mini.addEventListener('pointermove', function (e) { if (mini._d) tele(e); }); mini.addEventListener('pointerup', function () { mini._d = false; });
+    // ---- labels ----
+    var P = meta.places, pool = [], LB = 70;
+    for (i = 0; i < LB; i++) { var el = document.createElement('div'); el.className = 'lb'; document.body.appendChild(el); pool.push(el); }
+    var placeEl = document.getElementById('place'), altEl = document.getElementById('alt'), posEl = document.getElementById('pos');
+    function labels(vp, w, hh, alt) {
+      if (!lbt.checked) { pool.forEach(function (e) { e.style.display = 'none'; }); return; }
+      var used = {}, n = 0, minPop = alt > 200 ? 30000 : alt > 80 ? 8000 : alt > 25 ? 2500 : 0;
+      for (var j = 0; j < P.length && n < LB; j++) {
+        var p = P[j]; if (!p.cap && p.pop < minPop) continue;
+        var yy = groundAt(p.x, p.y), X = p.x, Z = p.y;
+        var cx = vp[0] * X + vp[4] * yy + vp[8] * Z + vp[12], cy = vp[1] * X + vp[5] * yy + vp[9] * Z + vp[13], cw = vp[3] * X + vp[7] * yy + vp[11] * Z + vp[15];
+        if (cw <= 0.01) continue; var sx = (cx / cw * 0.5 + 0.5) * w, sy = (1 - (cy / cw * 0.5 + 0.5)) * hh;
+        if (sx < 0 || sx > w || sy < 20 || sy > hh) continue;
+        var key = ((sx / 90) | 0) + ',' + ((sy / 24) | 0); if (used[key]) continue; used[key] = 1;
+        var e = pool[n++]; e.style.display = 'block'; e.className = 'lb' + (p.cap ? ' cap' : ''); e.textContent = p.n; e.style.left = sx + 'px'; e.style.top = sy + 'px';
+      }
+      for (; n < LB; n++) pool[n].style.display = 'none';
+    }
+    function nearest() { var best = null, bd = 1e9; for (var j = 0; j < P.length; j++) { var dx = P[j].x - cam.x, dz = P[j].y - cam.z, q = dx * dx + dz * dz; if (q < bd) { bd = q; best = P[j]; } } return bd < 900 ? best : null; }
+    // ---- loop ----
+    var last = performance.now(), frame = 0;
+    function loop(t) {
+      var dt = Math.min(0.1, (t - last) / 1000); last = t;
+      var gnd = groundAt(cam.x, cam.z), alt = Math.max(0.0005, cam.y - gnd);
+      var v = Math.max(alt, 0.05) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
+      if (keys.w || keys.arrowup) { cam.x += f[0] * v; cam.y += f[1] * v; cam.z += f[2] * v; }
+      if (keys.s || keys.arrowdown) { cam.x -= f[0] * v; cam.y -= f[1] * v; cam.z -= f[2] * v; }
+      if (keys.d || keys.arrowright) { cam.x += r[0] * v; cam.z += r[2] * v; }
+      if (keys.a || keys.arrowleft) { cam.x -= r[0] * v; cam.z -= r[2] * v; }
+      if (keys.e || keys[' ']) cam.y += v; if (keys.q || keys.c) cam.y -= v;
+      cam.x = Math.max(0, Math.min(W - 1, cam.x)); cam.z = Math.max(0, Math.min(H - 1, cam.z));
+      gnd = groundAt(cam.x, cam.z); if (cam.y < gnd + 0.002) cam.y = gnd + 0.002; if (cam.y > 1500) cam.y = 1500;
+      alt = Math.max(0.0005, cam.y - gnd);
+      var dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, hh = cv.clientHeight;
+      if (cv.width !== (w * dpr | 0) || cv.height !== (hh * dpr | 0)) { cv.width = w * dpr | 0; cv.height = hh * dpr | 0; }
+      gl.viewport(0, 0, cv.width, cv.height); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      var near = Math.max(alt * 0.02, 0.0004), far = Math.min(6000, Math.max(alt * 600, 40));
+      var vp = mul(persp(1.0, cv.width / cv.height, near, far), view());
+      gl.useProgram(pr);
+      gl.uniformMatrix4fv(U.uVP, false, vp); gl.uniform1f(U.uEx, EX); gl.uniform3f(U.uCam, cam.x, cam.y, cam.z); gl.uniform1i(U.uC, 0);
+      gl.uniform1f(U.uT, t / 1000); gl.uniform1f(U.uFog, 1.5 / far * 2.2); gl.uniform3f(U.uSky, SKY[0], SKY[1], SKY[2]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bXZ); gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bD); gl.enableVertexAttribArray(aD); gl.vertexAttribPointer(aD, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bI); gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0);
+      if ((frame++ & 1) === 0) {
+        labels(vp, w, hh, alt);
+        mdot.style.left = cam.x / W * 100 + '%'; mdot.style.top = cam.z / H * 100 + '%';
+        var nb = nearest(); placeEl.textContent = nb ? nb.n + (nb.s ? ' · ' + nb.s : '') : '—';
+        var miAlt = alt * MI; altEl.textContent = 'Altitude ' + (miAlt >= 1 ? miAlt.toFixed(1) + ' mi' : Math.round(miAlt * 5280) + ' ft') + ' above ground';
+        posEl.textContent = Math.round(cam.x * MI) + ', ' + Math.round(cam.z * MI) + ' mi from the NW corner';
+      }
+      requestAnimationFrame(loop);
+    }
+    msg.style.display = 'none'; requestAnimationFrame(loop);
+    window.__cam = cam;
+  }
+})();
+</script></body></html>
