@@ -50,7 +50,7 @@ canvas:active{cursor:grabbing}
     var mxx = mc2.getContext('2d'); mxx.drawImage(mimg, 0, 0); var MD = mxx.getImageData(0, 0, MW, MH).data;
     for (i = 0; i < n; i++) {
       var hv = ((px[i * 4] << 8) | px[i * 4 + 1]) / 65535 * 100, y, mi = (((i / W | 0) * SC | 0) * MW + (i % W) * SC) * 4, isLand = MD[mi] > 127;
-      if (isLand) y = Math.max(Math.pow(Math.max(hv - 18, 0), EXP) / 5280 / MI, 0.0005); else y = Math.min(-(20 - Math.min(hv, 19.9)) * 0.03, -0.002);
+      if (isLand) y = Math.max(Math.pow(Math.max(hv - 18, 0), EXP) / 5280 / MI, 0.0005); else y = -0.002;
       Y[i] = y;
     }
     // ---- mesh ----
@@ -73,13 +73,17 @@ canvas:active{cursor:grabbing}
     var VS = 'attribute vec2 axz;attribute vec3 ad;uniform mat4 uVP;uniform float uEx;uniform vec3 uCam;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;' +
       'void main(){float y=ad.x;float yy=y>=0.0?y*uEx:y;vec3 p=vec3(axz.x,yy,axz.y);vY=y;vXZ=axz;vUV=vec2((axz.x+0.5)/' + W + '.0,(axz.y+0.5)/' + H + '.0);' +
       'vN=normalize(vec3(-ad.y*uEx,1.0,-ad.z*uEx));vD=length(p-uCam);gl_Position=uVP*vec4(p,1.0);}';
-    var FS = 'precision mediump float;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;uniform sampler2D uC;uniform sampler2D uM;uniform float uBio;uniform float uT;uniform float uFog;uniform vec3 uSky;' +
+    var FS = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\nuniform float uDR;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;uniform sampler2D uC;uniform sampler2D uM;uniform float uBio;uniform float uT;uniform float uFog;uniform vec3 uSky;' +
+      'float hs(vec2 p){vec3 q=fract(vec3(mod(p,1024.0).xyx)*0.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hs(i),hs(i+vec2(1.0,0.0)),f.x),mix(hs(i+vec2(0.0,1.0)),hs(i+vec2(1.0,1.0)),f.x),f.y);}' +
       'vec3 ramp(float h){vec3 a=vec3(0.071,0.518,0.188),b=vec3(0.278,0.572,0.220),c=vec3(0.400,0.525,0.275),d=vec3(0.525,0.643,0.365),e=vec3(0.784,0.753,0.573),f=vec3(0.831,0.788,0.627);' +
       'if(h<35.0)return mix(a,b,clamp((h-20.0)/15.0,0.0,1.0));if(h<45.0)return mix(b,c,(h-35.0)/10.0);if(h<55.0)return mix(c,d,(h-45.0)/10.0);if(h<65.0)return mix(d,e,(h-55.0)/10.0);return mix(e,f,clamp((h-65.0)/25.0,0.0,1.0));}' +
       'void main(){vec3 L=normalize(vec3(-0.45,0.62,-0.38));vec3 col;vec4 m=texture2D(uM,vUV);float hh=m.g*100.0;' +
       'if(m.r<0.5){float dp=clamp((20.0-hh)/20.0,0.0,1.0);col=mix(vec3(0.275,0.404,0.510),vec3(0.165,0.286,0.408),sqrt(dp));' +
       'vec3 n=normalize(vec3(sin(vXZ.x*60.0+uT)*0.03+sin(vXZ.y*43.0-uT*1.3)*0.02,1.0,cos(vXZ.y*57.0+uT*0.8)*0.03));float sp=pow(max(dot(reflect(-L,n),normalize(vec3(0.0,0.7,0.7))),0.0),24.0);col+=vec3(sp*0.18);}' +
-      'else{vec3 b=mix(ramp(hh),texture2D(uC,vUV).rgb,uBio);float df=max(dot(normalize(vN),L),0.0);col=b*(0.5+0.7*df);}' +
+      'else{vec3 b=mix(ramp(hh),texture2D(uC,vUV).rgb,uBio);vec3 nn=normalize(vN);float k=1.0-smoothstep(uDR*0.6,uDR*2.4,vD);' +
+      'if(k>0.0){float n1=vn(vXZ*150.0),n2=vn(vXZ*600.0),n3=vn(vXZ*1800.0),n0=vn(vXZ*30.0);vec3 g=b*(0.68+0.5*n0)*(0.8+0.34*n1)*(0.84+0.3*n2)*(0.9+0.2*n3);' +
+      'float sl=1.0-nn.y;float rk=smoothstep(0.32,0.55,sl+(n1-0.5)*0.25);g=mix(g,vec3(0.43,0.40,0.36)*(0.75+0.5*n2),rk*0.85);b=mix(b,g,k);}' +
+      'float df=max(dot(nn,L),0.0);col=b*(0.5+0.7*df);}' +
       'float ln=(1.0-smoothstep(0.0,0.2,abs(m.r-0.5)))*(1.0-smoothstep(25.0,140.0,vD));col=mix(col,vec3(0.02),ln*0.85);' +
       'float f=1.0-exp(-vD*uFog);gl_FragColor=vec4(mix(col,uSky,clamp(f,0.0,1.0)),1.0);}';
     function sh(t, s) { var x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; }
@@ -87,7 +91,7 @@ canvas:active{cursor:grabbing}
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
     gl.useProgram(pr);
     var aXZ = gl.getAttribLocation(pr, 'axz'), aD = gl.getAttribLocation(pr, 'ad'), U = {};
-    ['uVP', 'uEx', 'uCam', 'uC', 'uM', 'uBio', 'uT', 'uFog', 'uSky'].forEach(function (nm) { U[nm] = gl.getUniformLocation(pr, nm); });
+    ['uVP', 'uEx', 'uCam', 'uC', 'uM', 'uBio', 'uT', 'uFog', 'uSky', 'uDR'].forEach(function (nm) { U[nm] = gl.getUniformLocation(pr, nm); });
     var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, cimg);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -100,11 +104,24 @@ canvas:active{cursor:grabbing}
     var SKY = [0.62, 0.74, 0.86]; gl.clearColor(SKY[0], SKY[1], SKY[2], 1);
     // ---- camera ----
     var cam = { x: W * 0.5, y: 330, z: H * 0.75, yaw: 0, pitch: -0.75 }, EX = 25, speed = 1, keys = {};
-    function groundAt(x, z) {
+    function hsh(a, b) { var s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); }
+    function vnz(x, z) { var ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz; fx = fx * fx * (3 - 2 * fx); fz = fz * fz * (3 - 2 * fz);
+      var a = hsh(ix, iz), b = hsh(ix + 1, iz), c = hsh(ix, iz + 1), d = hsh(ix + 1, iz + 1); return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz; }
+    function hG(x, z) { var xx = Math.max(0, Math.min(W - 1, x)), zz = Math.max(0, Math.min(H - 1, z)); return MD[(((zz * SC) | 0) * MW + ((xx * SC) | 0)) * 4 + 1] / 255 * 100; }
+    function sstep(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+    // procedural ground detail in map pixels (1 px = MI miles): rolling hills down to a few feet
+    function detail(x, z, minLam) {
+      var h = hG(x, z), lf = sstep(20, 23, h); if (lf <= 0) return 0;
+      var rough = Math.max(0.2, Math.min(1, 0.2 + (h - 20) / 50)), lam = 2, amp = 0.05, s = 0;
+      for (var o = 0; o < 10 && lam >= minLam; o++) { s += (vnz(x / lam + o * 17.3, z / lam - o * 9.1) - 0.5) * 2 * amp; lam /= 2.6; amp *= 0.5; }
+      return s * rough * lf * (1 + EX / 50);
+    }
+    function baseAt(x, z) {
       var fx = Math.max(0, Math.min(W - 1.001, x)), fz = Math.max(0, Math.min(H - 1.001, z)), ix = fx | 0, iz = fz | 0, tx_ = fx - ix, tz = fz - iz;
       var y = (Y[iz * W + ix] * (1 - tx_) + Y[iz * W + ix + 1] * tx_) * (1 - tz) + (Y[(iz + 1) * W + ix] * (1 - tx_) + Y[(iz + 1) * W + ix + 1] * tx_) * tz;
-      return y > 0 ? y * EX : 0;
+      return y;
     }
+    function groundAt(x, z) { var y = baseAt(x, z); return y > 0 ? Math.max(0.0003, y * EX + detail(x, z, 0.004)) : 0; }
     function mul(a, b) { var r = new Float32Array(16); for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) { var s = 0; for (var k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; }
     function persp(fov, asp, n, f) { var t = 1 / Math.tan(fov / 2), r = new Float32Array(16); r[0] = t / asp; r[5] = t; r[10] = (f + n) / (n - f); r[11] = -1; r[14] = 2 * f * n / (n - f); return r; }
     function view() {
@@ -199,6 +216,52 @@ canvas:active{cursor:grabbing}
       FP.a = [gl.getAttribLocation(FP, 'p'), gl.getAttribLocation(FP, 'n'), gl.getAttribLocation(FP, 'c')];
       FP.bP = buf(gl.ARRAY_BUFFER, fl.P); FP.bN = buf(gl.ARRAY_BUFFER, fl.N); FP.bC = buf(gl.ARRAY_BUFFER, fl.C); FP.bI = buf(gl.ELEMENT_ARRAY_BUFFER, fl.I);
     }
+    // ---- close-up ground patch: a fine mesh around the camera that gains detail as you descend ----
+    var PN = 128, PV = (PN + 1) * (PN + 1);
+    var PVS = 'attribute vec3 po;attribute vec3 pn;uniform mat4 uVPr;uniform vec3 uRel;uniform vec2 uC0;varying vec3 vN;varying vec2 vUV;varying float vY;varying float vD;varying vec2 vXZ;' +
+      'void main(){vec3 rel=vec3(uRel.x+po.x,uRel.y+po.y,uRel.z+po.z);vD=length(rel);vXZ=uC0+po.xz;vUV=vec2((vXZ.x+0.5)/' + W + '.0,(vXZ.y+0.5)/' + H + '.0);vY=po.y;vN=pn;gl_Position=uVPr*vec4(rel,1.0);}';
+    var PP = gl.createProgram(); gl.attachShader(PP, sh(gl.VERTEX_SHADER, PVS)); gl.attachShader(PP, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(PP);
+    if (!gl.getProgramParameter(PP, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(PP));
+    PP.u = {}; ['uVPr', 'uRel', 'uC0', 'uC', 'uM', 'uBio', 'uT', 'uFog', 'uSky', 'uDR'].forEach(function (nm) { PP.u[nm] = gl.getUniformLocation(PP, nm); });
+    PP.a = [gl.getAttribLocation(PP, 'po'), gl.getAttribLocation(PP, 'pn')];
+    var pidx = new Uint32Array(PN * PN * 6), pk = 0;
+    for (var pj = 0; pj < PN; pj++) for (var pi = 0; pi < PN; pi++) { var a0 = pj * (PN + 1) + pi, b0 = a0 + 1, c0 = a0 + PN + 1, d0 = c0 + 1; pidx[pk++] = a0; pidx[pk++] = c0; pidx[pk++] = b0; pidx[pk++] = b0; pidx[pk++] = c0; pidx[pk++] = d0; }
+    PP.bP = gl.createBuffer(); PP.bN = gl.createBuffer(); PP.bI = buf(gl.ELEMENT_ARRAY_BUFFER, pidx);
+    var pPos = new Float32Array(PV * 3), pNor = new Float32Array(PV * 3), pH = new Float32Array(PV), pKey = '', pR = 0, pCx = 0, pCz = 0;
+    function updatePatch(R) {
+      var cell = 2 * R / PN, cx = Math.round(cam.x / cell) * cell, cz = Math.round(cam.z / cell) * cell, key = cx + '|' + cz + '|' + R + '|' + EX;
+      if (key === pKey) return; pKey = key; pR = R; pCx = cx; pCz = cz;
+      var minLam = cell * 2, i, j, o;
+      for (j = 0; j <= PN; j++) for (i = 0; i <= PN; i++) {
+        var x = cx + (i - PN / 2) * cell, z = cz + (j - PN / 2) * cell, by = baseAt(x, z), hy, e = Math.max(Math.abs(i - PN / 2), Math.abs(j - PN / 2)) / (PN / 2), wgt = 1 - sstep(0.6, 1, e);
+        hy = by > 0 ? Math.max(0.0003, by * EX + detail(x, z, minLam) * wgt) : by; o = j * (PN + 1) + i; pH[o] = hy;
+        pPos[o * 3] = x - cx; pPos[o * 3 + 1] = hy; pPos[o * 3 + 2] = z - cz;
+      }
+      for (j = 0; j <= PN; j++) for (i = 0; i <= PN; i++) {
+        o = j * (PN + 1) + i; var i0 = Math.max(0, i - 1), i1 = Math.min(PN, i + 1), j0 = Math.max(0, j - 1), j1 = Math.min(PN, j + 1);
+        var dx = (pH[j * (PN + 1) + i1] - pH[j * (PN + 1) + i0]) / ((i1 - i0) * cell), dz = (pH[j1 * (PN + 1) + i] - pH[j0 * (PN + 1) + i]) / ((j1 - j0) * cell), l = Math.sqrt(dx * dx + 1 + dz * dz);
+        if (pPos[o * 3 + 1] < 0) { dx = 0; dz = 0; l = 1; }
+        pNor[o * 3] = -dx / l; pNor[o * 3 + 1] = 1 / l; pNor[o * 3 + 2] = -dz / l;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, PP.bP); gl.bufferData(gl.ARRAY_BUFFER, pPos, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, PP.bN); gl.bufferData(gl.ARRAY_BUFFER, pNor, gl.DYNAMIC_DRAW);
+    }
+    function drawPatch(proj, far, alt) {
+      var R = Math.pow(2, Math.ceil(Math.log(Math.max(alt * 40, 0.05)) / Math.LN2));
+      if (R > 100) return 0;
+      updatePatch(R);
+      var cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      var m = view(); m[12] = 0; m[13] = 0; m[14] = 0; var vpr = mul(proj, m);
+      gl.useProgram(PP); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -1);
+      gl.uniformMatrix4fv(PP.u.uVPr, false, vpr); gl.uniform3f(PP.u.uRel, pCx - cam.x, -cam.y, pCz - cam.z); gl.uniform2f(PP.u.uC0, pCx, pCz);
+      gl.uniform1i(PP.u.uC, 0); gl.uniform1i(PP.u.uM, 1); gl.uniform1f(PP.u.uBio, bioEl.checked ? 1 : 0); gl.uniform1f(PP.u.uT, performance.now() / 1000);
+      gl.uniform1f(PP.u.uFog, 1.5 / far * 2.2); gl.uniform3f(PP.u.uSky, SKY[0], SKY[1], SKY[2]); gl.uniform1f(PP.u.uDR, R);
+      gl.bindBuffer(gl.ARRAY_BUFFER, PP.bP); gl.enableVertexAttribArray(PP.a[0]); gl.vertexAttribPointer(PP.a[0], 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, PP.bN); gl.enableVertexAttribArray(PP.a[1]); gl.vertexAttribPointer(PP.a[1], 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, PP.bI); gl.drawElements(gl.TRIANGLES, pidx.length, gl.UNSIGNED_INT, 0);
+      gl.disableVertexAttribArray(PP.a[0]); gl.disableVertexAttribArray(PP.a[1]); gl.disable(gl.POLYGON_OFFSET_FILL);
+      return R;
+    }
     // ---- loop ----
     var last = performance.now(), frame = 0;
     function loop(t) {
@@ -218,12 +281,14 @@ canvas:active{cursor:grabbing}
       gl.viewport(0, 0, cv.width, cv.height); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       var near = Math.max(alt * 0.02, 0.0004), far = Math.min(6000, Math.max(alt * 600, 40));
       var vp = mul(persp(1.0, cv.width / cv.height, near, far), view());
+      var curR = Math.max(alt * 40, 0.05); curR = Math.pow(2, Math.ceil(Math.log(curR) / Math.LN2)); if (curR > 100) curR = 0.0001;
       gl.useProgram(pr);
       gl.uniformMatrix4fv(U.uVP, false, vp); gl.uniform1f(U.uEx, EX); gl.uniform3f(U.uCam, cam.x, cam.y, cam.z); gl.uniform1i(U.uC, 0); gl.uniform1i(U.uM, 1); gl.uniform1f(U.uBio, bioEl.checked ? 1 : 0); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex2); gl.activeTexture(gl.TEXTURE0);
-      gl.uniform1f(U.uT, t / 1000); gl.uniform1f(U.uFog, 1.5 / far * 2.2); gl.uniform3f(U.uSky, SKY[0], SKY[1], SKY[2]);
+      gl.uniform1f(U.uT, t / 1000); gl.uniform1f(U.uDR, curR); gl.uniform1f(U.uFog, 1.5 / far * 2.2); gl.uniform3f(U.uSky, SKY[0], SKY[1], SKY[2]);
       gl.bindBuffer(gl.ARRAY_BUFFER, bXZ); gl.enableVertexAttribArray(aXZ); gl.vertexAttribPointer(aXZ, 2, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, bD); gl.enableVertexAttribArray(aD); gl.vertexAttribPointer(aD, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bI); gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0);
+      drawPatch(persp(1.0, cv.width / cv.height, near, far), far, alt);
       if (FP) {
         gl.useProgram(FP); gl.disable(gl.CULL_FACE);
         gl.uniformMatrix4fv(FP.u.uVP, false, vp); gl.uniform1f(FP.u.uEx, EX); gl.uniform3f(FP.u.uCam, cam.x, cam.y, cam.z); gl.uniform1f(FP.u.uFog, 1.5 / far * 2.2); gl.uniform3f(FP.u.uSky, SKY[0], SKY[1], SKY[2]);
