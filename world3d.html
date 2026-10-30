@@ -152,7 +152,17 @@ canvas:active{cursor:grabbing}
     function groundAt(x, z) { x = Math.max(0, Math.min(W - 1, x)); z = Math.max(0, Math.min(H - 1, z)); return hgtC(x, z, W0); }
     function baseAt(x, z) { return baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[0]; }
     function landAt(x, z) { return baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[1] > 0.5; }
-    function landSafe(x, z) { return landAt(x, z) && landAt(x + 0.6, z) && landAt(x - 0.6, z) && landAt(x, z + 0.6) && landAt(x, z - 0.6); }
+    function dtS(ch, fx, fz, T) {            // bilinear, repeating sample of the detail tile (same maths as the GPU, finest mip)
+      var u = fx / T * 512 - 0.5, v = fz / T * 512 - 0.5, x0 = Math.floor(u), z0 = Math.floor(v), tx = u - x0, tz = v - z0;
+      var xa = ((x0 % 512) + 512) % 512, xb = (xa + 1) % 512, za = ((z0 % 512) + 512) % 512, zb = (za + 1) % 512;
+      var a = DT[(za * 512 + xa) * 4 + ch], b = DT[(za * 512 + xb) * 4 + ch], c = DT[(zb * 512 + xa) * 4 + ch], d = DT[(zb * 512 + xb) * 4 + ch];
+      return ((a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz) / 255;
+    }
+    function coastL(x, z) {                  // drawn land fraction incl. the coast wiggle (>0.5 = drawn as land)
+      var xx = Math.max(0, Math.min(W - 1.0001, x)), zz = Math.max(0, Math.min(H - 1.0001, z)), fx = xx * FTPX, fz = zz * FTPX;
+      return baseAtC(xx, zz)[1] + (dtS(2, fx, fz, 16384) - 0.5) * 0.34 + (dtS(2, fx, fz, 2048) - 0.5) * 0.16 + (dtS(3, fx, fz, 256) - 0.5) * 0.06;
+    }
+    function landSafe(x, z) { var e = 0.003; return coastL(x, z) > 0.55 && coastL(x + e, z) > 0.5 && coastL(x - e, z) > 0.5 && coastL(x, z + e) > 0.5 && coastL(x, z - e) > 0.5; }
     function hG(x, z) { var by = baseAt(x, z); return by > 0 ? 18 + Math.sqrt(by * FTPX) : 0; }   // map height value (0..100 scale)
     function vnz(x, z) { return vnzC(x * 1.0, z * 1.0); }
     // biome / regional style lookups (with a wobble so region borders look organic)
@@ -263,10 +273,15 @@ canvas:active{cursor:grabbing}
       'return mix(mix(l00,l10,f.x),mix(l01,l11,f.x),f.y);}\n' +
       'vec3 ramp(float h){vec3 a=vec3(0.071,0.518,0.188),b=vec3(0.278,0.572,0.220),c=vec3(0.400,0.525,0.275),d=vec3(0.525,0.643,0.365),e=vec3(0.784,0.753,0.573),f=vec3(0.831,0.788,0.627);' +
       'if(h<35.0)return mix(a,b,clamp((h-20.0)/15.0,0.0,1.0));if(h<45.0)return mix(b,c,(h-35.0)/10.0);if(h<55.0)return mix(c,d,(h-45.0)/10.0);if(h<65.0)return mix(d,e,(h-55.0)/10.0);return mix(e,f,clamp((h-65.0)/25.0,0.0,1.0));}\n' +
-      'vec3 galaxy(vec2 p){vec2 w=vec2(uTime*0.01,uTime*0.006);float n1=texture2D(uDet,p*0.045+w).r,n2=texture2D(uDet,p*0.16+0.31-w).g,n3=texture2D(uDet,p*0.55+0.7+w*2.0).b,n4=texture2D(uDet,p*0.021+0.5).g;' +
-      'vec3 c=vec3(0.010,0.006,0.035)+vec3(0.03,0.34,0.52)*smoothstep(0.38,0.65,n1)*(0.3+0.7*n4)+vec3(0.60,0.07,0.66)*smoothstep(0.40,0.68,n2)*smoothstep(0.30,0.6,n4)+vec3(0.12,0.12,0.60)*smoothstep(0.42,0.7,n3)*0.8;' +
-      'for(int s=0;s<3;s++){float sc=s==0?60.0:(s==1?260.0:900.0);vec2 cp=p*sc;vec2 id=mod(floor(cp),512.0);vec2 fp=fract(cp)-0.5;float h=hash21(id+float(s)*17.0);if(h>0.93){vec2 off=vec2(hash21(id+3.3),hash21(id+7.7))-0.5;float d=length(fp-off*0.6);' +
-      'float tw=0.65+0.35*sin(uTime*2.5+h*60.0);c+=vec3(0.9,0.95,1.0)*smoothstep(0.1,0.0,d)*tw*(1.5+h*3.0);}}return c;}\n' +
+      'vec3 gcol(int i){if(i==0)return vec3(0.02,0.42,0.50);if(i==1)return vec3(0.52,0.07,0.62);if(i==2)return vec3(0.10,0.20,0.75);if(i==3)return vec3(0.04,0.55,0.40);return vec3(0.65,0.15,0.50);}\n' +
+      'vec3 galaxy(vec2 base,vec3 rdp,float dist){float ay=max(-rdp.y,0.035);vec2 par=rdp.xz/ay;float fpft=dist*15840.0/(900.0*uPxK);vec3 c=vec3(0.006,0.004,0.024);' +
+      'for(int i=0;i<5;i++){float fi=float(i);float depth=30.0+fi*fi*70.0;vec2 p=base+par*depth;float sc=1.0/(700.0+fi*520.0);vec2 uv=p*sc+vec2(fi*0.37,fi*0.19)+vec2(uTime*0.0011*(1.0+fi),-uTime*0.0007);' +
+      'vec4 t=texture2D(uDet,uv);vec4 t2=texture2D(uDet,uv*2.3+0.5);float nb=t.g*0.62+t2.b*0.38;float cloud=smoothstep(0.50,0.86,nb);float rib=smoothstep(0.04,0.0,abs(t.g-0.52))*smoothstep(0.4,0.65,t.b);' +
+      'c+=gcol(i)*cloud*(0.20-fi*0.02)+gcol(4-i)*rib*0.35;}' +
+      'for(int s=0;s<3;s++){float fs=float(s);float cell=70.0+fs*fs*130.0;float depth=90.0+fs*430.0;vec2 q=(base+par*depth+vec2(fs*91.0,fs*47.0))/cell;vec2 id=mod(floor(q),512.0);vec2 fp=fract(q)-0.5;float h=hash21(id+fs*13.1);' +
+      'float vis=clamp(cell*0.07/fpft,0.0,1.0);if(h>0.78){vec2 off=vec2(hash21(id+3.3),hash21(id+7.7))-0.5;float d=length(fp-off*0.5);float h2=hash21(id+9.1);float r=0.025+0.05*h2;float tw=0.55+0.45*sin(uTime*(1.2+h*3.0)+h*60.0);' +
+      'vec3 sc2=h2<0.35?vec3(0.6,0.95,1.0):(h2<0.7?vec3(1.0,0.65,1.0):vec3(1.0));c+=sc2*smoothstep(r,0.0,d)*tw*(2.6+h*3.0)*vis;}' +
+      'c+=vec3(0.10,0.10,0.2)*0.05*(1.0-vis);}return c;}\n' +
       'void main(){\n' +
       '#ifdef CLIP\nif(vW.x<0.0||vW.y<0.0||vW.x>uWH.x-1.0||vW.y>uWH.y-1.0)discard;\n#else\nif(vW.x>uHole.x&&vW.x<uHole.z&&vW.y>uHole.y&&vW.y<uHole.w)discard;\n#endif\n' +
       'float dist=length(vRel);vec3 rd=vRel/dist;\n' +
@@ -277,27 +292,30 @@ canvas:active{cursor:grabbing}
       ' vec2 gw=g1*0.7+g2*0.9+g3*0.8;vec3 n=normalize(vec3(-gw.x,1.0,-gw.y));vec3 V=-rd;float cv_=max(dot(n,V),0.0);float F=0.02+0.98*pow(1.0-cv_,5.0);\n' +
       ' vec3 rr=reflect(rd,n);rr.y=abs(rr.y)+0.02;rr=normalize(rr);vec3 refl=skyCol(rr);\n' +
       ' float sdp=texture2D(uSD,(vW+0.5)/uWH).r*63.0;float shoreD=max(0.5-Lw,0.0);float dp=smoothstep(0.1,9.0,sdp+shoreD);\n' +
-      ' vec3 body=mix(vec3(0.030,0.200,0.215),vec3(0.003,0.028,0.065),sqrt(dp));body*=uAmbTop*0.55+uSunCol*0.10*max(uSun.y,0.0)+0.01;\n' +
+      ' vec3 body=mix(vec3(0.040,0.150,0.175),vec3(0.003,0.026,0.068),sqrt(dp));body*=uAmbTop*0.55+uSunCol*0.10*max(uSun.y,0.0)+0.01;\n' +
       ' float spec=pow(max(dot(rr,uSun),0.0),500.0);col=mix(body,refl,F)+uSunCol*spec*5.0;\n' +
       ' float wv=dtex(uFO2,256.0,vec2(uTime*0.4,0.0)).g;float foam=(1.0-smoothstep(0.0,0.004,shoreD))*(0.55+0.45*wv)+smoothstep(0.52,0.6,wv)*(1.0-smoothstep(0.004,0.06,shoreD))*0.4;\n' +
       ' vec3 fc=vec3(0.80,0.86,0.88)*(uAmbTop*0.7+uSunCol*0.35*max(uSun.y,0.0)+0.02);col=mix(col,fc,clamp(foam,0.0,1.0)*0.85);\n' +
-      ' float gz=1.0-smoothstep(16.0,44.0,length(vW-uGal));if(gz>0.0){col=mix(col,galaxy(vW)*(1.0-0.2*F),gz);}\n' +
+      ' float gz=1.0-smoothstep(16.0,44.0,length(vW-uGal));if(gz>0.0){vec3 rdp=normalize(rd+vec3(n.x,0.0,n.z)*0.10);vec3 gc=galaxy(uFO1+vLocFt,rdp,dist)+refl*F*0.22+uSunCol*spec*2.0;col=mix(col,gc,gz);}\n' +
       '}else{\n' +
       ' vec2 warp=(vec2(dtex(uFO0,16384.0,vec2(0.0)).r,dtex(uFO0,16384.0,vec2(0.37,0.11)).g)-0.5)*1.5;vec4 bz=texture2D(uB,(floor(vW+warp+0.5)+0.5)/uWH)*255.0;float sty=bz.g;float wgt=bz.b/255.0;\n' +
-      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,1.15);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;\n' +
+      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,0.92);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;\n' +
       ' vec3 n=normalize(vN);float h0;float fadeA=1.0-smoothstep(1500.0,9000.0,dist*15840.0);float fadeB=1.0-smoothstep(120.0,1400.0,dist*15840.0);\n' +
       ' vec2 gA=dgrad(uFO1,2048.0,8.0,vec2(0.0),h0);float hA=h0;vec2 gB=dgrad(uFO2,256.0,1.1,vec2(0.0),h0);float hB=h0;\n' +
       ' vec2 gd=gA*fadeA+gB*fadeB;n=normalize(n+vec3(-gd.x,0.0,-gd.y));\n' +
       ' vec4 dA=dtex(uFO1,2048.0,vec2(0.0));vec4 dB=dtex(uFO2,256.0,vec2(0.0));vec4 dC=dtex(uFO0,16384.0,vec2(0.0));\n' +
       ' float patchV=mix(0.5,dA.g,fadeA*0.8+0.2)*0.6+dC.g*0.4;float fine=mix(0.5,dB.b,fadeB);\n' +
-      ' alb*=0.42+1.35*patchV;alb*=0.72+0.62*fine;float dry=smoothstep(0.55,0.8,dA.b);alb=mix(alb,alb*vec3(1.25,1.05,0.7),dry*0.35*(1.0-uBio*0.0));\n' +
+      ' float vr=(sty>6.5&&sty<7.5)?0.12:(bz.r>12.5&&bz.r<13.5)?0.3:1.0;alb*=mix(1.0,0.42+1.35*patchV,vr);alb*=mix(1.0,0.72+0.62*fine,vr);float dry=smoothstep(0.55,0.8,dA.b);alb=mix(alb,alb*vec3(1.25,1.05,0.7),dry*0.35*(1.0-uBio*0.0));\n' +
       ' float slope=1.0-normalize(vN).y;float rk=smoothstep(0.30,0.55,slope+(dB.r-0.5)*0.18+(dA.r-0.5)*0.14);\n' +
       ' vec3 rockC=pow(vec3(0.46,0.43,0.39),vec3(2.2))*(0.75+0.5*dB.g);if(sty>1.5&&sty<2.5)rockC*=0.35;if(sty>5.5&&sty<6.5)rockC*=0.28;if(sty>6.5&&sty<7.5)rockC*=1.25;alb=mix(alb,rockC,rk*0.9);\n' +
       ' float pool=0.0;if(sty>3.5&&sty<5.5){float thr=sty<4.5?0.43:0.33;float pn=dtex(uFO1,2048.0,vec2(0.0)).g*0.65+dtex(uFO2,256.0,vec2(0.0)).g*0.35*fadeB+dC.g*0.0;pool=smoothstep(thr+0.025,thr-0.025,pn)*smoothstep(0.955,0.985,normalize(vN).y)*(0.4+0.6*wgt);}\n' +
+      ' float shoreIn=Lw-0.5;float beach=(1.0-smoothstep(0.0,0.028,shoreIn+(dB.g-0.5)*0.012))*(1.0-smoothstep(0.0009,0.004,vBy))*smoothstep(0.88,0.97,normalize(vN).y);if(bz.r>10.5&&bz.r<11.5)beach=0.0;' +
+      ' vec3 sandC=vec3(0.62,0.56,0.43);if(sty>5.5&&sty<6.5)sandC=vec3(0.07,0.07,0.075);else if(sty>1.5&&sty<2.5)sandC=vec3(0.17,0.16,0.15);else if(sty>3.5&&sty<5.5)sandC=vec3(0.10,0.12,0.10);else if(sty>6.5&&sty<7.5)sandC=vec3(0.50,0.49,0.44);' +
+      ' vec3 sandL=pow(sandC*(0.9+0.2*dB.g),vec3(2.2))*0.9;alb=mix(alb,sandL,beach*0.92);alb*=1.0-0.35*(1.0-smoothstep(0.0,0.006,shoreIn));' +
       ' float sh=shadowAt(vRel,1.0);float ndl=max(dot(n,uSun),0.0);vec3 amb=mix(uAmbBot,uAmbTop,n.y*0.5+0.5);vec3 E=uSunCol*ndl*sh+amb;col=alb*E;\n' +
       ' if(pool>0.0){vec3 V=-rd;vec3 pn2=normalize(vec3(-gB.x*0.25,1.0,-gB.y*0.25));float F=0.03+0.97*pow(1.0-max(dot(pn2,V),0.0),5.0);vec3 rr=reflect(rd,pn2);rr.y=abs(rr.y)+0.02;vec3 pc=vec3(0.002,0.003,0.003)+skyCol(normalize(rr))*(F*0.28);pc+=uSunCol*pow(max(dot(rr,uSun),0.0),300.0)*3.0*sh;col=mix(col,pc,pool*0.94);}\n' +
       '}\n' +
-      'float lineK=smoothstep(5.0,40.0,dist);if(lineK>0.0){float lw=dist*0.0016*uPxK;float ln=1.0-smoothstep(lw*0.6,lw*1.25,abs(L-0.5));col=mix(col,vec3(0.004,0.006,0.01),ln*0.9*lineK);}\n' +
+      'float lineK=smoothstep(12.0,70.0,dist);if(lineK>0.0){float lw=dist*0.0016*uPxK;float ln=1.0-smoothstep(lw*0.6,lw*1.25,abs(L-0.5));col=mix(col,vec3(0.004,0.006,0.01),ln*0.55*lineK);}\n' +
       'float f=1.0-exp(-dist*uFogK);col=mix(col,fogc,clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
 
     var UCLIP = ['uHT', 'uNZ', 'uVP', 'uOrg', 'uRel', 'uCamY', 'uS', 'uWH', 'uEx', 'uMorph', 'uMr', 'uW', 'uWc', 'uOct', 'uRot', 'uA'];
@@ -691,6 +709,8 @@ var fl = (function () {
       def('obsid', function (m) { m.rock(0.7, 1.1, 0.7, [0.03, 0.03, 0.035], [0.16, 0.16, 0.20], 0.32, false); }, 59);
       def('ptuft', function (m) { m.blades(7, 1, 0.06, 0.35, [0.26, 0.22, 0.30], [0.44, 0.38, 0.50], 0.35); }, 60);
       def('gtuft', function (m) { m.blades(7, 1, 0.06, 0.35, [0.20, 0.20, 0.17], [0.52, 0.52, 0.44], 0.4); }, 61);
+      def('mtuft', function (m) { m.blades(7, 1, 0.06, 0.35, [0.27, 0.31, 0.23], [0.43, 0.47, 0.35], 0.35); }, 63);
+      def('ntuft', function (m) { m.blades(7, 1, 0.06, 0.35, [0.30, 0.29, 0.31], [0.50, 0.49, 0.53], 0.4); }, 64);
       def('btuft', function (m) { m.blades(7, 1, 0.06, 0.35, [0.14, 0.14, 0.07], [0.36, 0.33, 0.14], 0.4); }, 62);
       Object.keys(MESH).forEach(function (k2) { MESH[k2].buf = buf(gl.ARRAY_BUFFER, MESH[k2].data); });
       // ---------- habitat tables: [mesh, probability per cell, min ft, max ft, tint] ----------
@@ -716,11 +736,11 @@ var fl = (function () {
         15: [['bush', 0.08, 3, 6, G1], ['reed', 0.05, 4.5, 7, G1]]
       };
       var ROCKP = { 1: 0.02, 2: 0.03, 3: 0.008, 4: 0.01, 5: 0.008, 6: 0.008, 7: 0.006, 8: 0.01, 9: 0.02, 10: 0.04, 11: 0.05, 12: 0.003, 13: 0.04, 14: 0.07, 15: 0.02 };
-      var ROCKT = { 1: [1.15, 1.0, 0.85], 2: [1.0, 0.98, 0.92], 14: [1.25, 0.95, 0.75], 11: [0.95, 1.0, 1.08], 13: [0.9, 0.8, 1.1] };
+      var ROCKT = { 1: [1.15, 1.0, 0.85], 2: [1.0, 0.98, 0.92], 14: [1.25, 0.95, 0.75], 11: [0.95, 1.0, 1.08], 13: [0.95, 0.94, 1.0] };
       var GRASS = { 1: [['dry', 0.02]], 2: [['dry', 0.10]], 3: [['tall', 0.55, [1.15, 1.05, 0.7]], ['tuft', 0.15, [1.2, 1.1, 0.7]]], 4: [['tuft', 0.80], ['tall', 0.12]], 5: [['tuft', 0.55]],
         6: [['tuft', 0.5, [1.1, 1.05, 0.8]], ['tall', 0.12, [1.1, 1.0, 0.7]]], 7: [['tuft', 0.35, [0.7, 1.0, 0.75]]], 8: [['tuft', 0.45, [0.8, 1.0, 0.85]]], 9: [['tuft', 0.25, [0.7, 0.85, 0.7]]],
         10: [['tuft', 0.30, [1.0, 0.95, 0.65]], ['dry', 0.1]], 12: [['tall', 0.55, [0.8, 1.0, 0.6]], ['tuft', 0.2, [0.8, 1, 0.7]]], 14: [['dry', 0.03]], 15: [['tuft', 0.55], ['tall', 0.1]] };
-      var GRASSH = { tuft: [0.9, 1.7], tall: [2.2, 3.8], dry: [0.8, 1.5], ptuft: [0.8, 1.6], gtuft: [0.8, 1.6], btuft: [0.8, 1.5] };
+      var GRASSH = { tuft: [0.9, 1.7], tall: [2.2, 3.8], dry: [0.8, 1.5], ptuft: [0.8, 1.6], mtuft: [0.9, 1.7], ntuft: [0.8, 1.5], gtuft: [0.8, 1.6], btuft: [0.8, 1.5] };
       // regional styles (override the biome tables where the style id is set and the regional weight is high enough)
       var STY = {
         1: { t: [['witheredOak', 0.075, 38, 70, [1.0, 1.0, 0.9]], ['spruce', 0.02, 40, 80, [0.9, 0.95, 0.8]], ['dead', 0.02, 26, 50, G1]], s: [['sage', 0.05, 2, 4, [0.9, 0.9, 0.75]], ['deadbush', 0.05, 1.5, 3, G1]], g: [['btuft', 0.35]], r: 0.012 },
@@ -729,10 +749,10 @@ var fl = (function () {
         4: { t: [['tendril', 0.06, 12, 26, G1], ['dead', 0.02, 18, 34, [0.55, 0.55, 0.6]]], s: [['tendril', 0.08, 4, 9, G1], ['reed', 0.10, 4.5, 8, [0.45, 0.5, 0.45]]], g: [['gtuft', 0.15]], r: 0.004 },
         5: { t: [['willow', 0.016, 140, 230, G1], ['mangrove', 0.07, 18, 34, [0.8, 0.95, 0.85]], ['tendril', 0.03, 12, 24, G1]], s: [['mush', 0.12, 3, 10, G1], ['reed', 0.12, 4.5, 8, [0.7, 0.9, 0.7]], ['bush', 0.05, 3, 6, [0.7, 0.9, 0.7]]], g: [['tuft', 0.35, [0.75, 0.95, 0.75]]], r: 0.004 },
         6: { t: [['charred', 0.01, 12, 26, G1]], s: [], g: [], r: 0.30, rockMesh: 'obsid' },
-        7: { t: [['deadpalm', 0.08, 30, 58, G1], ['palm', 0.01, 30, 55, [0.6, 0.6, 0.55]]], s: [['deadbush', 0.04, 1.5, 3.4, G1]], g: [['gtuft', 0.4]], r: 0.06 },
+        7: { t: [['deadpalm', 0.07, 30, 58, G1]], s: [], g: [['mtuft', 0.85]], r: 0.008 },
         8: { t: [['witheredOak', 0.07, 38, 74, [1.0, 1.0, 0.92]], ['spruce', 0.07, 55, 110, [0.9, 0.95, 0.82]], ['dead', 0.03, 26, 54, G1]], s: [['bush', 0.06, 3, 6, [0.85, 0.8, 0.55]], ['deadbush', 0.04, 1.5, 3, G1]], g: [['btuft', 0.35]], r: 0.012 }
       };
-      var NEX = { t: [], s: [['sage', 0.04, 2, 4, [0.9, 0.7, 1.0]]], g: [['ptuft', 0.30]], r: 0.05 };
+      var NEX = { t: [], s: [], g: [['ntuft', 0.28]], r: 0.05 };
       // pick the habitat for a location: regional style wins where its weight is high, else the biome table
       function habitat(layer, b) {
         var bio = b[0], sty = b[1], wgt = b[2], S = null;
@@ -746,7 +766,7 @@ var fl = (function () {
         'float ph=uT*1.6+iP.x*61.0+iP.z*43.0;lp.x+=sin(ph)*aS.x*0.14*s;lp.z+=cos(ph*0.8)*aS.x*0.09*s;vec3 r=vec3(lp.x*cs+lp.z*sn,lp.y,-lp.x*sn+lp.z*cs);vec3 rel=c+r;' +
         'vNn=vec3(aN.x*cs+aN.z*sn,aN.y,-aN.x*sn+aN.z*cs);vC=aC*mix(vec3(1.0),iR.yzw,aS.y);vRel=rel;gl_Position=uVP*vec4(rel,1.0);}';
       var VFS = G_FHEAD + G_COMMON + G_SHADOW + 'varying vec3 vC;varying vec3 vNn;varying vec3 vRel;uniform float uSunK;\n' +
-        'void main(){float dist=length(vRel);vec3 rd=vRel/dist;vec3 n=normalize(vNn);if(!gl_FrontFacing)n=-n;float d=dot(n,uSun);vec3 alb=pow(vC,vec3(1.9));' +
+        'void main(){float dist=length(vRel);vec3 rd=vRel/dist;vec3 n=normalize(vNn);if(!gl_FrontFacing)n=-n;float d=dot(n,uSun);vec3 alb=pow(vC,vec3(1.9));alb=mix(vec3(dot(alb,vec3(0.3,0.59,0.11))),alb,0.62);' +
         'float sh=shadowAt(vRel,4.5);float lit=(max(d,0.0)*0.8+max(-d,0.0)*0.22)*sh;vec3 amb=mix(uAmbBot,uAmbTop,n.y*0.5+0.5);vec3 col=alb*(uSunCol*lit+amb*1.1);' +
         'float f=1.0-exp(-dist*uFogK);col=mix(col,fogColAt(rd),clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
       var VATT = ['aP', 'aN', 'aC', 'aS', 'iP', 'iR'];
@@ -788,7 +808,7 @@ var fl = (function () {
               var pr2 = (hab && hab.r !== undefined ? hab.r : ROCKP[b]); if (r0 > pr2 * (1 + sl * 5)) continue;
               var u = hr(ix, iz, L.seed + 3); ft = 1.0 + Math.pow(u, 3) * 9 + (hr(ix, iz, 9) > 0.985 ? 8 : 0);
               var k2 = hr(ix, iz, L.seed + 4); mesh = hab && hab.rockMesh ? hab.rockMesh : (k2 < 0.45 ? 'rockA' : k2 < 0.75 ? 'rockB' : 'rockC'); var rt = ROCKT[b] || G1; tint = [rt[0] * 0.72, rt[1] * 0.72, rt[2] * 0.72];
-              if (b === 13 || (hab && hab === NEX)) { if (hr(ix, iz, 21) > 0.7) { mesh = 'boulder'; ft *= 2.2; } }
+              if (b === 13 || (hab && hab === NEX)) { if (hr(ix, iz, 21) > 0.5) { mesh = 'boulder'; ft *= 2.2; } }
             } else {
               if (L.name === 'trees') { if (sl > 1.2 || hg > 78) continue; var tl = 1 - sstep(60, 78, hg); if (hr(ix, iz, L.seed + 5) > tl) continue; if (sl > 0.5 && hr(ix, iz, L.seed + 6) < (sl - 0.5) / 0.7) continue; }
               else if (sl > 1.6 && L.name === 'grass') continue; else if (sl > 1.2 && hr(ix, iz, L.seed + 6) < (sl - 1.2)) continue;
@@ -879,7 +899,9 @@ var fl = (function () {
     ensureShadow();
     // ================= minimap =================
     var mc = document.getElementById('mc'); mc.width = 300; mc.height = Math.round(300 * H / W);
-    mc.getContext('2d').drawImage(cimg, 0, 0, mc.width, mc.height);
+    (function () { var fc = document.createElement('canvas'); fc.width = W; fc.height = H; var fx = fc.getContext('2d'), id = fx.createImageData(W, H), d = id.data, q;
+      for (q = 0; q < n; q++) { if (LF[q]) { d[q * 4] = CDATA[q * 4]; d[q * 4 + 1] = CDATA[q * 4 + 1]; d[q * 4 + 2] = CDATA[q * 4 + 2]; } else { d[q * 4] = 58; d[q * 4 + 1] = 86; d[q * 4 + 2] = 120; } d[q * 4 + 3] = 255; }
+      fx.putImageData(id, 0, 0); mc.getContext('2d').drawImage(fc, 0, 0, mc.width, mc.height); })();
     var mdot = document.getElementById('mdot'), mini = document.getElementById('mini');
     function tele(e) { var r = mc.getBoundingClientRect(); cam.x = (e.clientX - r.left) / r.width * W; cam.z = (e.clientY - r.top) / r.height * H; cam.y = Math.max(cam.y, groundAt(cam.x, cam.z) + 20); }
     mini.addEventListener('pointerdown', function (e) { tele(e); mini.setPointerCapture(e.pointerId); mini._d = true; });
