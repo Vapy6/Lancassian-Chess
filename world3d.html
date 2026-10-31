@@ -41,11 +41,11 @@ canvas:active{cursor:grabbing}
   var msg = document.getElementById('msg');
   if (!gl) { msg.textContent = 'This browser cannot do WebGL, so the 3D view will not run here.'; return; }
   function loadImg(u) { return new Promise(function (ok, no) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { no(new Error(u)); }; i.src = u; }); }
-  Promise.all([loadImg('world3d-height.png'), loadImg('world3d-color.png'), fetch('world3d-places.json').then(function (r) { return r.json(); }), loadImg('world3d-mask.png'), loadImg('world3d-biome.png')])
-    .then(function (a) { start(a[0], a[1], a[2], a[3], a[4]); })
+  Promise.all([loadImg('world3d-height.png'), loadImg('world3d-color.png'), fetch('world3d-places.json').then(function (r) { return r.json(); }), loadImg('world3d-mask.png'), loadImg('world3d-biome.png'), loadImg('world3d-rivers.png').catch(function () { return null; })])
+    .then(function (a) { start(a[0], a[1], a[2], a[3], a[4], a[5]); })
     .catch(function (e) { msg.textContent = 'Could not load ' + (e && e.message ? e.message : e) + '. Make sure world3d-height.png, world3d-color.png, world3d-mask.png, world3d-biome.png and world3d-places.json are in the same folder as this page.'; console.error(e); });
 
-  function start(himg, cimg, meta, mimg, bimg) {
+  function start(himg, cimg, meta, mimg, bimg, rimg) {
     var W = meta.w, H = meta.h, MI = meta.mi, EXP = meta.exp;
     var FTPX = 5280 * MI;                      // feet per map pixel
     var FT = 1 / FTPX;                         // one foot in map pixels
@@ -64,6 +64,7 @@ canvas:active{cursor:grabbing}
     var MW = mimg.width, MH = mimg.height, SC = MW / W;
     var MD = pixels(mimg, MW, MH);
     var BD = pixels(bimg, W, H);
+    var RVW = rimg ? rimg.width : 1, RVH = rimg ? rimg.height : 1, RV = rimg ? pixels(rimg, RVW, RVH) : new Uint8Array([255, 0, 0, 255]);
     var CDATA = pixels(cimg, W, H);
     var n = W * H, i, LF = new Uint8Array(n), Y = new Float32Array(n);
     for (i = 0; i < n; i++) {
@@ -139,6 +140,20 @@ canvas:active{cursor:grabbing}
       var la = LF[za * W + xa], lb = LF[za * W + xb], lc = LF[zb * W + xa], ld = LF[zb * W + xb];
       return [(ya + (yb - ya) * fx) * (1 - fz) + (yc + (yd - yc) * fx) * fz, (la + (lb - la) * fx) * (1 - fz) + (lc + (ld - lc) * fx) * fz];
     }
+    // river field: R = signed distance to the nearest river centreline (-2..2 px), G = half width (0..1.5 px); 2 texels per map px
+    function rvAt(x, z) {
+      var u = (x + 0.5) * RVW / W - 0.5, v = (z + 0.5) * RVH / H - 0.5, u0 = Math.floor(u), v0 = Math.floor(v), fu = u - u0, fv = v - v0;
+      var ua = Math.max(0, Math.min(RVW - 1, u0)), ub = Math.max(0, Math.min(RVW - 1, u0 + 1)), va = Math.max(0, Math.min(RVH - 1, v0)), vb = Math.max(0, Math.min(RVH - 1, v0 + 1));
+      var i00 = (va * RVW + ua) * 4, i10 = (va * RVW + ub) * 4, i01 = (vb * RVW + ua) * 4, i11 = (vb * RVW + ub) * 4, o = [0, 0];
+      for (var c = 0; c < 2; c++) { var t = (RV[i00 + c] * (1 - fu) + RV[i10 + c] * fu) * (1 - fv) + (RV[i01 + c] * (1 - fu) + RV[i11 + c] * fu) * fv; o[c] = t / 255; }
+      return [(o[0] * 2 - 1) * 2, o[1] * 1.5];
+    }
+    function rcutC(x, z, h) {
+      var r = rvAt(x, z), hw = r[1]; if (hw < 0.02) return h;
+      var a = Math.abs(r[0]) / hw, D = Math.max(0.003, Math.min(0.0095, 0.05 * hw)), ch = 1 - sstep(0.6, 1.25, a), v = 1 - sstep(1.0, Math.min(5.0, 1.9 / hw), a);
+      return h - D * (0.35 * v + 0.65 * ch) * sstep(0.0, 1.5 * D, h - 0.0003);
+    }
+    function riverNear(x, z) { var r = rvAt(x, z); return r[1] > 0.02 && Math.abs(r[0]) / r[1] < 1.6; }
     function hgtC(x, z, wt) {
       var bl = baseAtC(x, z), by = bl[0]; if (bl[1] <= 0.5) return 0;
       var lf = sstep(0.0003, 0.0025, by), rough = Math.max(0.2, Math.min(1, 0.2 + (Math.sqrt(by * FTPX) - 2) / 50)), det = 0;
@@ -147,7 +162,7 @@ canvas:active{cursor:grabbing}
         var px = ((o.c * x - o.s * z) / o.lam + o.ox), pz = ((o.s * x + o.c * z) / o.lam + o.oz);
         det += w * o.a * (vnzC(px, pz) * 2 - 1);
       }
-      return Math.max(by * (1 + (EX - 1) * sstep(0.0004, 0.005, by)) + det * rough * lf * (1 + EX / 50), 0.0003);
+      return rcutC(x, z, Math.max(by * (1 + (EX - 1) * sstep(0.0004, 0.005, by)) + det * rough * lf * (1 + EX / 50), 0.0003));
     }
     function groundAt(x, z) { x = Math.max(0, Math.min(W - 1, x)); z = Math.max(0, Math.min(H - 1, z)); return hgtC(x, z, W0); }
     function baseAt(x, z) { return baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[0]; }
@@ -198,7 +213,8 @@ canvas:active{cursor:grabbing}
     var tDet = tex2D(DT, 512, 512, gl.RGBA, gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, gl.REPEAT, true);
     var tNZ = tex2D(NZ, 256, 256, gl.RGBA, gl.NEAREST, gl.NEAREST, gl.REPEAT, false);
     var tSD = tex2D(SDT, W, H, gl.RGBA, gl.LINEAR, gl.LINEAR, gl.CLAMP_TO_EDGE, false);
-    function bindWorldTex() { bindTex(0, tHT); bindTex(1, tC); bindTex(2, tB); bindTex(3, tDet); bindTex(4, tNZ); bindTex(5, tSD); }
+    var tRV = tex2D(RV, RVW, RVH, gl.RGBA, gl.LINEAR, gl.LINEAR, gl.CLAMP_TO_EDGE, false);
+    function bindWorldTex() {bindTex(7, tRV);  bindTex(0, tHT); bindTex(1, tC); bindTex(2, tB); bindTex(3, tDet); bindTex(4, tNZ); bindTex(5, tSD); }
 
     // ================= matrices =================
     function mul(a, b) { var r = new Float32Array(16); for (var i2 = 0; i2 < 4; i2++) for (var j = 0; j < 4; j++) { var s = 0; for (var k2 = 0; k2 < 4; k2++) s += a[k2 * 4 + j] * b[i2 * 4 + k2]; r[i2 * 4 + j] = s; } return r; }
@@ -230,10 +246,12 @@ canvas:active{cursor:grabbing}
     var DEPTH_FS = G_FHEAD + G_PACK + 'void main(){gl_FragColor=packD(gl_FragCoord.z);}';
 
     // ================= terrain vertex shader (geometry clipmap level) =================
+    var G_RIV = 'uniform sampler2D uRV;vec2 rv(vec2 wp){vec4 c=texture2D(uRV,(wp+0.5)/uWH);return vec2((c.r*2.0-1.0)*2.0,c.g*1.5);}\n' +
+      'float rcut(vec2 wp,float h){vec2 r=rv(wp);float hw=r.y;if(hw<0.02)return h;float a=abs(r.x)/hw;float D=clamp(0.05*hw,0.003,0.0095);float ch=1.0-smoothstep(0.6,1.25,a);float v=1.0-smoothstep(1.0,min(5.0,1.9/hw),a);return h-D*(0.35*v+0.65*ch)*smoothstep(0.0,1.5*D,h-0.0003);}\n';
     var CLIP_VS = 'precision highp float;attribute vec2 aIJ;uniform highp sampler2D uHT;uniform sampler2D uNZ;uniform mat4 uVP;uniform vec2 uOrg;uniform vec2 uRel;uniform float uCamY;uniform float uS;uniform vec2 uWH;uniform float uEx;uniform float uMorph;uniform vec2 uMr;' +
       'uniform float uW[12];uniform float uWc[12];uniform vec2 uOct[12];uniform vec2 uRot[12];uniform float uA[12];' +
       'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
-      'vec4 tx(vec2 i){i=clamp(i,vec2(0.0),uWH-1.0);return texture2D(uHT,(i+0.5)/uWH);}\n' +
+      G_RIV + 'vec4 tx(vec2 i){i=clamp(i,vec2(0.0),uWH-1.0);return texture2D(uHT,(i+0.5)/uWH);}\n' +
       'float dec(vec4 t){vec3 b=floor(t.rgb*255.0+0.5);return (b.r*65536.0+b.g*256.0+b.b)/16777215.0*0.5;}\n' +
       'float vnz(vec2 p){vec2 i=floor(p);vec2 f=p-i;f=f*f*f*(f*(f*6.0-15.0)+10.0);vec2 uv=(i+0.5)/256.0;' +
       'float a=texture2D(uNZ,uv).r;float b=texture2D(uNZ,uv+vec2(1.0/256.0,0.0)).r;float c=texture2D(uNZ,uv+vec2(0.0,1.0/256.0)).r;float d=texture2D(uNZ,uv+vec2(1.0/256.0)).r;return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}\n' +
@@ -242,7 +260,7 @@ canvas:active{cursor:grabbing}
       'float by=mix(mix(dec(a),dec(b),f.x),mix(dec(c),dec(d),f.x),f.y);float L=mix(mix(a.a,b.a,f.x),mix(c.a,d.a,f.x),f.y);byOut=by;if(L<=0.5)return 0.0;' +
       'float lf=smoothstep(0.0003,0.0025,by);float rough=clamp(0.2+(sqrt(by*15840.0)-2.0)/50.0,0.2,1.0);float det=0.0;' +
       'for(int k=0;k<12;k++){float w=cs>0.5?uWc[k]:uW[k];if(w<=0.0)break;vec2 p=uOct[k]+vec2(uRot[k].x*loc.x-uRot[k].y*loc.y,uRot[k].y*loc.x+uRot[k].x*loc.y);det+=w*uA[k]*(vnz(p)*2.0-1.0);}' +
-      'return max(by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by))+det*rough*lf*(1.0+uEx/50.0),0.0003);}\n' +
+      'return rcut(wp,max(by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by))+det*rough*lf*(1.0+uEx/50.0),0.0003));}\n' +
       'void main(){vec2 loc=(aIJ-32.0)*uS;float t0;float h=hgt(loc,0.0,t0);float by0=t0;vec3 rel=vec3(loc.x+uRel.x,0.0,loc.y+uRel.y);' +
       'float dch=max(abs(rel.x),abs(rel.z));float a=uMorph*smoothstep(uMr.x,uMr.y,dch);float e=uS;vec3 n;' +
       'float hxm=hgt(loc-vec2(e,0.0),0.0,t0);float hxp=hgt(loc+vec2(e,0.0),0.0,t0);float hzm=hgt(loc-vec2(0.0,e),0.0,t0);float hzp=hgt(loc+vec2(0.0,e),0.0,t0);' +
@@ -263,7 +281,8 @@ canvas:active{cursor:grabbing}
 
     // ================= terrain fragment shader =================
     var TERR_FS = G_FHEAD + G_COMMON + G_SHADOW +
-      'uniform sampler2D uC;uniform sampler2D uB;uniform sampler2D uDet;uniform highp sampler2D uHT;uniform sampler2D uSD;uniform vec2 uWH;uniform float uBio;uniform vec2 uFO0;uniform vec2 uFO1;uniform vec2 uFO2;uniform vec2 uGal;uniform vec4 uHole;uniform float uPxK;\n' +
+      'uniform vec2 uWH;' + G_RIV +
+      'uniform sampler2D uC;uniform sampler2D uB;uniform sampler2D uDet;uniform highp sampler2D uHT;uniform sampler2D uSD;uniform float uBio;uniform vec2 uFO0;uniform vec2 uFO1;uniform vec2 uFO2;uniform vec2 uGal;uniform vec4 uHole;uniform float uPxK;\n' +
       'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
       'float hash21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}\n' +
       'vec4 dtex(vec2 fo,float T,vec2 off){return texture2D(uDet,(fo+vLocFt+off)/T);}\n' +
@@ -314,19 +333,28 @@ canvas:active{cursor:grabbing}
       ' vec3 sandL=pow(sandC*(0.9+0.2*dB.g),vec3(2.2))*0.9;alb=mix(alb,sandL,beach*0.92);alb*=1.0-0.35*(1.0-smoothstep(0.0,0.006,shoreIn));' +
       ' float sh=shadowAt(vRel,1.0);float ndl=max(dot(n,uSun),0.0);vec3 amb=mix(uAmbBot,uAmbTop,n.y*0.5+0.5);vec3 E=uSunCol*ndl*sh+amb;col=alb*E;\n' +
       ' if(pool>0.0){vec3 V=-rd;vec3 pn2=normalize(vec3(-gB.x*0.25,1.0,-gB.y*0.25));float F=0.03+0.97*pow(1.0-max(dot(pn2,V),0.0),5.0);vec3 rr=reflect(rd,pn2);rr.y=abs(rr.y)+0.02;vec3 pc=vec3(0.002,0.003,0.003)+skyCol(normalize(rr))*(F*0.28);pc+=uSunCol*pow(max(dot(rr,uSun),0.0),300.0)*3.0*sh;col=mix(col,pc,pool*0.94);}\n' +
+      ' {vec2 rr0=rv(vW);float hw=rr0.y;if(hw>0.02){float a0=abs(rr0.x)/hw;float aa=min(dist*0.0016*uPxK/hw,3.0);float a=a0*(1.0+0.30*(dA.r-0.5)*fadeA+0.18*(dB.r-0.5)*fadeB);\n' +
+      ' float wm=(1.0-smoothstep(0.80-aa*0.3,1.0+aa*0.7,a))/(1.0+aa*0.5);float wet=(1.0-smoothstep(1.0,2.2,a))*(1.0-wm);col*=1.0-wet*0.38;\n' +
+      ' if(wm>0.003){float e=0.02;vec2 gg=vec2(rv(vW+vec2(e,0.0)).x-rv(vW-vec2(e,0.0)).x,rv(vW+vec2(0.0,e)).x-rv(vW-vec2(0.0,e)).x);vec2 td=vec2(gg.y,-gg.x);td/=max(length(td),1e-4);\n' +
+      ' float h1;vec2 w1=dgrad(uFO2,256.0,1.2,-td*uTime*14.0,h1);vec2 w2=dgrad(uFO1,2048.0,9.0,-td*uTime*9.0,h1);vec2 w3=dgrad(uFO2,256.0,0.7,-td*uTime*5.0+vec2(77.0,31.0),h1);vec2 gw2=w1*0.8+w2*0.7+w3*0.5;\n' +
+      ' vec3 wn=normalize(vec3(-gw2.x,1.0,-gw2.y));vec3 V=-rd;float F=0.03+0.97*pow(1.0-max(dot(wn,V),0.0),5.0);vec3 rr=reflect(rd,wn);rr.y=abs(rr.y)+0.02;rr=normalize(rr);\n' +
+      ' vec3 wb=mix(vec3(0.085,0.19,0.16),vec3(0.015,0.065,0.085),smoothstep(0.8,0.0,a));wb*=uAmbTop*0.55+uSunCol*0.12*max(uSun.y,0.0)+0.012;\n' +
+      ' vec3 wc=mix(wb,skyCol(rr),F*0.9)+uSunCol*pow(max(dot(rr,uSun),0.0),400.0)*4.0*sh;\n' +
+      ' float fw=dtex(uFO2,256.0,-td*uTime*14.0).g;float foam=smoothstep(0.62,0.97,a)*(0.35+0.65*smoothstep(0.35,0.7,fw))+smoothstep(0.7,0.8,fw)*0.12;\n' +
+      ' wc=mix(wc,vec3(0.78,0.84,0.84)*(uAmbTop*0.7+uSunCol*0.3*max(uSun.y,0.0)+0.02),clamp(foam,0.0,1.0)*0.6);col=mix(col,wc,clamp(wm,0.0,1.0)*0.97);}}}\n' +
       '}\n' +
       'float lineK=smoothstep(12.0,70.0,dist);if(lineK>0.0){float lw=dist*0.0016*uPxK;float ln=1.0-smoothstep(lw*0.6,lw*1.25,abs(L-0.5));col=mix(col,vec3(0.004,0.006,0.01),ln*0.55*lineK);}\n' +
       'float f=1.0-exp(-dist*uFogK);col=mix(col,fogc,clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
 
-    var UCLIP = ['uHT', 'uNZ', 'uVP', 'uOrg', 'uRel', 'uCamY', 'uS', 'uWH', 'uEx', 'uMorph', 'uMr', 'uW', 'uWc', 'uOct', 'uRot', 'uA'];
+    var UCLIP = ['uRV', 'uHT', 'uNZ', 'uVP', 'uOrg', 'uRel', 'uCamY', 'uS', 'uWH', 'uEx', 'uMorph', 'uMr', 'uW', 'uWc', 'uOct', 'uRot', 'uA'];
     var UFRAG = ['uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime', 'uSh', 'uLVP', 'uShP', 'uC', 'uB', 'uDet', 'uSD', 'uBio', 'uFO0', 'uFO1', 'uFO2', 'uGal', 'uHole', 'uPxK'];
     var PC = mkProg(CLIP_VS, '#define CLIP 1\n' + TERR_FS, ['aIJ'], UCLIP.concat(UFRAG));
     var PCS = mkProg(CLIP_VS, DEPTH_FS, ['aIJ'], UCLIP);
-    var PK = mkProg(KV, TERR_FS, ['axz', 'ad'], ['uVP', 'uEx', 'uCam', 'uWH', 'uHT'].concat(UFRAG));
+    var PK = mkProg(KV, TERR_FS, ['axz', 'ad'], ['uVP', 'uEx', 'uCam', 'uWH', 'uHT', 'uRV'].concat(UFRAG));
     // per-program uniforms that never change
     var ROTU = new Float32Array(NOCT * 2), AU = new Float32Array(NOCT);
     for (k = 0; k < NOCT; k++) { ROTU[k * 2] = OCT[k].c / OCT[k].lam; ROTU[k * 2 + 1] = OCT[k].s / OCT[k].lam; AU[k] = OCT[k].a; }
-    [PC, PCS].forEach(function (p) { gl.useProgram(p); gl.uniform2fv(p.u['uRot[0]'] !== undefined ? p.u['uRot[0]'] : p.u.uRot, ROTU); gl.uniform1fv(p.u.uA, AU); gl.uniform2f(p.u.uWH, W, H); gl.uniform1i(p.u.uHT, 0); gl.uniform1i(p.u.uNZ, 4); });
+    [PC, PCS].forEach(function (p) { gl.useProgram(p); gl.uniform2fv(p.u['uRot[0]'] !== undefined ? p.u['uRot[0]'] : p.u.uRot, ROTU); gl.uniform1fv(p.u.uA, AU); gl.uniform2f(p.u.uWH, W, H); gl.uniform1i(p.u.uHT, 0); gl.uniform1i(p.u.uNZ, 4); gl.uniform1i(p.u.uRV, 7); });
 
     // ================= meshes =================
     var NC = 64, NV = NC + 1;
@@ -845,7 +873,7 @@ var fl = (function () {
               var cl = 0.3 + 1.5 * vnz(x / 0.03 + L.seed, z / 0.03 - L.seed); if (L.name === 'grass') cl = 0.6 + 0.8 * vnz(x / 0.012 + L.seed, z / 0.012);
               sp = pick(tab, r0 / cl); if (!sp) continue;
             }
-            var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z)) continue;
+            var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z) || riverNear(x, z)) continue;
             var hg = hG(x, z), sl = EX * Math.hypot(baseAt(x + 1, z) - baseAt(x - 1, z), baseAt(x, z + 1) - baseAt(x, z - 1)) / 2;
             if (L.name === 'rocks') {
               var pr2 = (hab && hab.r !== undefined ? hab.r : ROCKP[b]); if (r0 > pr2 * (1 + sl * 5)) continue;
@@ -921,7 +949,7 @@ var fl = (function () {
     // ================= program setup that never changes =================
     [PC, PK].forEach(function (p) {
       gl.useProgram(p); gl.uniform1i(p.u.uC, 1); gl.uniform1i(p.u.uB, 2); gl.uniform1i(p.u.uDet, 3); gl.uniform1i(p.u.uSD, 5); gl.uniform1i(p.u.uSh, 6); gl.uniform2f(p.u.uWH, W, H);
-      if (p.u.uHT) gl.uniform1i(p.u.uHT, 0);
+      if (p.u.uHT) gl.uniform1i(p.u.uHT, 0); gl.uniform1i(p.u.uRV, 7);
     });
     gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
     var GALX = 257.1, GALZ = 851.2;
