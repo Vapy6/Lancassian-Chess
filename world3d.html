@@ -148,10 +148,16 @@ canvas:active{cursor:grabbing}
       for (var c = 0; c < 2; c++) { var t = (RV[i00 + c] * (1 - fu) + RV[i10 + c] * fu) * (1 - fv) + (RV[i01 + c] * (1 - fu) + RV[i11 + c] * fu) * fv; o[c] = t / 255; }
       return [(o[0] * 2 - 1) * 2, o[1] * 1.5];
     }
+    function baseExagC(x, z) { var by = baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[0]; return by * (1 + (EX - 1) * sstep(0.0004, 0.005, by)); }
     function rcutC(x, z, h) {
       var r = rvAt(x, z), hw = r[1]; if (hw < 0.02) return h;
-      var a = Math.abs(r[0]) / hw, D = Math.max(0.003, Math.min(0.0095, 0.05 * hw)), ch = 1 - sstep(0.6, 1.25, a), v = 1 - sstep(1.0, Math.min(5.0, 1.9 / hw), a);
-      return h - D * (0.35 * v + 0.65 * ch) * sstep(0.0, 1.5 * D, h - 0.0003);
+      var a = Math.abs(r[0]) / hw, amax = Math.min(5.0, 1.9 / hw); if (a >= amax) return h;
+      var D = Math.max(0.003, Math.min(0.0095, 0.05 * hw)), v = 1 - sstep(1.0, amax, a), h1 = h - D * 0.35 * v * sstep(0.0, 1.5 * D, h - 0.0003);
+      var cw = 1 - sstep(1.0, 1.6, a); if (cw <= 0) return h1;
+      var e = 0.02, gx = rvAt(x + e, z)[0] - rvAt(x - e, z)[0], gz = rvAt(x, z + e)[0] - rvAt(x, z - e)[0], gl = Math.hypot(gx, gz); if (gl < 1e-4) return h1;
+      gx /= gl; gz /= gl; var cx = x - gx * r[0], cz = z - gz * r[0], tx2 = gz * 0.5, tz2 = -gx * 0.5;
+      var hc = (baseExagC(cx, cz) * 2 + baseExagC(cx + tx2, cz + tz2) + baseExagC(cx - tx2, cz - tz2)) * 0.25, bed = Math.max(hc - D, 0.0003);
+      return h1 + (bed - h1) * cw;
     }
     function riverNear(x, z) { var r = rvAt(x, z); return r[1] > 0.02 && Math.abs(r[0]) / r[1] < 1.6; }
     function hgtC(x, z, wt) {
@@ -246,8 +252,7 @@ canvas:active{cursor:grabbing}
     var DEPTH_FS = G_FHEAD + G_PACK + 'void main(){gl_FragColor=packD(gl_FragCoord.z);}';
 
     // ================= terrain vertex shader (geometry clipmap level) =================
-    var G_RIV = 'uniform sampler2D uRV;vec2 rv(vec2 wp){vec4 c=texture2D(uRV,(wp+0.5)/uWH);return vec2((c.r*2.0-1.0)*2.0,c.g*1.5);}\n' +
-      'float rcut(vec2 wp,float h){vec2 r=rv(wp);float hw=r.y;if(hw<0.02)return h;float a=abs(r.x)/hw;float D=clamp(0.05*hw,0.003,0.0095);float ch=1.0-smoothstep(0.6,1.25,a);float v=1.0-smoothstep(1.0,min(5.0,1.9/hw),a);return h-D*(0.35*v+0.65*ch)*smoothstep(0.0,1.5*D,h-0.0003);}\n';
+    var G_RIV = 'uniform sampler2D uRV;vec2 rv(vec2 wp){vec4 c=texture2D(uRV,(wp+0.5)/uWH);return vec2((c.r*2.0-1.0)*2.0,c.g*1.5);}\n';
     var CLIP_VS = 'precision highp float;attribute vec2 aIJ;uniform highp sampler2D uHT;uniform sampler2D uNZ;uniform mat4 uVP;uniform vec2 uOrg;uniform vec2 uRel;uniform float uCamY;uniform float uS;uniform vec2 uWH;uniform float uEx;uniform float uMorph;uniform vec2 uMr;' +
       'uniform float uW[12];uniform float uWc[12];uniform vec2 uOct[12];uniform vec2 uRot[12];uniform float uA[12];' +
       'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
@@ -255,6 +260,10 @@ canvas:active{cursor:grabbing}
       'float dec(vec4 t){vec3 b=floor(t.rgb*255.0+0.5);return (b.r*65536.0+b.g*256.0+b.b)/16777215.0*0.5;}\n' +
       'float vnz(vec2 p){vec2 i=floor(p);vec2 f=p-i;f=f*f*f*(f*(f*6.0-15.0)+10.0);vec2 uv=(i+0.5)/256.0;' +
       'float a=texture2D(uNZ,uv).r;float b=texture2D(uNZ,uv+vec2(1.0/256.0,0.0)).r;float c=texture2D(uNZ,uv+vec2(0.0,1.0/256.0)).r;float d=texture2D(uNZ,uv+vec2(1.0/256.0)).r;return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}\n' +
+      'float baseH(vec2 p){vec2 i0=floor(p);vec2 f=p-i0;float a=dec(tx(i0)),b=dec(tx(i0+vec2(1.0,0.0))),c=dec(tx(i0+vec2(0.0,1.0))),d=dec(tx(i0+vec2(1.0,1.0)));float by=mix(mix(a,b,f.x),mix(c,d,f.x),f.y);return by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by));}\n' +
+      'float rcut(vec2 wp,float h){vec2 r=rv(wp);float hw=r.y;if(hw<0.02)return h;float a=abs(r.x)/hw;float amax=min(5.0,1.9/hw);if(a>=amax)return h;float D=clamp(0.05*hw,0.003,0.0095);float v=1.0-smoothstep(1.0,amax,a);float h1=h-D*0.35*v*smoothstep(0.0,1.5*D,h-0.0003);' +
+      'float cw=1.0-smoothstep(1.0,1.6,a);if(cw<=0.0)return h1;float e=0.02;vec2 g=vec2(rv(wp+vec2(e,0.0)).x-rv(wp-vec2(e,0.0)).x,rv(wp+vec2(0.0,e)).x-rv(wp-vec2(0.0,e)).x);float gl=length(g);if(gl<1e-4)return h1;g/=gl;' +
+      'vec2 cp=wp-g*r.x;vec2 tg=vec2(g.y,-g.x)*0.5;float hc=(baseH(cp)*2.0+baseH(cp+tg)+baseH(cp-tg))*0.25;float bed=max(hc-D,0.0003);return mix(h1,bed,cw);}\n' +
       'float hgt(vec2 loc,float cs,out float byOut){vec2 wp=uOrg+loc;vec2 i0=floor(wp);vec2 f=wp-i0;' +
       'vec4 a=tx(i0);vec4 b=tx(i0+vec2(1.0,0.0));vec4 c=tx(i0+vec2(0.0,1.0));vec4 d=tx(i0+vec2(1.0,1.0));' +
       'float by=mix(mix(dec(a),dec(b),f.x),mix(dec(c),dec(d),f.x),f.y);float L=mix(mix(a.a,b.a,f.x),mix(c.a,d.a,f.x),f.y);byOut=by;if(L<=0.5)return 0.0;' +
