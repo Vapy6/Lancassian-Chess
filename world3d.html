@@ -178,7 +178,7 @@ canvas:active{cursor:grabbing}
       var i00 = (va * LFW + ua) * 4, i10 = (va * LFW + ub) * 4, i01 = (vb * LFW + ua) * 4, i11 = (vb * LFW + ub) * 4, o = [0, 0];
       for (var c = 0; c < 2; c++) o[c] = ((LFD[i00 + c] * (1 - fu) + LFD[i10 + c] * fu) * (1 - fv) + (LFD[i01 + c] * (1 - fu) + LFD[i11 + c] * fu) * fv) / 255 * 2 - 1;
       var mw = sstep(0.03, 0.30, h0), lf = sstep(0.0008, 0.004, h0);
-      return lf * ((0.02 + 0.10 * h0) * o[0] * (1 - mw * 0.4) + mw * 0.50 * h0 * o[1]);
+      return lf * ((0.02 + 0.10 * h0) * o[0] * (1 - mw * 0.4) + mw * 0.50 * h0 * (o[1] * 0.45 + 0.55 * (sstep(-0.12, 0.12, o[1]) * 2 - 1)));
     }
     function baseExagC0(x, z) { var by = baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[0]; return by * (1 + (EX - 1) * sstep(0.0004, 0.005, by)); }
     function baseExagC(x, z) { var b = baseExagC0(x, z); return b + lformC(x, z, b); }
@@ -291,7 +291,7 @@ canvas:active{cursor:grabbing}
       'float a=texture2D(uNZ,uv).r;float b=texture2D(uNZ,uv+vec2(1.0/256.0,0.0)).r;float c=texture2D(uNZ,uv+vec2(0.0,1.0/256.0)).r;float d=texture2D(uNZ,uv+vec2(1.0/256.0)).r;return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}\n';
     // landforms: rolling hills everywhere, ridged mountain relief that grows with height (mirrored exactly by lformC in a_core.js)
     var G_LF = 'float lform(vec2 p,float h0){if(h0<0.0008)return 0.0;vec2 t=texture2D(uLF,(p+0.5)/uWH).rg*2.0-1.0;float mw=smoothstep(0.03,0.30,h0);float lf=smoothstep(0.0008,0.004,h0);' +
-      'return lf*((0.02+0.10*h0)*t.x*(1.0-mw*0.4)+mw*0.50*h0*t.y);}\n';
+      'return lf*((0.02+0.10*h0)*t.x*(1.0-mw*0.4)+mw*0.50*h0*(t.y*0.45+0.55*(smoothstep(-0.12,0.12,t.y)*2.0-1.0)));}\n';
     var CLIP_VS = 'precision highp float;attribute vec2 aIJ;uniform highp sampler2D uHT;uniform sampler2D uNZ;uniform sampler2D uLF;uniform mat4 uVP;uniform vec2 uOrg;uniform vec2 uRel;uniform float uCamY;uniform float uS;uniform vec2 uWH;uniform float uEx;uniform float uMorph;uniform vec2 uMr;' +
       'uniform float uW[12];uniform float uWc[12];uniform vec2 uOct[12];uniform vec2 uRot[12];uniform float uA[12];' +
       'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
@@ -916,7 +916,7 @@ var fl = (function () {
             if (x < 2 || z < 2 || x > W - 3 || z > H - 3) continue;
             var bi = biomeInfo(x, z), b = bi[0], sp = null, ft = 0, tint = null, mesh;
             if (L.name === 'rocks') {
-              var hab = habitat('rocks', bi), pr = hab && hab.r !== undefined ? hab.r : ROCKP[b]; if (!pr) continue; if (r0 > pr * 6) continue;
+              var hab = habitat('rocks', bi), pr = hab && hab.r !== undefined ? hab.r : ROCKP[b]; if (!pr) continue; if (r0 > pr * 16) continue;
             } else {
               var tab = habitat(L.name, bi); if (!tab || !tab.length) continue;
               var cl = 0.3 + 1.5 * vnz(x / 0.03 + L.seed, z / 0.03 - L.seed); if (L.name === 'grass') cl = 0.6 + 0.8 * vnz(x / 0.012 + L.seed, z / 0.012);
@@ -925,7 +925,7 @@ var fl = (function () {
             var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z) || riverNear(x, z)) continue;
             var hg = hG(x, z), sl = EX * Math.hypot(baseAt(x + 1, z) - baseAt(x - 1, z), baseAt(x, z + 1) - baseAt(x, z - 1)) / 2;
             if (L.name === 'rocks') {
-              var pr2 = (hab && hab.r !== undefined ? hab.r : ROCKP[b]); if (r0 > pr2 * (1 + sl * 5)) continue;
+              var pr2 = (hab && hab.r !== undefined ? hab.r : ROCKP[b]); if (r0 > pr2 * (1 + sl * 15)) continue;
               var u = hr(ix, iz, L.seed + 3); ft = 1.0 + Math.pow(u, 3) * 9 + (hr(ix, iz, 9) > 0.985 ? 8 : 0);
               var k2 = hr(ix, iz, L.seed + 4); mesh = hab && hab.rockMesh ? hab.rockMesh : (k2 < 0.45 ? 'rockA' : k2 < 0.75 ? 'rockB' : 'rockC'); var rt = ROCKT[b] || G1; tint = [rt[0] * 0.72, rt[1] * 0.72, rt[2] * 0.72];
               if (b === 13 || (hab && hab === NEX)) { if (hr(ix, iz, 21) > 0.5) { mesh = 'boulder'; ft *= 2.2; } }
