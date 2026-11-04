@@ -18,10 +18,10 @@ label{display:block;color:var(--dim);font-size:12px;margin:8px 0 2px}select,inpu
 .btn.g{background:#2a313b;color:var(--ink)}.sheet h3{font:600 24px Georgia,serif;margin:0}.sub{color:var(--dim)}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
 .st{background:#12151a;border:1px solid var(--line);border-radius:8px;text-align:center;padding:6px}.st b{display:block;font:600 20px Georgia,serif}.st span{font-size:11px;color:var(--dim)}
 table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 4px;border-bottom:1px solid #232a33}td.n{text-align:right;width:40px;font-variant-numeric:tabular-nums}.pf{color:var(--acc)}
-ul{margin:4px 0 0 18px;padding:0}.note{font-size:12px;color:var(--dim)}
+ul{margin:4px 0 0 18px;padding:0}textarea{width:100%;min-height:80px;background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit;resize:vertical}.tw{white-space:pre-wrap}details summary{cursor:pointer;color:var(--dim);font-size:13px}.sp{font-size:12px;color:var(--dim);margin:2px 0 6px}@media print{.left,#errs,.btn,#saved,.noprint{display:none!important}body{background:#fff;color:#000}.card{border:0}}.note{font-size:12px;color:var(--dim)}
 </style></head><body>
 <div class="wrap">
- <div>
+ <div class="left">
   <div class="card"><h1>Character Creator</h1><div class="note">D&amp;D 5e SRD 5.1 rules (CC-BY-4.0). Level 1.</div>
    <label>Name</label><input type="text" id="name" placeholder="Name your hero">
    <div class="row"><div><label>Species</label><select id="race"></select></div><div><label>Subrace</label><select id="subrace"></select></div></div>
@@ -32,6 +32,19 @@ ul{margin:4px 0 0 18px;padding:0}.note{font-size:12px;color:var(--dim)}
    <div class="abil" id="abil"></div><div id="rollrow" style="display:none"><button class="btn g" id="reroll">Roll 4d6 (drop lowest)</button></div>
   </div>
   <div class="card"><h2>Skills</h2><div id="skillblocks"></div></div>
+  <div class="card"><h2>Starting equipment</h2><div id="kit"></div><label>Starting gold (optional)</label><input type="number" id="gp" min="0" value="0"></div>
+  <div class="card" id="spellcard" style="display:none"><h2>Spells</h2><div id="spellblocks"></div></div>
+  <div class="card"><h2>Character details</h2>
+   <div class="row"><div><label>Alignment</label><select id="d_alignment"></select></div><div><label>Deity / faith</label><input type="text" id="d_deity" placeholder="Who do they worship?"></div></div>
+   <div class="row"><div><label>Gender / pronouns</label><input type="text" id="d_gender"></div><div><label>Age</label><input type="text" id="d_age"></div></div>
+   <div class="row"><div><label>Height</label><input type="text" id="d_height"></div><div><label>Weight</label><input type="text" id="d_weight"></div></div>
+   <div class="row"><div><label>Eyes</label><input type="text" id="d_eyes"></div><div><label>Skin</label><input type="text" id="d_skin"></div></div>
+   <label>Hair</label><input type="text" id="d_hair">
+   <label>Appearance</label><textarea id="d_appearance"></textarea><label>Personality traits</label><textarea id="d_personality"></textarea>
+   <div class="row"><div><label>Ideals</label><textarea id="d_ideals"></textarea></div><div><label>Bonds</label><textarea id="d_bonds"></textarea></div></div>
+   <label>Flaws</label><textarea id="d_flaws"></textarea><label>Backstory</label><textarea id="d_backstory" style="min-height:140px"></textarea>
+   <label>Allies &amp; organizations</label><textarea id="d_allies"></textarea><label>Treasure</label><textarea id="d_treasure"></textarea><label>Notes</label><textarea id="d_notes"></textarea><label>Experience points</label><input type="text" id="d_xp" value="0">
+  </div>
  </div>
  <div>
   <div class="card"><div id="errs"></div><div id="sheet" class="sheet"></div>
@@ -39,11 +52,13 @@ ul{margin:4px 0 0 18px;padding:0}.note{font-size:12px;color:var(--dim)}
   <div class="card"><h2>Saved characters</h2><div id="saved" class="note"></div></div>
  </div>
 </div>
+<script src="dnd-data.js"></script>
 <script src="dnd-rules.js"></script>
 <script>
 (function () {
-  var D = window.DND, $ = function (id) { return document.getElementById(id); };
-  var S = { method: 'pointbuy', base: { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 }, skills: [], bgSkills: [], raceSkills: [], halfElfAsi: [], expertise: [], assign: {} };
+  var D = window.DND, X = window.DNDDATA, $ = function (id) { return document.getElementById(id); };
+  var S = { method: 'pointbuy', base: { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 }, skills: [], bgSkills: [], raceSkills: [], halfElfAsi: [], expertise: [], assign: {}, kit: { choices: [], picks: {} }, cantrips: [], known: [], prepared: [] };
+  fill($('d_alignment'), ['(unaligned)'].concat(X.ALIGNMENTS));
   function fill(sel, items) { sel.innerHTML = items.map(function (x) { return '<option>' + x + '</option>'; }).join(''); }
   fill($('race'), Object.keys(D.RACES)); fill($('cls'), Object.keys(D.CLASSES)); fill($('bg'), Object.keys(D.BACKGROUNDS)); $('bg').value = 'Acolyte';
   ['pointbuy:Point buy', 'standard:Standard array', 'roll:Roll 4d6', 'manual:Manual'].forEach(function (m) { var p = m.split(':'), c = document.createElement('span'); c.className = 'chip'; c.textContent = p[1]; c.onclick = function () { setMethod(p[0]); }; c.dataset.m = p[0]; $('methods').appendChild(c); });
@@ -86,11 +101,41 @@ ul{margin:4px 0 0 18px;padding:0}.note{font-size:12px;color:var(--dim)}
     if (c.cls.expertise) { var prof = [].concat(fixed, S.skills, S.bgSkills, S.raceSkills); h += chips('Expertise', prof, S.expertise, c.cls.expertise, function () { return false; }).replace(/class="chip/g, 'data-k="expertise" class="chip'); }
     if (fixed.length) h = '<div class="note">Granted: ' + fixed.join(', ') + '</div>' + h;
     $('skillblocks').innerHTML = h;
+    // equipment
+    var kit = X.KITS[$('cls').value], kh = '';
+    function picker(tok, key) { var opts = tok === '@instrument' ? X.INSTRUMENTS : Object.keys(X.WEAPONS).filter(function (n) { var w = X.WEAPONS[n]; return tok === '@simple' ? w.cat === 'simple' : tok === '@simplemelee' ? w.cat === 'simple' && w.kind === 'melee' : tok === '@martial' ? w.cat === 'martial' : w.cat === 'martial' && w.kind === 'melee'; });
+      return '<select data-pick="' + key + '"><option value="">- choose ' + X.TOKENS[tok] + ' -</option>' + opts.map(function (n) { return '<option' + (S.kit.picks[key] === n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>'; }
+    kit.slots.forEach(function (slot, si) {
+      kh += '<label>Choice ' + (si + 1) + '</label><select data-kit="' + si + '"><option value="">- choose -</option>' + slot.map(function (op, oi) { return '<option value="' + oi + '"' + (S.kit.choices[si] === oi ? ' selected' : '') + '>' + op.l + '</option>'; }).join('') + '</select>';
+      var cho = slot[S.kit.choices[si]]; if (cho) cho.i.forEach(function (it, ti) { if (it.charAt(0) === '@') kh += picker(it, si + '.' + ti); });
+    });
+    kh += '<div class="note" style="margin-top:8px">Also included: ' + kit.fixed.map(function (f) { return f.charAt(0) === '@' ? '' : f; }).filter(Boolean).join(', ') + '</div>';
+    kit.fixed.forEach(function (it, ti) { if (it.charAt(0) === '@') kh += picker(it, 'f.' + ti); });
+    $('kit').innerHTML = kh;
+    // spells
+    var sc = c.cls.spell, sp = '';
+    $('spellcard').style.display = sc ? 'block' : 'none';
+    if (sc) {
+      var CS = X.CLASS_SPELLS[$('cls').value], isHE = $('subrace').value === 'High Elf', castT = Math.min(20, S.base[sc.ability] + bonus[sc.ability]), prepMax = Math.max(1, D.mod(castT) + 1);
+      var cl = CS[0].slice(); if (isHE) X.CLASS_SPELLS.Wizard[0].forEach(function (n) { if (cl.indexOf(n) < 0) cl.push(n); });
+      var needC = sc.cantrips + (isHE ? 1 : 0);
+      function sch(title, list, sel, max, key) { return chips(title, list, sel, max, function () { return false; }).replace(/class="chip/g, 'data-k="' + key + '" class="chip'); }
+      sp += sch('Cantrips', cl, S.cantrips, needC, 'cantrips');
+      if (sc.known) sp += sch('Level-1 spells known', CS[1], S.known, sc.known, 'known');
+      else if (sc.spellbook) { sp += sch('Spellbook (level 1)', CS[1], S.known, sc.spellbook, 'known'); sp += sch('Prepared today', S.known, S.prepared, prepMax, 'prepared'); }
+      else { sp += sch('Prepared spells', CS[1], S.prepared, prepMax, 'prepared'); if ($('cls').value === 'Cleric') sp += '<div class="note">Life domain spells always prepared: Bless, Cure Wounds.</div>'; }
+      var seen = S.cantrips.concat(S.known, S.prepared).filter(function (n, i, a) { return a.indexOf(n) === i; });
+      if (seen.length) sp += '<div class="sp">' + seen.map(function (n) { var s = X.SPELLS[n]; return '<b>' + n + '</b> (' + (s.level ? 'level 1' : 'cantrip') + ', ' + s.school + ', ' + s.time + ', ' + s.range + '): ' + s.text; }).join('<br>') + '</div>';
+      S._max = { cantrips: needC, known: sc.known || sc.spellbook || 0, prepared: prepMax };
+    }
+    $('spellblocks').innerHTML = sp;
     sheet();
   }
   function D_cls() { return $('cls').value; }
+  function details() { var o = {}; ['alignment', 'deity', 'gender', 'age', 'height', 'weight', 'eyes', 'skin', 'hair', 'appearance', 'personality', 'ideals', 'bonds', 'flaws', 'backstory', 'allies', 'treasure', 'notes', 'xp'].forEach(function (k) { o[k] = $('d_' + k).value; }); if (o.alignment === '(unaligned)') o.alignment = ''; return o; }
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
   function sheet() {
-    var r = D.buildCharacter({ name: $('name').value, race: $('race').value, subrace: $('subrace').disabled ? null : $('subrace').value, cls: $('cls').value, background: $('bg').value, method: S.method, base: S.base, skills: S.skills, bgSkills: S.bgSkills, raceSkills: S.raceSkills, halfElfAsi: S.halfElfAsi, expertise: S.expertise });
+    var r = D.buildCharacter({ name: $('name').value, race: $('race').value, subrace: $('subrace').disabled ? null : $('subrace').value, cls: $('cls').value, background: $('bg').value, method: S.method, base: S.base, skills: S.skills, bgSkills: S.bgSkills, raceSkills: S.raceSkills, halfElfAsi: S.halfElfAsi, expertise: S.expertise, kit: S.kit, spells: { cantrips: S.cantrips, known: S.known, prepared: S.prepared }, details: details(), gp: $('gp').value });
     S.last = r;
     if (!r.ok) { $('errs').innerHTML = r.errors.map(function (e) { return '<div class="err">' + e + '</div>'; }).join(''); $('sheet').innerHTML = ''; return; }
     $('errs').innerHTML = '<div class="ok">Ready - this character is legal.</div>';
@@ -103,17 +148,31 @@ ul{margin:4px 0 0 18px;padding:0}.note{font-size:12px;color:var(--dim)}
       '<h2 style="margin-top:12px">Skills</h2><table>' + D.ALL_SKILLS.map(function (k) { var x = s.skills[k]; return '<tr><td class="' + (x.proficient ? 'pf' : '') + '">' + (x.expertise ? '&#9670; ' : x.proficient ? '&#9679; ' : '&#9675; ') + k + ' <span class="note">(' + x.ability + ')</span></td><td class="n">' + D.signed(x.bonus) + '</td></tr>'; }).join('') + '</table>' +
       (s.spellcasting ? '<h2 style="margin-top:12px">Spellcasting</h2><div class="note">' + s.spellcasting.ability.toUpperCase() + ' - Save DC ' + s.spellcasting.saveDC + ' - Attack ' + D.signed(s.spellcasting.attackBonus) + ' - ' + s.spellcasting.cantrips + ' cantrips - ' + s.spellcasting.slots[1] + ' level-1 slot' + (s.spellcasting.slots[1] > 1 ? 's' : '') + (s.spellcasting.spellsKnown ? ' - ' + s.spellcasting.spellsKnown + ' spells known' : '') + (s.spellcasting.spellbook ? ' - spellbook of ' + s.spellcasting.spellbook : '') + (s.spellcasting.prepared ? ' - prepare ' + s.spellcasting.prepared : '') + '</div>' : '') +
       '<h2 style="margin-top:12px">Features &amp; traits</h2><ul>' + s.features.map(function (f) { return '<li>' + f + '</li>'; }).join('') + '</ul>' +
-      '<h2 style="margin-top:12px">Training</h2><div class="note">Armor: ' + (s.armor.join(', ') || 'none') + '<br>Weapons: ' + s.weapons.join(', ') + '<br>Languages: ' + s.languages.join(', ') + '</div>';
+      '<h2 style="margin-top:12px">Training</h2><div class="note">Armor: ' + (s.armor.join(', ') || 'none') + '<br>Weapons: ' + s.weapons.join(', ') + '<br>Languages: ' + s.languages.join(', ') + '</div>' + extra(s);
+  }
+  function extra(s) {
+    var o = '<h2 style="margin-top:12px">Attacks</h2><table>' + s.attacks.map(function (a) { return '<tr><td>' + a.name + ' <span class="note">' + (a.props.join(', ') || '') + (a.versatile ? ' (two-handed ' + a.versatile + ')' : '') + (a.proficient ? '' : ' - not proficient') + '</span></td><td class="n">' + D.signed(a.bonus) + '</td><td class="n" style="width:110px">' + (/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + a.mod) : a.dice + (a.mod ? D.signed(a.mod) : '')) + ' ' + a.type.slice(0, 5) + '.</td></tr>'; }).join('') + '</table>';
+    if (s.stealthDisadvantage) o += '<div class="note">Armor gives disadvantage on Stealth checks.</div>'; if (s.armorWarning) o += '<div class="err">' + s.armorWarning + '</div>';
+    o += '<h2 style="margin-top:12px">Equipment</h2><ul>' + s.inventory.map(function (x) { return '<li>' + esc(x.name) + (x.qty > 1 ? ' x' + x.qty : '') + '</li>'; }).join('') + '</ul>';
+    s.gear.forEach(function (g) { o += '<details><summary>' + g.pack + ' contents</summary><div class="note">' + g.contents.join(', ') + '</div></details>'; });
+    o += '<div class="note">Coins: ' + s.currency.gp + ' gp</div>';
+    if (s.spellcasting) { var sc = s.spellcasting, lst = function (t, a) { return a && a.length ? '<div><b>' + t + ':</b> ' + a.join(', ') + '</div>' : ''; };
+      o += '<div style="margin-top:8px" class="note">' + lst('Cantrips', sc.cantripList) + lst(sc.spellbook ? 'Spellbook' : 'Spells known', sc.spellbook || sc.spellsKnown ? sc.knownSpells : null) + lst('Prepared', sc.prepared ? sc.preparedSpells : null) + lst('Domain (always prepared)', sc.domainSpells) + '</div>'; }
+    var d = s.details, bits = [['Alignment', d.alignment], ['Deity', d.deity], ['Age', d.age], ['Height', d.height], ['Weight', d.weight], ['Eyes', d.eyes], ['Skin', d.skin], ['Hair', d.hair], ['Gender', d.gender], ['XP', d.xp]].filter(function (b) { return b[1]; });
+    if (bits.length) o += '<h2 style="margin-top:12px">Details</h2><div class="note">' + bits.map(function (b) { return b[0] + ': ' + esc(b[1]); }).join(' - ') + '</div>';
+    [['Appearance', 'appearance'], ['Personality traits', 'personality'], ['Ideals', 'ideals'], ['Bonds', 'bonds'], ['Flaws', 'flaws'], ['Backstory', 'backstory'], ['Allies & organizations', 'allies'], ['Treasure', 'treasure'], ['Notes', 'notes']].forEach(function (p) { if (d[p[1]]) o += '<h2 style="margin-top:12px">' + p[0] + '</h2><div class="tw">' + esc(d[p[1]]) + '</div>'; });
+    o += '<h2 style="margin-top:12px">Tracking</h2><div class="note">Inspiration &#9744; - Hit dice ' + s.hitDiceTotal + ' - Death saves: successes &#9675;&#9675;&#9675; failures &#9675;&#9675;&#9675; - Temp HP ____ - Conditions ____</div>';
+    return o;
   }
   // events
-  ['race', 'subrace', 'cls', 'bg'].forEach(function (id) { $(id).onchange = function () { S.skills = []; S.bgSkills = []; S.raceSkills = []; S.expertise = []; if (id === 'race') S.halfElfAsi = []; render(); }; });
-  $('name').oninput = sheet; $('reroll').onclick = function () { setMethod('roll'); };
+  ['race', 'subrace', 'cls', 'bg'].forEach(function (id) { $(id).onchange = function () { S.skills = []; S.bgSkills = []; S.raceSkills = []; S.expertise = []; if (id === 'cls' || id === 'subrace') { S.kit = { choices: [], picks: {} }; S.cantrips = []; S.known = []; S.prepared = []; } if (id === 'race') S.halfElfAsi = []; render(); }; });
+  $('name').oninput = sheet; $('gp').oninput = sheet; Array.prototype.forEach.call(document.querySelectorAll('[id^=d_]'), function (e) { e.oninput = sheet; e.onchange = sheet; }); $('reroll').onclick = function () { setMethod('roll'); };
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (t.dataset && t.dataset.a) { var a = t.dataset.a, n = S.base[a] + (+t.dataset.d); if (n >= 8 && n <= 15) { S.base[a] = n; if (D.pointCost(S.base) > D.POINT_BUDGET) S.base[a] -= +t.dataset.d; } render(); }
-    else if (t.dataset && t.dataset.k) { var c = current(), mx = { skills: c.cls.skillCount, bgSkills: c.bg.pick || 0, raceSkills: c.race.skillsChoose || 0, halfElfAsi: 2, expertise: c.cls.expertise || 0 }; if (!t.classList.contains('off')) { toggle(S[t.dataset.k], t.dataset.s, mx[t.dataset.k]); if (t.dataset.k !== 'expertise') S.expertise = S.expertise.filter(function (s) { return [].concat(c.race.skills, c.bg.skills, S.skills, S.bgSkills, S.raceSkills).indexOf(s) >= 0; }); render(); } }
+    else if (t.dataset && t.dataset.k) { var c = current(), mx = { skills: c.cls.skillCount, bgSkills: c.bg.pick || 0, raceSkills: c.race.skillsChoose || 0, halfElfAsi: 2, expertise: c.cls.expertise || 0, cantrips: (S._max || {}).cantrips || 0, known: (S._max || {}).known || 0, prepared: (S._max || {}).prepared || 0 }; if (!t.classList.contains('off')) { toggle(S[t.dataset.k], t.dataset.s, mx[t.dataset.k]); if (t.dataset.k === 'known') S.prepared = S.prepared.filter(function (n) { return !c.cls.spell.spellbook || S.known.indexOf(n) >= 0; }); if (['skills', 'bgSkills', 'raceSkills'].indexOf(t.dataset.k) >= 0) S.expertise = S.expertise.filter(function (s) { return [].concat(c.race.skills, c.bg.skills, S.skills, S.bgSkills, S.raceSkills).indexOf(s) >= 0; }); render(); } }
   });
-  document.addEventListener('change', function (e) { var t = e.target; if (t.dataset && t.dataset.sa) { S.base[t.dataset.sa] = +t.value; render(); } if (t.dataset && t.dataset.na) { S.base[t.dataset.na] = Math.max(3, Math.min(20, +t.value || 10)); render(); } });
+  document.addEventListener('change', function (e) { var t = e.target; if (t.dataset && t.dataset.kit !== undefined) { S.kit.choices[+t.dataset.kit] = t.value === '' ? undefined : +t.value; Object.keys(S.kit.picks).forEach(function (k) { if (k.split('.')[0] === t.dataset.kit) delete S.kit.picks[k]; }); render(); } if (t.dataset && t.dataset.pick) { S.kit.picks[t.dataset.pick] = t.value; render(); } if (t.dataset && t.dataset.sa) { S.base[t.dataset.sa] = +t.value; render(); } if (t.dataset && t.dataset.na) { S.base[t.dataset.na] = Math.max(3, Math.min(20, +t.value || 10)); render(); } });
   function load() { try { return JSON.parse(localStorage.getItem('dnd.characters') || '[]'); } catch (e) { return []; } }
   function listSaved() { var l = load(); $('saved').innerHTML = l.length ? l.map(function (c, i) { return '<div>' + c.name + ' - ' + (c.subrace || c.race) + ' ' + c.cls + ' <a href="#" data-del="' + i + '" style="color:var(--bad)">delete</a></div>'; }).join('') : 'Nothing saved yet.'; }
   $('save').onclick = function () { if (!S.last || !S.last.ok) return; var l = load(); l.push(S.last.sheet); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (e) { } listSaved(); };

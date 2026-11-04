@@ -4,6 +4,7 @@
    Works as a browser global (window.DND) or a Node module. Level-1 creation for now; built to grow (levels, spells, combat). */
 (function (root) {
   'use strict';
+  var DATA = (typeof require === 'function' && typeof module !== 'undefined') ? require('./dnd-data.js') : root.DNDDATA;
   var ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
   var ABILITY_NAMES = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma' };
   var SKILLS = {
@@ -129,6 +130,52 @@
       sheet.spellcasting = { ability: sa, saveDC: 8 + pb + sm, attackBonus: pb + sm, cantrips: cls.spell.cantrips, slots: { 1: cls.spell.slots }, kind: cls.spell.kind,
         spellsKnown: cls.spell.known || null, spellbook: cls.spell.spellbook || null, prepared: cls.spell.kind === 'prepared' ? Math.max(1, sm + level) : null };
     }
+    // ---------- equipment, attacks, armor class ----------
+    var kit = DATA.KITS[o.cls], items = [], kitSel = o.kit || {}, picks = kitSel.picks || {};
+    function expand(tok, key) { if (tok.charAt(0) !== '@') return tok; var p = picks[key]; if (!p) { errors.push('Choose ' + DATA.TOKENS[tok] + '.'); return null; }
+      var w = DATA.WEAPONS[p], okc = tok === '@instrument' ? DATA.INSTRUMENTS.indexOf(p) >= 0 : w && (tok === '@simple' ? w.cat === 'simple' : tok === '@simplemelee' ? w.cat === 'simple' && w.kind === 'melee' : tok === '@martial' ? w.cat === 'martial' : w.cat === 'martial' && w.kind === 'melee');
+      if (!okc) { errors.push(p + ' is not ' + DATA.TOKENS[tok] + '.'); return null; } return p; }
+    kit.slots.forEach(function (slot, si) { var ci = kitSel.choices && kitSel.choices[si]; if (ci === undefined || !slot[ci]) { errors.push('Choose your starting equipment (' + (si + 1) + '/' + kit.slots.length + ').'); return; }
+      slot[ci].i.forEach(function (it, ti) { var r = expand(it, si + '.' + ti); if (r) items.push(r); }); });
+    kit.fixed.forEach(function (it, ti) { var r = expand(it, 'f.' + ti); if (r) items.push(r); });
+    var inv = [], gear = [], qtyW = { '4 Javelins': ['Javelin', 4], '5 Javelins': ['Javelin', 5], '10 darts': ['Dart', 10] };
+    items.forEach(function (it) { if (qtyW[it]) inv.push({ name: qtyW[it][0], qty: qtyW[it][1] }); else inv.push({ name: it, qty: 1 }); });
+    function rollup(list) { var m = {}, out = []; list.forEach(function (x) { if (m[x.name]) m[x.name].qty += x.qty; else { m[x.name] = { name: x.name, qty: x.qty }; out.push(m[x.name]); } }); return out; }
+    inv = rollup(inv);
+    inv.forEach(function (x) { if (DATA.PACKS[x.name]) gear.push({ pack: x.name, contents: DATA.PACKS[x.name] }); });
+    var weapons = inv.filter(function (x) { return DATA.WEAPONS[x.name]; }), armors = inv.filter(function (x) { return DATA.ARMOR[x.name] && DATA.ARMOR[x.name].type !== 'shield'; }), hasShield = inv.some(function (x) { return x.name === 'Shield'; });
+    function armorProf(a) { var l = cls.armor.join(' ').toLowerCase(); if (a.type === 'shield') return l.indexOf('shield') >= 0; if (l.indexOf('all armor') >= 0) return true; if (o.cls === 'Cleric' && o.cls && false) return true; return l.indexOf(a.type) >= 0; }
+    function weaponProf(w) { var l = cls.weapons, ex = (o.race === 'Dwarf' && ['Battleaxe', 'Handaxe', 'Light hammer', 'Warhammer'].indexOf(w.name) >= 0) || (o.subrace === 'High Elf' && ['Longsword', 'Shortsword', 'Shortbow', 'Longbow'].indexOf(w.name) >= 0);
+      return ex || (w.cat === 'simple' && l.indexOf('Simple weapons') >= 0) || (w.cat === 'martial' && l.indexOf('Martial weapons') >= 0) || l.indexOf(w.name + 's') >= 0; }
+    var best = null, bestAC = -1; armors.forEach(function (x) { var a = DATA.ARMOR[x.name], v = a.base + (a.dexCap === null ? m.dex : Math.min(m.dex, a.dexCap)); if (armorProf(a) && v > bestAC) { best = a; bestAC = v; } });
+    var shieldOn = hasShield && armorProf(DATA.ARMOR['Shield']) && !(o.cls === 'Monk');
+    if (best) { sheet.ac = bestAC + (shieldOn ? 2 : 0); sheet.acNote = best.name + (shieldOn ? ' + shield' : ''); sheet.stealthDisadvantage = best.stealthDis; if (best.str && score.str < best.str) sheet.armorWarning = best.name + ' needs Strength ' + best.str + ' (speed -10 ft otherwise).'; }
+    else { sheet.ac += shieldOn ? 2 : 0; if (shieldOn) sheet.acNote += ' + shield'; }
+    var attacks = [];
+    weapons.forEach(function (x) { var w = DATA.WEAPONS[x.name], fin = w.props.indexOf('finesse') >= 0, ab = w.kind === 'ranged' ? 'dex' : fin ? (m.dex > m.str ? 'dex' : 'str') : 'str', pr = weaponProf(w);
+      var ver = /versatile \((\w+)\)/.exec(w.props.join(' '));
+      attacks.push({ name: w.name + (x.qty > 1 ? ' (x' + x.qty + ')' : ''), weapon: w.name, ability: ab, bonus: m[ab] + (pr ? pb : 0), proficient: pr, dice: w.dice, mod: m[ab], type: w.type, ranged: w.kind === 'ranged', props: w.props, versatile: ver ? ver[1] : null }); });
+    var mono = o.cls === 'Monk', ua = mono ? (m.dex > m.str ? 'dex' : 'str') : 'str';
+    attacks.push({ name: mono ? 'Unarmed strike (Martial Arts)' : 'Unarmed strike', weapon: null, ability: ua, bonus: m[ua] + pb, proficient: true, dice: mono ? '1d4' : '1', mod: mono ? m[ua] : m.str, type: 'bludgeoning', ranged: false, props: [] });
+    sheet.attacks = attacks; sheet.inventory = inv; sheet.gear = gear; sheet.proficiencies = { armor: cls.armor, weapons: cls.weapons };
+    sheet.currency = { cp: 0, sp: 0, ep: 0, gp: Math.max(0, +(o.gp || 0)), pp: 0 };
+    // ---------- spells ----------
+    if (cls.spell) {
+      var CS = DATA.CLASS_SPELLS[o.cls], sc = sheet.spellcasting, sel = o.spells || {}, can = (sel.cantrips || []).filter(function (x, i, a) { return a.indexOf(x) === i; }), known = (sel.known || []).filter(function (x, i, a) { return a.indexOf(x) === i; }), prep = (sel.prepared || []).filter(function (x, i, a) { return a.indexOf(x) === i; });
+      var needC = cls.spell.cantrips + (o.subrace === 'High Elf' ? 1 : 0);
+      if (can.length !== needC) errors.push('Pick ' + needC + ' cantrips (' + can.length + ' chosen).');
+      can.forEach(function (n) { if (o.subrace === 'High Elf' && DATA.CLASS_SPELLS.Wizard[0].indexOf(n) >= 0) return; if (CS[0].indexOf(n) < 0) errors.push(n + ' is not on the ' + o.cls + ' spell list.'); });
+      if (cls.spell.known) { if (known.length !== cls.spell.known) errors.push('Pick ' + cls.spell.known + ' level-1 spells (' + known.length + ' chosen).'); known.forEach(function (n) { if (CS[1].indexOf(n) < 0) errors.push(n + ' is not on the ' + o.cls + ' spell list.'); }); sc.knownSpells = known; sc.preparedSpells = known; }
+      else if (cls.spell.spellbook) { if (known.length !== cls.spell.spellbook) errors.push('Pick ' + cls.spell.spellbook + ' spells for your spellbook (' + known.length + ' chosen).'); known.forEach(function (n) { if (CS[1].indexOf(n) < 0) errors.push(n + ' is not on the wizard spell list.'); });
+        if (prep.length > sc.prepared) errors.push('You can prepare ' + sc.prepared + ' spells.'); prep.forEach(function (n) { if (known.indexOf(n) < 0) errors.push(n + ' is not in your spellbook.'); }); sc.knownSpells = known; sc.preparedSpells = prep; }
+      else { if (prep.length > sc.prepared) errors.push('You can prepare ' + sc.prepared + ' spells.'); prep.forEach(function (n) { if (CS[1].indexOf(n) < 0) errors.push(n + ' is not on the ' + o.cls + ' spell list.'); }); sc.preparedSpells = prep.slice(); if (o.cls === 'Cleric') sc.domainSpells = ['Bless', 'Cure Wounds']; }
+      sc.cantripList = can;
+    }
+    // ---------- flavor / sheet extras ----------
+    var dt = o.details || {}, det = {};
+    ['alignment', 'deity', 'gender', 'age', 'height', 'weight', 'eyes', 'skin', 'hair', 'appearance', 'personality', 'ideals', 'bonds', 'flaws', 'backstory', 'allies', 'treasure', 'notes', 'xp'].forEach(function (k) { det[k] = String(dt[k] === undefined ? '' : dt[k]).slice(0, 4000); });
+    sheet.details = det; sheet.inspiration = false; sheet.deathSaves = { ok: 0, fail: 0 }; sheet.hitDiceTotal = '1' + sheet.hitDie; sheet.tempHp = 0; sheet.conditions = [];
+    if (errors.length) return { ok: false, errors: errors };
     return { ok: true, errors: [], sheet: sheet };
   }
 

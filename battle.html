@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Battle Tester</title>
+<style>
+:root{--bg:#14171c;--card:#1d222a;--ink:#e8e4da;--dim:#9aa3ad;--acc:#d9b45a;--bad:#e07a6a;--ok:#7fc08a;--line:#2e3540;--foe:#c9675a;--pty:#6aa5d9}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}h1{font:600 22px Georgia,serif;margin:0 0 4px;color:var(--acc)}h2{font:600 13px system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+.btn{background:var(--acc);color:#1a1405;border:0;border-radius:7px;padding:7px 12px;font-weight:600;cursor:pointer;margin:3px 4px 0 0}.btn.g{background:#2a313b;color:var(--ink)}.btn:disabled{opacity:.4;cursor:default}
+.row{display:flex;align-items:center;gap:8px;margin:4px 0}.row span.n{flex:1}.row button{width:26px;height:26px;background:#252c36;color:var(--ink);border:1px solid var(--line);border-radius:5px;cursor:pointer}
+.u{border:1px solid var(--line);border-left:4px solid var(--pty);border-radius:8px;padding:8px 10px;margin:6px 0;cursor:default;background:#12151a}.u.foe{border-left-color:var(--foe)}.u.cur{outline:2px solid var(--acc)}.u.dead{opacity:.35}.u.tgt{cursor:pointer}.u.sel{background:#2a2410}
+.bar{height:6px;background:#2a313b;border-radius:3px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--ok)}.u.foe .bar i{background:var(--foe)}
+.note{font-size:12px;color:var(--dim)}#log{height:300px;overflow:auto;font-size:13px;background:#12151a;border:1px solid var(--line);border-radius:8px;padding:8px}#log div{margin:2px 0}.hit{color:#f0c27a}.sys{color:var(--acc)}
+select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px}
+</style></head><body><div class="wrap">
+<h1>Battle Tester</h1><div class="note">Turn-based D&amp;D 5e SRD combat. Pick a party and some monsters, then fight. Characters saved in the creator appear here too.</div>
+<div id="setup" class="grid" style="margin-top:12px">
+ <div class="card"><h2>Party</h2><div id="party"></div></div>
+ <div class="card"><h2>Monsters</h2><div id="foes"></div></div>
+ <div class="card" style="grid-column:1/-1"><button class="btn" id="start">Start battle</button> <span class="note" id="warn"></span></div>
+</div>
+<div id="fight" style="display:none">
+ <div class="grid"><div class="card"><h2>Round <span id="rnd">1</span> - <span id="cur"></span></h2><div id="order"></div></div>
+ <div><div class="card"><h2>Actions</h2><div class="note" id="hint"></div><div id="acts"></div><div style="margin-top:8px"><button class="btn g" id="end">End turn</button><button class="btn g" id="auto">Auto-play rest</button><button class="btn g" id="reset">New battle</button></div></div>
+ <div class="card"><h2>Log</h2><div id="log"></div></div></div></div>
+</div></div>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-combat.js"></script><script src="dnd-monsters.js"></script><script src="dnd-presets.js"></script>
+<script>
+(function () {
+  var D = window.DND, C = window.DNDCOMBAT, M = window.DNDMONSTERS, P = window.DNDPRESETS, $ = function (i) { return document.getElementById(i); };
+  var roster = [], saved = []; try { saved = JSON.parse(localStorage.getItem('dnd.characters') || '[]'); } catch (e) { }
+  Object.keys(P.PRESETS).forEach(function (n) { roster.push({ label: n, sheet: P.build(n), on: n.indexOf('Aldric') === 0 || n.indexOf('Mira') === 0 }); });
+  saved.forEach(function (s) { roster.push({ label: s.name + ' (saved ' + (s.subrace || s.race) + ' ' + s.cls + ')', sheet: s, on: false }); });
+  var foes = {}; M.LIST.forEach(function (m) { foes[m.name] = m.name === 'Goblin' ? 3 : 0; });
+  function setup() {
+    $('party').innerHTML = roster.map(function (r, i) { return '<label class="row"><input type="checkbox" data-r="' + i + '"' + (r.on ? ' checked' : '') + '> <span class="n">' + r.label + '</span><span class="note">HP ' + r.sheet.hpMax + ' AC ' + r.sheet.ac + '</span></label>'; }).join('');
+    $('foes').innerHTML = M.LIST.map(function (m) { return '<div class="row"><span class="n">' + m.name + ' <span class="note">CR ' + (m.cr < 1 ? (m.cr === 0.125 ? '1/8' : m.cr === 0.25 ? '1/4' : '1/2') : m.cr) + ' - HP ' + m.hp + ' AC ' + m.ac + '</span></span><button data-f="' + m.name + '" data-d="-1">-</button><b>' + foes[m.name] + '</b><button data-f="' + m.name + '" data-d="1">+</button></div>'; }).join('');
+  }
+  var enc, sel = null, pending = null, busy = false;
+  function log(t, cls) { var d = document.createElement('div'); d.textContent = t; if (cls) d.className = cls; $('log').appendChild(d); $('log').scrollTop = 1e9; }
+  function start() {
+    var party = roster.filter(function (r) { return r.on; }); var fl = []; Object.keys(foes).forEach(function (k) { for (var i = 0; i < foes[k]; i++) fl.push(k); });
+    if (!party.length || !fl.length) { $('warn').textContent = 'Pick at least one hero and one monster.'; return; } $('warn').textContent = '';
+    enc = new C.Encounter(); party.forEach(function (r) { enc.add(C.combatant(JSON.parse(JSON.stringify(r.sheet)), 'party')); });
+    var cnt = {}; fl.forEach(function (k) { cnt[k] = (cnt[k] || 0) + 1; }); var seen = {};
+    fl.forEach(function (k) { var m = M.make(k); seen[k] = (seen[k] || 0) + 1; if (cnt[k] > 1) m.name += ' ' + seen[k]; enc.add(C.combatant(m, 'foe')); });
+    $('setup').style.display = 'none'; $('fight').style.display = 'block'; $('log').innerHTML = ''; enc.start(); log('Battle begins! Initiative: ' + enc.order.map(function (u) { return u.name; }).join(', '), 'sys'); begin();
+  }
+  function begin() { sel = null; pending = null; var w = enc.winner(); if (w) { finish(w); return; } var u = enc.current(); render(); if (u.team === 'party' && (u.hp <= 0 || u.dead) && !busy) { setTimeout(advance, 700); return; } if (u.team === 'foe' && !busy) setTimeout(function () { monsterTurn(); }, 500); }
+  function monsterTurn() { var u = enc.current(); if (!u || u.team !== 'foe') return; C.aiTurn(enc, u, null).forEach(function (l) { log(l, /hit|slain|drops/.test(l) ? 'hit' : ''); }); advance(); }
+  function advance() { var w = enc.winner(); if (w) { finish(w); return; } enc.next(); (enc.log || []).splice(0).forEach(function (l) { log(l, 'sys'); }); var u = enc.current(); if (u) log('-- ' + u.name + "'s turn --", 'sys'); begin(); }
+  function finish(w) { render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.'; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (w === 'party') log('XP earned: ' + xp, 'sys'); }
+  function render() {
+    $('rnd').textContent = enc.round; var cur = enc.current(); $('cur').textContent = cur ? cur.name : '';
+    $('order').innerHTML = enc.order.map(function (u, i) {
+      var conds = Object.keys(u.conditions).join(', '), pct = Math.max(0, u.hp / u.hpMax * 100), need = pending && pending.target === 'enemy' ? u.team !== (cur && cur.team) : pending && pending.target === 'ally' ? u.team === (cur && cur.team) : false;
+      return '<div class="u ' + u.team + (u === cur ? ' cur' : '') + (u.dead ? ' dead' : '') + (need && !u.dead ? ' tgt' : '') + (u === sel ? ' sel' : '') + '" data-u="' + i + '"><b>' + u.name + '</b> <span class="note">init ' + Math.floor(u.initiative) + ' - AC ' + C.effectiveAC(u) + ' - HP ' + u.hp + '/' + u.hpMax + (u.temp ? ' (+' + u.temp + ')' : '') + (u.rage ? ' - RAGING' : '') + (conds ? ' - ' + conds : '') + (u.hp === 0 && !u.dead ? ' - deaths ' + u.deathSaves.ok + '/' + u.deathSaves.fail : '') + '</span><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
+    }).join('');
+    var mine = cur && cur.team === 'party' && !enc.winner();
+    $('acts').innerHTML = mine ? C.actions(cur).map(function (a, i) { var spent = (a.id === 'cast' && C.SPELL_FX[a.spell].bonus) ? !cur.turn.bonus : (a.id === 'secondWind' || a.id === 'rage') ? !cur.turn.bonus : !cur.turn.action; return '<button class="btn' + (pending && pending._i === i ? '' : ' g') + '" data-a="' + i + '"' + (spent ? ' disabled' : '') + '>' + a.label + '</button>'; }).join('') : '';
+    $('hint').textContent = mine ? (pending ? (pending.target === 'enemy' ? 'Pick an enemy target' + (pending.aoe ? ' (area spells hit all foes)' : '') : 'Pick an ally') : 'Choose an action. Action: ' + (cur.turn.action ? 'ready' : 'used') + ' - Bonus: ' + (cur.turn.bonus ? 'ready' : 'used')) : (cur && !enc.winner() ? cur.name + ' is acting...' : '');
+    $('end').disabled = !mine; $('auto').disabled = !!enc.winner();
+  }
+  function run(a, target) { var cur = enc.current(), tg = a.aoe ? enc.units.filter(function (u) { return u.team !== cur.team && !u.dead; }) : target ? [target] : [];
+    var r = C.act(enc, cur, a, tg, null); r.log.forEach(function (l) { log(l, /hit|slain|down|drops/.test(l) ? 'hit' : ''); }); pending = null; if (enc.winner()) finish(enc.winner()); else render(); }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!t.closest) return;
+    if (t.dataset && t.dataset.f) { foes[t.dataset.f] = Math.max(0, Math.min(8, foes[t.dataset.f] + +t.dataset.d)); setup(); return; }
+    if (t.dataset && t.dataset.r !== undefined) { roster[+t.dataset.r].on = t.checked; return; }
+    if (t.id === 'start') return start(); if (t.id === 'reset') { $('fight').style.display = 'none'; $('setup').style.display = 'grid'; return; }
+    if (t.id === 'end') { advance(); return; }
+    if (t.id === 'auto') { busy = true; var n = 0; (function loop() { if (enc.winner() || n++ > 300) { busy = false; return finish(enc.winner() || 'party'); } var u = enc.current(); if (u && !u.dead) C.aiTurn(enc, u, null).forEach(function (l) { log(l, /hit|slain|drops/.test(l) ? 'hit' : ''); }); enc.next(); loop(); })(); return; }
+    if (t.dataset && t.dataset.a !== undefined) { var a = C.actions(enc.current())[+t.dataset.a]; a._i = +t.dataset.a; if (a.target === 'none') run(a); else if (a.aoe) run(a); else { pending = a; render(); } return; }
+    var ue = t.closest('[data-u]'); if (ue && pending) { var u = enc.order[+ue.dataset.u]; if (u.dead) return; var cur = enc.current(); if ((pending.target === 'enemy') === (u.team !== cur.team)) { var a2 = pending; run(a2, u); } }
+  });
+  setup();
+})();
+</script></body></html>
