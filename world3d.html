@@ -1000,7 +1000,7 @@ var fl = (function () {
     if (typeof FF !== 'undefined' && FF) {
       var WV = 'precision highp float;attribute vec3 p;attribute vec3 n;attribute vec3 c;uniform mat4 uVP;uniform vec3 uOff;uniform vec2 uRot;uniform float uScale;varying vec3 vN;varying vec3 vC;varying vec3 vRel;varying float vY;' +
         'void main(){vec3 q=vec3(p.x*uRot.x+p.z*uRot.y,p.y,-p.x*uRot.y+p.z*uRot.x);vN=vec3(n.x*uRot.x+n.z*uRot.y,n.y,-n.x*uRot.y+n.z*uRot.x);vC=c;vY=0.0;vRel=uOff+q*uScale;gl_Position=uVP*vec4(vRel,1.0);}';
-      WP = mkProg(WV, FF, ['p', 'n', 'c'], ['uVP', 'uOff', 'uRot', 'uScale', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
+      WP = mkProg(WV, FF.replace('float st=smoothstep(0.55,0.86,1.0-abs(n.y));', 'float st=0.0;'), ['p', 'n', 'c'], ['uVP', 'uOff', 'uRot', 'uScale', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
       WB = { p: gl.createBuffer(), n: gl.createBuffer(), c: gl.createBuffer() };
     }
     var COL = { skin: [0.85, 0.66, 0.52], hair: [0.25, 0.15, 0.08], tunic: [0.55, 0.16, 0.12], pants: [0.30, 0.25, 0.20], boots: [0.20, 0.14, 0.10], belt: [0.35, 0.22, 0.10] };
@@ -1025,6 +1025,14 @@ var fl = (function () {
       box(0, 5.25 + bob, 0, 0.36, 0.38, 0.36, 0, 0, COL.skin); box(0, 5.55 + bob, -0.03, 0.39, 0.16, 0.39, 0, 0, COL.hair);
       return { P: new Float32Array(P), N: new Float32Array(N), C: new Float32Array(C) };
     }
+    var HERO = null;
+    (function () {
+      try { HERO = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { HERO = null; } if (!HERO) return;
+      var cc = { Barbarian: [0.55, 0.30, 0.12], Bard: [0.55, 0.18, 0.45], Cleric: [0.85, 0.85, 0.80], Druid: [0.22, 0.42, 0.18], Fighter: [0.45, 0.47, 0.52], Monk: [0.85, 0.55, 0.15], Paladin: [0.80, 0.72, 0.30], Ranger: [0.20, 0.38, 0.25], Rogue: [0.16, 0.16, 0.20], Sorcerer: [0.70, 0.12, 0.15], Warlock: [0.30, 0.15, 0.45], Wizard: [0.15, 0.25, 0.65] };
+      var rs = { Dwarf: [0.80, 0.58, 0.45], Elf: [0.90, 0.75, 0.62], Halfling: [0.88, 0.68, 0.52], Human: [0.85, 0.66, 0.52], Dragonborn: [0.55, 0.30, 0.25], Gnome: [0.88, 0.68, 0.55], 'Half-Elf': [0.88, 0.70, 0.56], 'Half-Orc': [0.50, 0.62, 0.40], Tiefling: [0.65, 0.28, 0.35] };
+      var c = cc[HERO.cls]; if (c) { COL.tunic = c; COL.pants = [c[0] * 0.5, c[1] * 0.5, c[2] * 0.5]; }
+      var k = rs[HERO.race]; if (k) COL.skin = k;
+    })();
     var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
@@ -1032,7 +1040,7 @@ var fl = (function () {
       var x = Math.max(1, Math.min(W - 2, cam.x)), z = Math.max(1, Math.min(H - 2, cam.z));
       if (!landSafe(x, z)) { walkMsg('Walk mode needs land: fly over land (or click the small map) and press F again.'); return; }
       WALK.on = true; WALK.x = x; WALK.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; WALK.grounded = true; WALK.body = cam.yaw + Math.PI; cam.pitch = Math.max(-0.5, Math.min(0.1, cam.pitch));
-      walkMsg('Walk mode: WASD move, Shift sprint, Space jump, V first/third person, wheel zoom, F to fly again.');
+      walkMsg((HERO ? HERO.name + ', ' + HERO.cls + '. ' : '') + 'Walk mode: WASD move, Shift sprint, Space jump, V first/third person, wheel zoom, F to fly again.');
     }
     function walkStep(dt) {
       var f = [-Math.sin(cam.yaw), -Math.cos(cam.yaw)], r = [Math.cos(cam.yaw), -Math.sin(cam.yaw)], mx = 0, mz = 0;
