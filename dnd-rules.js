@@ -52,6 +52,8 @@
     'Custom background': { skills: [], pick: 2, languages: 0, feature: 'Your own story (choose 2 skills)' }
   };
 
+  var FIGHTING_STYLES = { 'Archery': '+2 to attack rolls with ranged weapons', 'Defense': '+1 AC while wearing armor', 'Dueling': '+2 damage with a one-handed melee weapon and no other weapon', 'Great Weapon Fighting': 'Reroll 1s and 2s on damage with two-handed melee weapons', 'Protection': 'Reaction: impose disadvantage on an attack against an adjacent ally (needs a shield)', 'Two-Weapon Fighting': 'Add your ability modifier to the damage of your off-hand attack' };
+  var DRAGON_ANCESTRY = { 'Black': ['acid', '5 by 30 ft line (Dex save)'], 'Blue': ['lightning', '5 by 30 ft line (Dex save)'], 'Brass': ['fire', '5 by 30 ft line (Dex save)'], 'Bronze': ['lightning', '5 by 30 ft line (Dex save)'], 'Copper': ['acid', '5 by 30 ft line (Dex save)'], 'Gold': ['fire', '15 ft cone (Dex save)'], 'Green': ['poison', '15 ft cone (Con save)'], 'Red': ['fire', '15 ft cone (Dex save)'], 'Silver': ['cold', '15 ft cone (Con save)'], 'White': ['cold', '15 ft cone (Con save)'] };
   var STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
   var POINT_COST = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
   var POINT_BUDGET = 27;
@@ -130,6 +132,8 @@
       sheet.spellcasting = { ability: sa, saveDC: 8 + pb + sm, attackBonus: pb + sm, cantrips: cls.spell.cantrips, slots: { 1: cls.spell.slots }, kind: cls.spell.kind,
         spellsKnown: cls.spell.known || null, spellbook: cls.spell.spellbook || null, prepared: cls.spell.kind === 'prepared' ? Math.max(1, sm + level) : null };
     }
+    if (o.cls === 'Fighter') { if (!FIGHTING_STYLES[o.fightingStyle]) errors.push('Choose a Fighting Style.'); else sheet.features = sheet.features.map(function (f) { return f.indexOf('Fighting Style') === 0 ? 'Fighting Style: ' + o.fightingStyle + ' (' + FIGHTING_STYLES[o.fightingStyle] + ')' : f; }); sheet.fightingStyle = o.fightingStyle; }
+    if (o.race === 'Dragonborn') { var dg = DRAGON_ANCESTRY[o.dragon]; if (!dg) errors.push('Choose a draconic ancestry.'); else { sheet.dragonAncestry = o.dragon; sheet.features = sheet.features.map(function (f) { return f.indexOf('Draconic Ancestry') === 0 ? 'Draconic Ancestry: ' + o.dragon + ' dragon' : f.indexOf('Breath Weapon') === 0 ? 'Breath Weapon: ' + dg[1] + ', 2d6 ' + dg[0] + ' damage, DC ' + (8 + pb + m.con) + ' (recharges on a short or long rest)' : f.indexOf('Damage Resistance') === 0 ? 'Damage Resistance: ' + dg[0] : f; }); sheet.resist = [dg[0]]; } }
     // ---------- equipment, attacks, armor class ----------
     var kit = DATA.KITS[o.cls], items = [], kitSel = o.kit || {}, picks = kitSel.picks || {};
     function expand(tok, key) { if (tok.charAt(0) !== '@') return tok; var p = picks[key]; if (!p) { errors.push('Choose ' + DATA.TOKENS[tok] + '.'); return null; }
@@ -151,10 +155,12 @@
     var shieldOn = hasShield && armorProf(DATA.ARMOR['Shield']) && !(o.cls === 'Monk');
     if (best) { sheet.ac = bestAC + (shieldOn ? 2 : 0); sheet.acNote = best.name + (shieldOn ? ' + shield' : ''); sheet.stealthDisadvantage = best.stealthDis; if (best.str && score.str < best.str) sheet.armorWarning = best.name + ' needs Strength ' + best.str + ' (speed -10 ft otherwise).'; }
     else { sheet.ac += shieldOn ? 2 : 0; if (shieldOn) sheet.acNote += ' + shield'; }
+    if (o.fightingStyle === 'Defense' && best) sheet.ac += 1;
     var attacks = [];
     weapons.forEach(function (x) { var w = DATA.WEAPONS[x.name], fin = w.props.indexOf('finesse') >= 0, ab = w.kind === 'ranged' ? 'dex' : fin ? (m.dex > m.str ? 'dex' : 'str') : 'str', pr = weaponProf(w);
       var ver = /versatile \((\w+)\)/.exec(w.props.join(' '));
-      attacks.push({ name: w.name + (x.qty > 1 ? ' (x' + x.qty + ')' : ''), weapon: w.name, ability: ab, bonus: m[ab] + (pr ? pb : 0), proficient: pr, dice: w.dice, mod: m[ab], type: w.type, ranged: w.kind === 'ranged', props: w.props, versatile: ver ? ver[1] : null }); });
+      var sty = o.cls === 'Fighter' ? o.fightingStyle : null, two = w.props.indexOf('two-handed') >= 0, dmgBonus = (sty === 'Dueling' && w.kind === 'melee' && !two) ? 2 : 0, atkBonus = (sty === 'Archery' && w.kind === 'ranged') ? 2 : 0;
+      attacks.push({ name: w.name + (x.qty > 1 ? ' (x' + x.qty + ')' : ''), weapon: w.name, ability: ab, bonus: m[ab] + (pr ? pb : 0) + atkBonus, proficient: pr, dice: w.dice, mod: m[ab] + dmgBonus, type: w.type, ranged: w.kind === 'ranged', props: w.props, versatile: ver ? ver[1] : null }); });
     var mono = o.cls === 'Monk', ua = mono ? (m.dex > m.str ? 'dex' : 'str') : 'str';
     attacks.push({ name: mono ? 'Unarmed strike (Martial Arts)' : 'Unarmed strike', weapon: null, ability: ua, bonus: m[ua] + pb, proficient: true, dice: mono ? '1d4' : '1', mod: mono ? m[ua] : m.str, type: 'bludgeoning', ranged: false, props: [] });
     sheet.attacks = attacks; sheet.inventory = inv; sheet.gear = gear; sheet.proficiencies = { armor: cls.armor, weapons: cls.weapons };
@@ -180,7 +186,7 @@
   }
 
   var api = { ABILITIES: ABILITIES, ABILITY_NAMES: ABILITY_NAMES, SKILLS: SKILLS, ALL_SKILLS: ALL_SKILLS, RACES: RACES, CLASSES: CLASSES, BACKGROUNDS: BACKGROUNDS,
-    STANDARD_ARRAY: STANDARD_ARRAY, POINT_COST: POINT_COST, POINT_BUDGET: POINT_BUDGET,
+    STANDARD_ARRAY: STANDARD_ARRAY, FIGHTING_STYLES: FIGHTING_STYLES, DRAGON_ANCESTRY: DRAGON_ANCESTRY, POINT_COST: POINT_COST, POINT_BUDGET: POINT_BUDGET,
     d: d, roll: roll, d20: d20, roll4d6: roll4d6, rollAbilityScores: rollAbilityScores, mod: mod, profBonus: profBonus, pointCost: pointCost, signed: signed, buildCharacter: buildCharacter };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DND = api;
 })(typeof window !== 'undefined' ? window : this);

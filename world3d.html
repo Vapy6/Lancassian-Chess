@@ -24,7 +24,7 @@ canvas:active{cursor:grabbing}
 <canvas id="gl"></canvas>
 <div id="msg">Loading the world…</div>
 <div id="hud"><h1 id="ttl">Myosia in 3D</h1>
-<div class="k">Drag to look · W A S D to fly · Q / E down / up · Shift to go faster · mouse wheel changes speed · click the small map to jump</div>
+<div class="k">Drag to look · W A S D to fly · Q / E down / up · Shift to go faster · mouse wheel changes speed · click the small map to jump · F toggles walk mode with a character</div><div class="k" id="wk"></div>
 <label>Time of day <span id="tdv">10:30</span><input id="td" type="range" min="0" max="24" step="0.05" value="10.5"></label>
 <label>Mountain height ×<span id="exv">25</span><input id="ex" type="range" min="1" max="120" value="25"></label>
 <label>Quality <select id="qs"><option>High</option><option>Medium</option><option>Low</option></select></label>
@@ -994,6 +994,77 @@ var fl = (function () {
         }
       };
     })();
+    // ================= walkable character (F toggles walk mode, V toggles first / third person) =================
+    var WALK = { on: false, x: 0, z: 0, y: 0, vy: 0, body: 0, third: true, dist: 16, phase: 0, moving: false, grounded: true, count: 0 };
+    var WP = null, WB = null;
+    if (typeof FF !== 'undefined' && FF) {
+      var WV = 'precision highp float;attribute vec3 p;attribute vec3 n;attribute vec3 c;uniform mat4 uVP;uniform vec3 uOff;uniform vec2 uRot;uniform float uScale;varying vec3 vN;varying vec3 vC;varying vec3 vRel;varying float vY;' +
+        'void main(){vec3 q=vec3(p.x*uRot.x+p.z*uRot.y,p.y,-p.x*uRot.y+p.z*uRot.x);vN=vec3(n.x*uRot.x+n.z*uRot.y,n.y,-n.x*uRot.y+n.z*uRot.x);vC=c;vY=0.0;vRel=uOff+q*uScale;gl_Position=uVP*vec4(vRel,1.0);}';
+      WP = mkProg(WV, FF, ['p', 'n', 'c'], ['uVP', 'uOff', 'uRot', 'uScale', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
+      WB = { p: gl.createBuffer(), n: gl.createBuffer(), c: gl.createBuffer() };
+    }
+    var COL = { skin: [0.85, 0.66, 0.52], hair: [0.25, 0.15, 0.08], tunic: [0.55, 0.16, 0.12], pants: [0.30, 0.25, 0.20], boots: [0.20, 0.14, 0.10], belt: [0.35, 0.22, 0.10] };
+    function buildFigure(phase, moving, sprint) {
+      var P = [], N = [], C = [];
+      function box(cx, cy, cz, hx, hy, hz, piv, ang, col) {
+        var ca = Math.cos(ang), sa = Math.sin(ang), V = [];
+        for (var i = 0; i < 8; i++) { var x = cx + (i & 1 ? hx : -hx), y = cy + (i & 2 ? hy : -hy), z = cz + (i & 4 ? hz : -hz), dy = y - piv; V.push([x, piv + dy * ca - z * sa, dy * sa + z * ca]); }
+        var F = [[1, 3, 7, 5], [0, 4, 6, 2], [2, 6, 7, 3], [0, 1, 5, 4], [4, 5, 7, 6], [0, 2, 3, 1]];
+        F.forEach(function (f) { var a = V[f[0]], b = V[f[1]], c2 = V[f[2]], d = V[f[3]], ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c2[0] - a[0], vy = c2[1] - a[1], vz = c2[2] - a[2];
+          var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+          // make the normal point away from the box centre
+          var mx = (a[0] + c2[0]) / 2 - (V[0][0] + V[7][0]) / 2, my = (a[1] + c2[1]) / 2 - (V[0][1] + V[7][1]) / 2, mz = (a[2] + c2[2]) / 2 - (V[0][2] + V[7][2]) / 2; if (nx * mx + ny * my + nz * mz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+          [a, b, c2, a, c2, d].forEach(function (v) { P.push(v[0], v[1], v[2]); N.push(nx, ny, nz); C.push(col[0], col[1], col[2]); }); });
+      }
+      var sw = moving ? Math.sin(phase) * (sprint ? 0.95 : 0.7) : 0, bob = moving ? Math.abs(Math.cos(phase)) * 0.06 : 0;
+      box(-0.3, 1.35 + bob, 0, 0.26, 0.45, 0.28, 2.7, sw, COL.boots); box(-0.3, 2.2 + bob, 0, 0.26, 0.5, 0.28, 2.7, sw, COL.pants);
+      box(0.3, 1.35 + bob, 0, 0.26, 0.45, 0.28, 2.7, -sw, COL.boots); box(0.3, 2.2 + bob, 0, 0.26, 0.5, 0.28, 2.7, -sw, COL.pants);
+      box(0, 3.65 + bob, 0, 0.62, 0.95, 0.34, 0, 0, COL.tunic); box(0, 2.85 + bob, 0, 0.64, 0.1, 0.36, 0, 0, COL.belt);
+      box(-0.88, 3.65 + bob, 0, 0.2, 0.85, 0.22, 4.4 + bob, -sw * 0.8, COL.tunic); box(0.88, 3.65 + bob, 0, 0.2, 0.85, 0.22, 4.4 + bob, sw * 0.8, COL.tunic);
+      box(-0.88, 2.65 + bob, 0, 0.18, 0.2, 0.2, 4.4 + bob, -sw * 0.8, COL.skin); box(0.88, 2.65 + bob, 0, 0.18, 0.2, 0.2, 4.4 + bob, sw * 0.8, COL.skin);
+      box(0, 5.25 + bob, 0, 0.36, 0.38, 0.36, 0, 0, COL.skin); box(0, 5.55 + bob, -0.03, 0.39, 0.16, 0.39, 0, 0, COL.hair);
+      return { P: new Float32Array(P), N: new Float32Array(N), C: new Float32Array(C) };
+    }
+    var WSTAT = false;
+    function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
+    function toggleWalk() {
+      if (WALK.on) { WALK.on = false; walkMsg('Fly mode.'); return; }
+      var x = Math.max(1, Math.min(W - 2, cam.x)), z = Math.max(1, Math.min(H - 2, cam.z));
+      if (!landSafe(x, z)) { walkMsg('Walk mode needs land: fly over land (or click the small map) and press F again.'); return; }
+      WALK.on = true; WALK.x = x; WALK.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; WALK.grounded = true; WALK.body = cam.yaw + Math.PI; cam.pitch = Math.max(-0.5, Math.min(0.1, cam.pitch));
+      walkMsg('Walk mode: WASD move, Shift sprint, Space jump, V first/third person, wheel zoom, F to fly again.');
+    }
+    function walkStep(dt) {
+      var f = [-Math.sin(cam.yaw), -Math.cos(cam.yaw)], r = [Math.cos(cam.yaw), -Math.sin(cam.yaw)], mx = 0, mz = 0;
+      if (keys.w || keys.arrowup) { mx += f[0]; mz += f[1]; } if (keys.s || keys.arrowdown) { mx -= f[0]; mz -= f[1]; }
+      if (keys.d || keys.arrowright) { mx += r[0]; mz += r[1]; } if (keys.a || keys.arrowleft) { mx -= r[0]; mz -= r[1]; }
+      var len = Math.hypot(mx, mz), sprint = !!keys.shift; WALK.moving = len > 0;
+      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
+      if (WALK.moving) {
+        var spd = 13 * FT * (sprint ? 3 : 1) * dt, dx = mx / len * spd, dz = mz / len * spd;
+        if (ok(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; } else if (ok(WALK.x + dx, WALK.z)) WALK.x += dx; else if (ok(WALK.x, WALK.z + dz)) WALK.z += dz;
+        var tgt = Math.atan2(mx, mz), diff = tgt - WALK.body; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); WALK.body += diff * Math.min(1, dt * 12);
+        WALK.phase += dt * (sprint ? 11 : 7.5);
+      }
+      if (!WALK.third) WALK.body = cam.yaw + Math.PI;
+      var gnd = groundAt(WALK.x, WALK.z);
+      if (keys[' '] && WALK.grounded) { WALK.vy = 14 * FT; WALK.grounded = false; }
+      WALK.vy -= 32 * FT * dt; WALK.y += WALK.vy * dt;
+      if (WALK.y <= gnd + 0.0001 * FT * 10 && WALK.vy <= 0 || WALK.y < gnd) { WALK.y = gnd; WALK.vy = 0; WALK.grounded = true; } else WALK.grounded = false;
+      var eye = 5.4 * FT, hx = WALK.x, hy = WALK.y + eye, hz = WALK.z;
+      if (WALK.third) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
+    }
+    function drawPlayer(vpRot, far) {
+      if (!WP || !WALK.on || !WALK.third) return;
+      var m = buildFigure(WALK.phase, WALK.moving, !!keys.shift);
+      gl.bindBuffer(gl.ARRAY_BUFFER, WB.p); gl.bufferData(gl.ARRAY_BUFFER, m.P, gl.DYNAMIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, WB.n); gl.bufferData(gl.ARRAY_BUFFER, m.N, gl.DYNAMIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, WB.c); gl.bufferData(gl.ARRAY_BUFFER, m.C, gl.DYNAMIC_DRAW);
+      gl.useProgram(WP); gl.disable(gl.CULL_FACE); setAtmoUniforms(WP, far);
+      gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, WALK.x - cam.x, WALK.y - cam.y, WALK.z - cam.z); gl.uniform2f(WP.u.uRot, Math.cos(WALK.body), Math.sin(WALK.body)); gl.uniform1f(WP.u.uScale, FT);
+      [[WB.p, 0], [WB.n, 1], [WB.c, 2]].forEach(function (q) { gl.bindBuffer(gl.ARRAY_BUFFER, q[0]); gl.enableVertexAttribArray(q[1]); gl.vertexAttribPointer(q[1], 3, gl.FLOAT, false, 0, 0); });
+      gl.drawArrays(gl.TRIANGLES, 0, m.P.length / 3);
+      for (var q2 = 0; q2 < 3; q2++) gl.disableVertexAttribArray(q2);
+      gl.enable(gl.CULL_FACE);
+    }
 
     // ================= program setup that never changes =================
     [PC, PK].forEach(function (p) {
@@ -1008,8 +1079,8 @@ var fl = (function () {
     cv.addEventListener('pointerdown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); });
     cv.addEventListener('pointerup', function () { drag = false; });
     cv.addEventListener('pointermove', function (e) { if (!drag) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
-    cv.addEventListener('wheel', function (e) { e.preventDefault(); speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
-    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; });
+    cv.addEventListener('wheel', function (e) { e.preventDefault(); if (WALK.on) { WALK.dist = Math.max(2, Math.min(80, WALK.dist * (e.deltaY < 0 ? 1 / 1.15 : 1.15))); return; } speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
+    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; } if (WALK.on && e.key === ' ') e.preventDefault(); });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     var exEl = document.getElementById('ex');
     exEl.addEventListener('input', function () { EX = +exEl.value; EXV.textContent = EX; });
@@ -1023,7 +1094,7 @@ var fl = (function () {
       for (q = 0; q < n; q++) { if (LF[q]) { d[q * 4] = CDATA[q * 4]; d[q * 4 + 1] = CDATA[q * 4 + 1]; d[q * 4 + 2] = CDATA[q * 4 + 2]; } else { d[q * 4] = 58; d[q * 4 + 1] = 86; d[q * 4 + 2] = 120; } d[q * 4 + 3] = 255; }
       fx.putImageData(id, 0, 0); mc.getContext('2d').drawImage(fc, 0, 0, mc.width, mc.height); })();
     var mdot = document.getElementById('mdot'), mini = document.getElementById('mini');
-    function tele(e) { var r = mc.getBoundingClientRect(); cam.x = (e.clientX - r.left) / r.width * W; cam.z = (e.clientY - r.top) / r.height * H; cam.y = Math.max(cam.y, groundAt(cam.x, cam.z) + 20); }
+    function tele(e) { var r = mc.getBoundingClientRect(); cam.x = (e.clientX - r.left) / r.width * W; cam.z = (e.clientY - r.top) / r.height * H; cam.y = Math.max(cam.y, groundAt(cam.x, cam.z) + 20); if (WALK.on) { if (landSafe(cam.x, cam.z)) { WALK.x = cam.x; WALK.z = cam.z; WALK.y = groundAt(WALK.x, WALK.z); WALK.vy = 0; } } }
     mini.addEventListener('pointerdown', function (e) { tele(e); mini.setPointerCapture(e.pointerId); mini._d = true; });
     mini.addEventListener('pointermove', function (e) { if (mini._d) tele(e); }); mini.addEventListener('pointerup', function () { mini._d = false; });
     // ================= labels =================
@@ -1072,12 +1143,14 @@ var fl = (function () {
       perfT = t / 1000;
       var dt = Math.min(0.1, (t - last) / 1000), rawDt = (t - last) / 1000; last = t;
       var gnd = groundAt(cam.x, cam.z), alt = Math.max(0.0004, cam.y - gnd);
+      if (WALK.on) walkStep(dt); else {
       var v = Math.max(alt, 0.0015) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
       if (keys.w || keys.arrowup) { cam.x += f[0] * v; cam.y += f[1] * v; cam.z += f[2] * v; }
       if (keys.s || keys.arrowdown) { cam.x -= f[0] * v; cam.y -= f[1] * v; cam.z -= f[2] * v; }
       if (keys.d || keys.arrowright) { cam.x += r[0] * v; cam.z += r[2] * v; }
       if (keys.a || keys.arrowleft) { cam.x -= r[0] * v; cam.z -= r[2] * v; }
       if (keys.e || keys[' ']) cam.y += v; if (keys.q || keys.c) cam.y -= v;
+      }
       cam.x = Math.max(0, Math.min(W - 1, cam.x)); cam.z = Math.max(0, Math.min(H - 1, cam.z));
       gnd = groundAt(cam.x, cam.z); if (cam.y < gnd + 0.0004) cam.y = gnd + 0.0004; if (cam.y > 1500) cam.y = 1500;
       alt = Math.max(0.0004, cam.y - gnd);
@@ -1115,7 +1188,7 @@ var fl = (function () {
       gl.useProgram(PC); gl.uniformMatrix4fv(PC.u.uVP, false, vpRot); setFragCommon(PC, far, pxK);
       drawClipLevels(PC, NLEV - 1, true);
       if (VEG) VEG.draw(vpRot, far, t);
-      drawIslands(vpRot, far);
+      drawIslands(vpRot, far); drawPlayer(vpRot, far);
       // ---- HUD ----
       if ((frame++ & 1) === 0) {
         labels(vpRot, w, hh, alt);
