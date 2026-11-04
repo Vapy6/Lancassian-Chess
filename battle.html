@@ -49,7 +49,7 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
   function begin() { sel = null; pending = null; var w = enc.winner(); if (w) { finish(w); return; } var u = enc.current(); render(); if (u.team === 'party' && (u.hp <= 0 || u.dead) && !busy) { setTimeout(advance, 700); return; } if (u.team === 'foe' && !busy) setTimeout(function () { monsterTurn(); }, 500); }
   function monsterTurn() { var u = enc.current(); if (!u || u.team !== 'foe') return; C.aiTurn(enc, u, null).forEach(function (l) { log(l, /hit|slain|drops/.test(l) ? 'hit' : ''); }); advance(); }
   function advance() { var w = enc.winner(); if (w) { finish(w); return; } enc.next(); (enc.log || []).splice(0).forEach(function (l) { log(l, 'sys'); }); var u = enc.current(); if (u) log('-- ' + u.name + "'s turn --", 'sys'); begin(); }
-  function finish(w) { render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.'; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (w === 'party') log('XP earned: ' + xp, 'sys'); }
+  function finish(w) { try { var xx = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (window.parent !== window) window.parent.postMessage({ dndBattle: true, winner: w, xp: xx }, '*'); } catch (e) { } render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.'; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (w === 'party') log('XP earned: ' + xp, 'sys'); }
   function render() {
     $('rnd').textContent = enc.round; var cur = enc.current(); $('cur').textContent = cur ? cur.name : '';
     $('order').innerHTML = enc.order.map(function (u, i) {
@@ -74,5 +74,10 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     var ue = t.closest('[data-u]'); if (ue && pending) { var u = enc.order[+ue.dataset.u]; if (u.dead) return; var cur = enc.current(); if ((pending.target === 'enemy') === (u.team !== cur.team)) { var a2 = pending; run(a2, u); } }
   });
   setup();
+  var qs = /[?&]enc=([^&]+)/.exec(location.search);
+  if (qs) { var act = null; try { act = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { }
+    roster.forEach(function (r) { r.on = false; }); if (act) roster.push({ label: act.name, sheet: act, on: true }); else roster[0].on = true;
+    Object.keys(foes).forEach(function (k) { foes[k] = 0; }); decodeURIComponent(qs[1]).split(',').forEach(function (p) { var a = p.split(':'); if (a[0] in foes) foes[a[0]] = Math.min(8, +a[1] || 1); });
+    start(); }
 })();
 </script></body></html>
