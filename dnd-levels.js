@@ -68,7 +68,7 @@
     var gains = [], dPB = newPB - oldPB;
     var die = HD[c], hpRoll = Math.floor(die / 2) + 1, hpGain = Math.max(1, hpRoll + m.con) + (/Dwarven Toughness/.test((s.features || []).join('|')) ? 1 : 0);
     var conBack = (m.con - oldMods.con) * (lv - 1); s.hpMax += hpGain + conBack; s.hp += hpGain + conBack; gains.push('+' + (hpGain + conBack) + ' max HP');
-    s.level = lv; s.profBonus = newPB; s.hitDiceTotal = lv; if (dPB) gains.push('Proficiency bonus is now +' + newPB);
+    s.level = lv; s.profBonus = newPB; s.hitDiceTotal = lv + (s.hitDie || 'd' + die); if (typeof s.hdLeft === 'number') s.hdLeft = Math.min(lv, s.hdLeft + 1); if (dPB) gains.push('Proficiency bonus is now +' + newPB);
     ABIL.forEach(function (a) { if (s.saves && s.saves[a]) { var sv = s.saves[a]; if (typeof sv === 'object') sv.bonus += (m[a] - oldMods[a]) + (sv.proficient ? dPB : 0); else s.saves[a] = sv + (m[a] - oldMods[a]); } });
     Object.keys(s.skills).forEach(function (k) { var sk = s.skills[k]; sk.bonus += (m[sk.ability] - oldMods[sk.ability]) + (sk.proficient ? dPB * (sk.expertise ? 2 : 1) : 0); if (exp.indexOf(k) >= 0) { sk.expertise = true; sk.bonus += newPB; } });
     s.passivePerception = 10 + s.skills['Perception'].bonus; s.initiative = m.dex;

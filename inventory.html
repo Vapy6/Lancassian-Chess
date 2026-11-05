@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Character &amp; Inventory</title>
+<style>
+:root{--bg:#14171c;--card:#1d222a;--ink:#e8e4da;--dim:#9aa3ad;--acc:#d9b45a;--bad:#e07a6a;--ok:#7fc08a;--line:#2e3540}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:12px}h1{font:600 20px Georgia,serif;margin:0;color:var(--acc)}h2{font:600 12px system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}.note{font-size:12px;color:var(--dim)}
+.tabs{display:flex;gap:6px;margin:8px 0}.tab{flex:1;background:#252c36;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-weight:600;cursor:pointer}.tab.on{background:var(--acc);color:#1a1405}
+.btn{background:#2a313b;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer;margin-left:4px;font-size:12px}.btn.a{background:var(--acc);color:#1a1405;border:0;font-weight:600}.btn:disabled{opacity:.4;cursor:default}
+.bar{height:8px;background:#2a313b;border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px}.stat{background:#12151a;border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}.stat b{display:block;font-size:18px}
+table{width:100%;border-collapse:collapse}td,th{padding:3px 6px;text-align:left;font-size:13px}th{color:var(--dim);font-weight:500}tr+tr td{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid var(--line)}.row:first-of-type{border-top:0}.row .n{flex:1;min-width:0}.tag{font-size:11px;color:#1a1405;background:var(--acc);border-radius:4px;padding:0 5px;margin-left:4px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.two{grid-template-columns:1fr}}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid var(--dim);margin-right:5px}.dot.p{background:var(--acc);border-color:var(--acc)}
+#msg{min-height:18px;color:var(--acc);font-size:13px;margin:4px 0}select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px}
+</style></head><body><div class="wrap">
+<div id="app"></div>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script><script src="dnd-inventory.js"></script>
+<script>
+(function () {
+  var I = window.DNDINV, DATA = window.DNDDATA, app = document.getElementById('app'), S = null, tab = 'equip', msg = '';
+  var AB = [['str', 'Strength'], ['dex', 'Dexterity'], ['con', 'Constitution'], ['int', 'Intelligence'], ['wis', 'Wisdom'], ['cha', 'Charisma']], SLOTN = { mainHand: 'Main hand', offHand: 'Off hand', armor: 'Armor', amulet: 'Amulet', ring1: 'Ring 1', ring2: 'Ring 2' };
+  function esc(t) { return String(t === undefined || t === null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function sg(n) { return (n >= 0 ? '+' : '') + n; }
+  function load() { try { S = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { S = null; } if (S) I.ensure(S); }
+  function save() { I.saveActive(S); try { if (window.parent !== window) window.parent.postMessage({ dndHero: true }, '*'); } catch (e) { } }
+  function sv(a) { var x = S.saves && S.saves[a]; return x && typeof x === 'object' ? x.bonus : (x || S.mods[a]); }
+  function head() {
+    var pct = Math.max(0, Math.min(100, S.hp / S.hpMax * 100)), h = I.hdInfo(S), nx = window.DNDLEVELS ? window.DNDLEVELS.nextXp(S) : null;
+    return '<div class="card"><h1>' + esc(S.name) + '</h1><div class="note">Level ' + S.level + ' ' + esc(S.subrace || S.race) + ' ' + esc(S.cls) + ' - ' + (S.xp || 0) + ' XP' + (nx ? ' / ' + nx : '') + '</div>' +
+      '<div class="stats" style="margin-top:8px"><div class="stat"><b>' + S.hp + '/' + S.hpMax + '</b>HP</div><div class="stat"><b>' + S.ac + '</b>AC</div><div class="stat"><b>' + S.speed + '</b>Speed</div><div class="stat"><b>' + sg(S.profBonus) + '</b>Prof.</div><div class="stat"><b>' + S.hdLeft + '/' + h.total + '</b>Hit dice (d' + h.die + ')</div><div class="stat"><b>' + S.currency.gp + '</b>gp</div></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>' +
+      '<div class="tabs"><button class="tab' + (tab === 'sheet' ? ' on' : '') + '" data-t="sheet">Sheet</button><button class="tab' + (tab === 'equip' ? ' on' : '') + '" data-t="equip">Equipment</button></div><div id="msg">' + esc(msg) + '</div>';
+  }
+  function sheetTab() {
+    var o = '<div class="card"><h2>Abilities</h2><table><tr><th></th><th>Score</th><th>Mod</th><th>Save</th></tr>' + AB.map(function (a) { var p = S.saves && S.saves[a[0]] && S.saves[a[0]].proficient; return '<tr><td>' + a[1] + '</td><td>' + S.scores[a[0]] + '</td><td>' + sg(S.mods[a[0]]) + '</td><td><span class="dot' + (p ? ' p' : '') + '"></span>' + sg(sv(a[0])) + '</td></tr>'; }).join('') + '</table></div>';
+    o += '<div class="two"><div class="card"><h2>Skills</h2><table>' + Object.keys(S.skills).map(function (k) { var x = S.skills[k]; return '<tr><td><span class="dot' + (x.proficient ? ' p' : '') + '"></span>' + esc(k) + (x.expertise ? ' *' : '') + '</td><td>' + sg(x.bonus) + '</td></tr>'; }).join('') + '</table><div class="note">Passive Perception ' + S.passivePerception + ' - Initiative ' + sg(S.initiative) + '</div></div>';
+    o += '<div><div class="card"><h2>Attacks</h2>' + S.attacks.map(function (a) { return '<div class="row"><span class="n">' + esc(a.name) + '</span><span class="note">' + sg(a.bonus) + ', ' + esc(/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + a.mod) : a.dice + (a.mod ? sg(a.mod) : '')) + ' ' + esc(a.type) + (a.rng ? ', range ' + a.rng[0] + '/' + a.rng[1] : '') + '</span></div>'; }).join('') + '</div>';
+    var sc = S.spellcasting; if (sc) { o += '<div class="card"><h2>Spells</h2><div class="note">Save DC ' + sc.saveDC + ', attack ' + sg(sc.attackBonus) + '. Slots: ' + Object.keys(sc.slots).map(function (k) { return sc.slots[k] + ' x L' + k; }).join(', ') + '</div>' +
+      ((sc.cantripList || []).length ? '<div style="margin-top:4px"><b>Cantrips:</b> ' + esc(sc.cantripList.join(', ')) + '</div>' : '') + ((sc.preparedSpells || []).length ? '<div style="margin-top:4px"><b>Prepared:</b> ' + esc(sc.preparedSpells.concat(sc.domainSpells || []).filter(function (n, i, a) { return a.indexOf(n) === i; }).join(', ')) + '</div>' : '') + '</div>'; }
+    o += '</div></div><div class="card"><h2>Features</h2>' + S.features.map(function (f) { return '<div style="margin:3px 0">' + esc(f) + '</div>'; }).join('') + '</div>';
+    return o;
+  }
+  function equipTab() {
+    var eq = S.equipped, o = '<div class="card"><h2>Equipped</h2>' + I.SLOTS.map(function (k) { var n = eq[k]; return '<div class="row"><span class="note" style="width:70px">' + SLOTN[k] + '</span><span class="n">' + (n ? esc(n) + ' <span class="note">' + esc(I.describe(n)) + '</span>' : '<span class="note">empty</span>') + '</span>' + (n ? '<button class="btn" data-u="' + k + '">Unequip</button>' : '') + '</div>'; }).join('') +
+      '<div class="note" style="margin-top:6px">AC ' + S.ac + ' (' + esc(S.acNote) + ')' + (S.stealthDisadvantage ? ' - stealth disadvantage' : '') + (S.armorWarning ? ' - ' + esc(S.armorWarning) : '') + '</div></div>';
+    o += '<div class="card"><h2>Backpack</h2>' + (S.inventory.length ? S.inventory.map(function (x) {
+      var k = I.kind(x.name), eqn = I.SLOTS.filter(function (s) { return eq[s] === x.name; }).length, b = '';
+      if (k === 'weapon') { b = '<button class="btn" data-e="' + esc(x.name) + '" data-s="mainHand">Main hand</button><button class="btn" data-e="' + esc(x.name) + '" data-s="offHand">Off hand</button>'; }
+      else if (k !== 'gear') b = '<button class="btn" data-e="' + esc(x.name) + '">Equip</button>';
+      if (I.MAGIC[x.name] && I.MAGIC[x.name].type === 'potion') b = '<button class="btn a" data-p="' + esc(x.name) + '">Drink</button>';
+      var pk = DATA.PACKS[x.name] ? ' title="' + esc(DATA.PACKS[x.name].join(', ')) + '"' : '';
+      return '<div class="row"><span class="n"' + pk + '>' + esc(x.name) + (x.qty > 1 ? ' x' + x.qty : '') + (eqn ? '<span class="tag">equipped' + (eqn > 1 ? ' x' + eqn : '') + '</span>' : '') + '<div class="note">' + esc(I.describe(x.name) || (DATA.PACKS[x.name] ? 'Adventuring gear (hover to see contents)' : '')) + '</div></span>' + b + '<button class="btn" data-d="' + esc(x.name) + '">Drop</button></div>';
+    }).join('') : '<div class="note">Nothing in your pack.</div>') + '</div>';
+    var h = I.hdInfo(S), sel = ''; for (var i = 1; i <= S.hdLeft; i++) sel += '<option>' + i + '</option>';
+    o += '<div class="card"><h2>Money &amp; rest</h2><div class="note">' + S.currency.gp + ' gp' + (S.currency.sp ? ', ' + S.currency.sp + ' sp' : '') + (S.currency.cp ? ', ' + S.currency.cp + ' cp' : '') + '</div><div class="row"><span class="n">Short rest: spend hit dice (d' + h.die + ' ' + sg(S.mods.con) + ' each)</span><select id="hd"' + (S.hdLeft ? '' : ' disabled') + '>' + sel + '</select><button class="btn a" id="sr"' + (S.hdLeft && S.hp < S.hpMax ? '' : ' disabled') + '>Rest</button></div><div class="row"><span class="n">Long rest: full HP, regain half your hit dice</span><button class="btn a" id="lr">Rest</button></div></div>';
+    return o;
+  }
+  function render() {
+    if (!S) { app.innerHTML = '<div class="card"><h1>No active character</h1><div class="note">Create one in <a style="color:var(--acc)" href="character.html">the character creator</a> and press "play in 3D" first.</div></div>'; return; }
+    app.innerHTML = head() + (tab === 'sheet' ? sheetTab() : equipTab());
+  }
+  function done(r) { msg = r.msg || ''; if (r.ok !== false) save(); render(); }
+  document.addEventListener('click', function (e) {
+    var t = e.target; if (!S || !t.dataset) return;
+    if (t.dataset.t) { tab = t.dataset.t; msg = ''; return render(); }
+    if (t.dataset.u) return done(I.unequip(S, t.dataset.u)); if (t.dataset.e) return done(I.equip(S, t.dataset.e, t.dataset.s));
+    if (t.dataset.d) return done(I.drop(S, t.dataset.d, 1)); if (t.dataset.p) return done(I.usePotion(S, t.dataset.p));
+    if (t.id === 'sr') return done(I.shortRest(S, +document.getElementById('hd').value)); if (t.id === 'lr') return done(I.longRest(S));
+  });
+  window.addEventListener('storage', function (e) { if (e.key === 'dnd.active') { load(); render(); } });
+  window.addEventListener('message', function (e) { if (e.data && e.data.dndRefresh) { load(); render(); } });
+  load(); render();
+})();
+</script></div></body></html>

@@ -1,0 +1,28 @@
+Myosia 3D viewer (world3d.html) - state as of 2026-11-05 (late evening, session 3)
+
+Repo: github.com/Vapy6/Lancassian-Chess (GitHub Pages, public). User (Matthew) does not touch code: build files, send with SendUserFile, he uploads to repo root and hard-refreshes. Do not touch chess / worldbuilder / 2D map files. He is on a limited free plan: work efficiently, test sparingly, no big rewrites.
+The old scratchpad tree (g3d/) is gone. Working method now: clone the public repo (add_repo read access, then GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Vapy6/lancassian-chess) and edit the repo files directly (world3d.html is now edited in place; the old v2/ chunk build no longer exists). Bash has no network for installs; Playwright + /usr/bin/google-chrome (executable_path, --no-sandbox) works for non-WebGL pages (inventory.html, battle.html). Serve with python3 -m http.server from the repo dir.
+
+Viewer (single self-contained world3d.html, raw WebGL1)
+Camera-relative geometry-clipmap terrain (12 levels) + coarse far mesh; CPU mirror groundAt/hgtC must match GPU hgt(). Sky, shadows, shader water, instanced vegetation with regional habitat tables, floating Vortex islands (user: still has issues), rivers (inlaid beds), landforms/cliffs (unverified on real mountains).
+Page needs: world3d-height/color/mask/biome/rivers.png, world3d-places.json. Units: 1 px = 15840 ft, FT = px per ft. The game layer lives inside start() (meta.places, cam, keys, groundAt, FT in scope); search for "var HERO" / "turn-based encounters" / "towns:" to find it.
+
+Game layer
+Walk mode: F walk/fly, V first/third person, WASD, Shift sprint, Space jump. Humanoid coloured by class/race of the active character (localStorage dnd.active, set by "play in 3D" in character.html).
+E = encounter: region-based monsters as figures with name/HP/distance labels; click label to target. battle.html runs in a side-panel iframe (postMessage: dndState/dndPos/dndTarget/dndFoeMove/dndBattle). Movement budget = speed (Dash x2), melee reach 5 ft, ranged weapons use their own range (attack.rng [normal,long], e.g. thrown dagger 20/60), spells 120, opportunity attacks, Disengage, enemies move/dash. Walking locked outside your turn.
+Towns: T near a place -> generated NPC, skill-check dialogue, "clear the roads" quest, J quest log (localStorage dnd.quests).
+Levelling 1-5: dnd-levels.js + levelup.html. Engine extras in dnd-combat.js: Action Surge, sneak attack scaling, rage uses, Improved Critical, Disengage.
+
+DELIVERED THIS SESSION: loot, inventory, equipment, rests, potions
+- dnd-inventory.js (window.DNDINV): ensure(sheet) one-time setup (equipment slots from starting kit, hit dice string "3d10" + hdLeft, currency, one starter Potion of Healing, migrates old HERO.gold into currency.gp); equip/unequip/drop; recompute(sheet) rebuilds AC and attacks from equipment (heavy armor ignores Dex, Defense/Dueling/Archery, versatile two-handed damage, off-hand weapons need light and get no ability damage, stowed ranged/thrown weapons stay as attack options, shield/armor need proficiency, Cleric gets heavy armor via Life domain); usePotion; shortRest(spend hit dice); longRest (full HP, regain half hit dice); lootFor/giveLoot (beasts drop nothing; gp, weapons, potions, rare Ring of Protection / Amulet of Health); saveActive writes dnd.active + the matching entry in dnd.characters. Magic: Potion of Healing, Potion of Greater Healing, Ring of Protection (+1 AC), Amulet of Health (Con 19 -> extra max HP while worn).
+- dnd-combat.js: combatant starts at current sheet hp; potions count from inventory; 'potion' action (action, 2d4+2 / 4d4+4); auto-play drinks at <= 1/4 HP.
+- dnd-levels.js: hitDiceTotal is a string like rules; hdLeft +1 on level up.
+- battle.html (embed ?enc= mode only): runs DNDINV.ensure on the active hero, on finish writes HP (min 1), used potions, XP and loot back to dnd.active once, then posts {dndBattle, winner, xp, loot, hp, totalXp, saved}. Parent re-reads HERO (heroRefresh) instead of adding XP again when saved:true.
+- inventory.html: tabs Sheet (abilities, saves, skills, attacks, spells, features) and Equipment (slots, backpack with equip/drink/drop, gold, short/long rest). Opens as a side panel in walk mode with I (not during an encounter or conversation); also works standalone.
+- world3d.html: I key, heroRefresh()/gpOf()/addGp() (quest gold now goes to currency.gp), loot shown in the victory header.
+Tested: node (presets keep identical AC, equip rules, potions, rests, loot, level-up), Chrome (inventory clicks, battle write-back with XP/loot/HP). NOT tested in the real 3D page (no GPU here): press I in walk mode, then E, win a fight, check loot line.
+
+Known gaps / next candidates
+Spell slots, Second Wind, Rage etc. still refresh at the start of every battle (not persisted between fights, so short/long rest only affect HP and hit dice). Ring of Protection does not add to saves. No selling/buying yet. No ammunition counts. Off-hand attack is a normal action (no bonus-action attacks in the engine).
+Open / later
+Persistent per-rest resources (slots, Second Wind); NPC trading/selling; spells levels 2-3 + levels above 5; Paladin/Ranger spell lists; concentration; richer quests; save/export whole campaign; grid/AoE targeting; real-time/RTS mode; real-GPU fps check; island fixes; outcrop models; roads from Azgaar routes; Three.js decision; online later. The user's long ChatGPT "master prompt" was reviewed: treat as roadmap, one item at a time.

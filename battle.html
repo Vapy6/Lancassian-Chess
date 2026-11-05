@@ -24,7 +24,7 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
  <div><div class="card"><h2>Actions</h2><div class="note" id="hint"></div><div id="acts"></div><div style="margin-top:8px"><button class="btn g" id="end">End turn</button><button class="btn g" id="auto">Auto-play rest</button><button class="btn g" id="reset">New battle</button></div></div>
  <div class="card"><h2>Log</h2><div id="log"></div></div></div></div>
 </div></div>
-<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-combat.js"></script><script src="dnd-monsters.js"></script><script src="dnd-presets.js"></script>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-combat.js"></script><script src="dnd-monsters.js"></script><script src="dnd-presets.js"></script><script src="dnd-inventory.js"></script>
 <script>
 (function () {
   var D = window.DND, C = window.DNDCOMBAT, M = window.DNDMONSTERS, P = window.DNDPRESETS, $ = function (i) { return document.getElementById(i); };
@@ -64,7 +64,21 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     setTimeout(function () { if (!skipAtk) C.aiTurn(enc, u, null).forEach(say); advance(); }, wait); }
   function advance() { var w = enc.winner(); if (w) { finish(w); return; } enc.next(); (enc.log || []).splice(0).forEach(function (l) { log(l, 'sys'); }); var u = enc.current(); if (u) log('-- ' + u.name + "'s turn --", 'sys'); begin(); }
   var doneSent = false;
-  function finish(w) { if (doneSent) return; doneSent = true; try { var xx = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (window.parent !== window) window.parent.postMessage({ dndBattle: true, winner: w, xp: xx }, '*'); } catch (e) { } render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.'; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (w === 'party') log('XP earned: ' + xp, 'sys'); }
+  // embed mode only: write hp, used potions, XP and loot back to the active character (once), then tell the 3D world
+  function writeBack(w, xp) {
+    if (!/[?&]enc=/.test(location.search)) return null; var h = null; try { h = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { } if (!h) return null;
+    var u = enc.units.filter(function (x) { return x.team === 'party'; })[0]; if (!u) return null; var I = window.DNDINV; I.ensure(h);
+    h.hp = Math.max(1, Math.min(h.hpMax, u.hp)); if (u.potionsUsed.h) I.drop(h, 'Potion of Healing', u.potionsUsed.h); if (u.potionsUsed.g) I.drop(h, 'Potion of Greater Healing', u.potionsUsed.g);
+    var lines = []; if (w === 'party') { h.xp = (h.xp || 0) + xp; lines = I.giveLoot(h, I.lootFor(enc.units.filter(function (x) { return x.team === 'foe'; }).map(function (x) { return x.name; }), M.BESTIARY)); }
+    I.saveActive(h); return { lines: lines, hp: h.hp, hpMax: h.hpMax, totalXp: h.xp || 0 };
+  }
+  function finish(w) {
+    if (doneSent) return; doneSent = true; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0), wb = null;
+    try { wb = writeBack(w, xp); } catch (e) { wb = null; }
+    try { if (window.parent !== window) window.parent.postMessage({ dndBattle: true, winner: w, xp: xp, loot: wb ? wb.lines : [], hp: wb ? wb.hp : null, totalXp: wb ? wb.totalXp : null, saved: !!wb }, '*'); } catch (e) { }
+    render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.';
+    if (w === 'party') log('XP earned: ' + xp, 'sys'); if (wb && wb.lines.length) log('Loot: ' + wb.lines.join(', '), 'sys'); if (wb) log('You now have ' + wb.hp + '/' + wb.hpMax + ' HP.', 'sys');
+  }
   function render() {
     try { if (window.parent !== window) window.parent.postMessage({ dndState: true, foes: enc.units.filter(function (u) { return u.team === 'foe'; }).map(function (u) { return { name: u.name, dead: !!u.dead || u.hp <= 0, hp: u.hp, max: u.hpMax, cur: enc.current() === u }; }), tgt: !!(pending && pending.target === 'enemy'), left: (enc.current() && enc.current().turn) ? enc.current().turn.move : 0, mine: !!(enc.current() && enc.current().team === 'party') }, '*'); } catch (e) { }
     $('rnd').textContent = enc.round; var cur = enc.current(); $('cur').textContent = cur ? cur.name : '';
@@ -79,9 +93,9 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
   }
   function run(a, target) { var cur = enc.current();
     if (P && F && target && (a.id === 'attack' || a.id === 'cast')) { var ti = foeList().indexOf(target), d = ti >= 0 && F[ti] ? dst(P, F[ti]) : 0;
-      if (a.id === 'attack') { var at = cur.attacks[a.attack || 0], rr = at.ranged ? 80 : reachOf(at);
-        if (d > (at.ranged ? 320 : rr) + 0.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - ' + (at.ranged ? 'out of range (320 ft max).' : 'out of reach (' + rr + ' ft). Walk closer.'), 'sys'); pending = null; render(); return; }
-        if (at.ranged && d > 80) a.dis = true; if (at.ranged) a.range = d; }
+      if (a.id === 'attack') { var at = cur.attacks[a.attack || 0], rg = at.rng || [80, 320], rr = at.ranged ? rg[0] : reachOf(at);
+        if (d > (at.ranged ? rg[1] : rr) + 0.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - ' + (at.ranged ? 'out of range (' + rg[1] + ' ft max).' : 'out of reach (' + rr + ' ft). Walk closer.'), 'sys'); pending = null; render(); return; }
+        if (at.ranged && d > rg[0]) a.dis = true; if (at.ranged) a.range = d; }
       else { var fxx = C.SPELL_FX[a.spell]; if (fxx && fxx.melee && d > 5.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - touch/melee spell needs 5 ft.', 'sys'); pending = null; render(); return; } if (d > 120) { log(target.name + ' is out of spell range (' + Math.round(d) + ' ft).', 'sys'); pending = null; render(); return; } } }
     var cur3 = null, tg = a.aoe ? enc.units.filter(function (u) { return u.team !== cur.team && !u.dead; }) : target ? [target] : [];
     var r = C.act(enc, cur, a, tg, null); r.log.forEach(function (l) { log(l, /hit|slain|down|drops/.test(l) ? 'hit' : ''); }); pending = null; if (enc.winner()) finish(enc.winner()); else render(); }
@@ -105,7 +119,7 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
   setup();
   var qs = /[?&]enc=([^&]+)/.exec(location.search);
   if (qs) { var act = null; try { act = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { }
-    roster.forEach(function (r) { r.on = false; }); if (act) roster.push({ label: act.name, sheet: act, on: true }); else roster[0].on = true;
+    roster.forEach(function (r) { r.on = false; }); if (act) { window.DNDINV.ensure(act); act.hp = Math.max(1, act.hp); } if (act) roster.push({ label: act.name, sheet: act, on: true }); else roster[0].on = true;
     Object.keys(foes).forEach(function (k) { foes[k] = 0; }); decodeURIComponent(qs[1]).split(',').forEach(function (p) { var a = p.split(':'); if (a[0] in foes) foes[a[0]] = Math.min(8, +a[1] || 1); });
     start(); }
 })();

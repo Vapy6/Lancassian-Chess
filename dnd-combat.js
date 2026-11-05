@@ -10,12 +10,14 @@
   function combatant(src, team) {
     var c = {
       id: src.id || (src.name + '#' + Math.floor(Math.random() * 1e6)), name: src.name, team: team || 'party',
-      hp: src.hpMax || src.hp, hpMax: src.hpMax || src.hp, temp: 0, ac: src.ac, mods: src.mods || { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+      hp: (src.hp !== undefined && src.hpMax) ? src.hp : (src.hpMax || src.hp), hpMax: src.hpMax || src.hp, temp: 0, ac: src.ac, mods: src.mods || { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
       prof: src.profBonus || src.prof || 2, speed: src.speed || 30, saves: src.saves || {}, attacks: src.attacks || [], spellcasting: src.spellcasting || null,
       conditions: {}, resist: src.resist || [], vulnerable: src.vulnerable || [], immune: src.immune || [], dead: false, stable: false, deathSaves: { ok: 0, fail: 0 },
       concentrating: null, initiative: 0, turn: null, level: src.level || 1, cls: src.cls || null, monster: !src.cls, used: {}, acBonus: 0, dodging: false, rage: false, packTactics: !!src.packTactics, multiattack: src.multiattack || 1, undeadFortitude: !!src.undeadFortitude, layPool: src.cls === 'Paladin' ? 5 * (src.level || 1) : 0, xp: src.xp || 0, critMin: (src.features || []).some(function (f) { return /Improved Critical/.test(f); }) ? 19 : 20, slots: src.spellcasting ? JSON.parse(JSON.stringify(src.spellcasting.slots)) : {}
     };
-    c.baseAC = c.ac; return c;
+    c.baseAC = c.ac; c.potions = { h: 0, g: 0 }; c.potionsUsed = { h: 0, g: 0 };
+    (src.inventory || []).forEach(function (x) { if (x.name === 'Potion of Healing') c.potions.h += x.qty; else if (x.name === 'Potion of Greater Healing') c.potions.g += x.qty; });
+    return c;
   }
   function has(c, k) { return !!c.conditions[k]; }
   function addCondition(c, k) { c.conditions[k] = true; if (k === 'unconscious' || k === 'paralyzed' || k === 'stunned') c.conditions.incapacitated = true; }
@@ -170,6 +172,8 @@
         cand.forEach(function (x) { if (x.hp <= pool && !has(x, 'unconscious')) { pool -= x.hp; addCondition(x, 'unconscious'); addCondition(x, 'prone'); put.push(x.name); } }); log.push(actor.name + ' casts Sleep: ' + (put.length ? put.join(', ') + ' fall asleep.' : 'nobody falls asleep.')); }
       return { ok: true, log: log };
     }
+    if (id === 'potion') { var pk = action.kind === 'g' ? 'g' : 'h'; if (!actor.potions || !(actor.potions[pk] > 0)) return fail('You have no such potion.'); if (actor.hp >= actor.hpMax) return fail('You are already at full hit points.'); if (!enc.spend('action')) return fail('No action left.');
+      actor.potions[pk]--; actor.potionsUsed[pk]++; var ph = heal(actor, pk === 'g' ? rollDamage('4d4', 4, false, rng) : rollDamage('2d4', 2, false, rng)); return { ok: true, log: [actor.name + ' drinks a Potion of ' + (pk === 'g' ? 'Greater ' : '') + 'Healing: +' + ph + ' HP (' + actor.hp + '/' + actor.hpMax + ').'] }; }
     if (id === 'dodge') { if (!enc.spend('action')) return fail('No action left.'); actor.dodging = true; return { ok: true, log: [actor.name + ' takes the Dodge action.'] }; }
     if (id === 'disengage') { if (!enc.spend('action')) return fail('No action left.'); actor.disengaged = true; return { ok: true, log: [actor.name + ' disengages (no opportunity attacks this turn).'] }; }
     if (id === 'actionSurge') { if (actor.cls !== 'Fighter' || actor.level < 2 || actor.used.surge) return fail('Action Surge is not available.'); actor.used.surge = true; actor.turn.action = true; return { ok: true, log: [actor.name + ' uses Action Surge: one additional action.'] }; }
@@ -186,6 +190,7 @@
       o.push({ id: 'cast', spell: n, label: n + (fx.slot ? ' (L' + fx.slot + ', ' + (c.slots[fx.slot] || 0) + ' left)' : ''), target: fx.kind === 'heal' || fx.kind === 'magearmor' ? 'ally' : fx.kind === 'shield' ? 'none' : 'enemy', aoe: !!fx.aoe || fx.kind === 'sleep' }); });
     if (c.cls === 'Fighter' && !c.used.secondWind) o.push({ id: 'secondWind', label: 'Second Wind', target: 'none' }); if (c.cls === 'Fighter' && c.level >= 2 && !c.used.surge) o.push({ id: 'actionSurge', label: 'Action Surge', target: 'none' }); if (c.cls === 'Barbarian' && !c.rage) o.push({ id: 'rage', label: 'Rage', target: 'none' });
     if (c.cls === 'Paladin' && c.layPool > 0) o.push({ id: 'layOnHands', label: 'Lay on Hands (' + c.layPool + ' HP pool)', target: 'ally' });
+    if (c.potions && c.potions.h > 0) o.push({ id: 'potion', kind: 'h', label: 'Potion of Healing (' + c.potions.h + ')', target: 'none' }); if (c.potions && c.potions.g > 0) o.push({ id: 'potion', kind: 'g', label: 'Greater Healing potion (' + c.potions.g + ')', target: 'none' });
     o.push({ id: 'dodge', label: 'Dodge', target: 'none' }); o.push({ id: 'dash', label: 'Dash', target: 'none' }); o.push({ id: 'disengage', label: 'Disengage', target: 'none' }); return o;
   }
   /** Simple monster / auto AI: attack the weakest living enemy. */
@@ -193,6 +198,7 @@
     var foes = enc.units.filter(function (u) { return u.team !== actor.team && !u.dead && u.hp > 0; }); if (!foes.length) return [];
     foes.sort(function (a, b) { return a.hp - b.hp; }); var melee = 0; actor.attacks.forEach(function (a, i) { if (!a.ranged && !melee) melee = i; });
     var best = 0, bd = -1; actor.attacks.forEach(function (a, i) { var e = (a.bonus || 0) + 0 * i + DNDavg(a); if (e > bd) { bd = e; best = i; } });
+    if (actor.potions && actor.hp > 0 && actor.hp <= actor.hpMax / 4 && (actor.potions.g > 0 || actor.potions.h > 0)) return act(enc, actor, { id: 'potion', kind: actor.potions.g > 0 ? 'g' : 'h' }, [], rng).log;
     if (actor.cls === 'Barbarian' && !actor.rage) act(enc, actor, { id: 'rage' }, [], rng);
     if (actor.cls === 'Fighter' && !actor.used.secondWind && actor.hp <= actor.hpMax / 2) return act(enc, actor, { id: 'secondWind' }, [], rng).log;
     var sc = actor.spellcasting; if (sc) { var opts = actions(actor).filter(function (a) { return a.id === 'cast' && a.target === 'enemy'; }); if (opts.length) { var pick = opts[opts.length - 1]; var ally = enc.units.filter(function (u) { return u.team === actor.team && !u.dead && u.hp > 0 && u.hp < u.hpMax / 2; }).sort(function (a, b) { return a.hp - b.hp; })[0];
