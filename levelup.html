@@ -1,0 +1,49 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Level Up</title>
+<style>
+:root{--bg:#14161c;--card:#1d2029;--line:#2e3340;--tx:#e8e6df;--mut:#9aa0ad;--gold:#e0b84a;--ok:#7ec27e;--bad:#e07a6a}
+*{box-sizing:border-box}body{margin:0;padding:18px;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,sans-serif;max-width:820px;margin:auto}
+h1{font:600 26px Georgia,serif;color:var(--gold);margin:0 0 4px}h2{font:600 13px sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}.note{color:var(--mut);font-size:13px}
+.btn{background:var(--gold);color:#222;border:0;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer}.btn:disabled{opacity:.4;cursor:default}.g{background:#2b303c;color:var(--tx)}
+.bar{height:10px;background:#2b303c;border-radius:5px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--gold)}
+label.chk{display:inline-block;margin:3px 10px 3px 0;padding:3px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer}label.chk input{margin-right:5px}
+.asi{display:flex;gap:10px;flex-wrap:wrap}.asi div{text-align:center}.asi input{width:56px}.err{color:var(--bad)}.ok{color:var(--ok)}a{color:var(--gold)}
+</style></head><body>
+<h1>Level Up</h1><div class="note">D&amp;D 5e (2014 SRD), levels 1-5. <a href="world3d.html">Back to the 3D world</a> | <a href="character.html">Character creator</a></div>
+<div id="root"></div>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script>
+<script>
+(function () {
+  var L = window.DNDLEVELS, DATA = window.DNDDATA, $ = function (i) { return document.getElementById(i); }, root = $('root'), ch = null;
+  try { ch = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { }
+  function save(sheet) { try { localStorage.setItem('dnd.active', JSON.stringify(sheet)); var l = JSON.parse(localStorage.getItem('dnd.characters') || '[]'); for (var i = 0; i < l.length; i++) if (l[i].name === sheet.name && l[i].cls === sheet.cls) l[i] = sheet; localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (e) { } }
+  function boxes(id, list, own, n) { return '<div id="' + id + '" data-n="' + n + '">' + list.filter(function (x) { return own.indexOf(x) < 0; }).map(function (x) { return '<label class="chk"><input type="checkbox" value="' + x + '">' + x + '</label>'; }).join('') + '</div>'; }
+  function picked(id) { var e = $(id); return e ? [].slice.call(e.querySelectorAll('input:checked')).map(function (x) { return x.value; }) : []; }
+  function render(msg) {
+    if (!ch) { root.innerHTML = '<div class="card">No active character. Save one in the <a href="character.html">creator</a> and press "play in 3D" first.</div>'; return; }
+    var nx = L.nextXp(ch), pct = nx ? Math.min(100, (ch.xp || 0) / nx * 100) : 100, h = '<div class="card"><h2>' + ch.name + ' - ' + (ch.subrace || ch.race) + ' ' + ch.cls + ', level ' + ch.level + '</h2><div class="note">XP ' + (ch.xp || 0) + (nx ? ' / ' + nx : ' (max level in this version)') + '</div><div class="bar"><i style="width:' + pct + '%"></i></div>' + (msg || '') + '</div>';
+    if (!L.canLevel(ch)) { root.innerHTML = h + '<div class="card note">' + (ch.level >= L.MAXLV ? 'Level ' + L.MAXLV + ' is the highest level supported so far.' : 'Win more fights to earn XP. Next level at ' + nx + ' XP.') + '</div>'; return; }
+    var p = L.plan(ch), cs = ch.spellcasting, CS = DATA.CLASS_SPELLS[ch.cls], f = '<div class="card"><h2>Becoming level ' + p.level + '</h2>';
+    f += '<div>Gains: hit points, proficiency bonus, spell slots and features where your class gets them.' + (p.features.length ? '<br><b>New features:</b> ' + p.features.join(', ') : '') + '</div></div>';
+    if (p.asi) { f += '<div class="card"><h2>Ability Score Improvement</h2><div class="note">Spend 2 points: +2 to one score or +1 to two (max 20).</div><div class="asi">' + ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(function (a) { return '<div><b>' + a.toUpperCase() + '</b> ' + ch.scores[a] + '<br><input type="number" id="asi_' + a + '" min="0" max="2" value="0"></div>'; }).join('') + '</div></div>'; }
+    if (cs) {
+      if (p.cantrips) f += '<div class="card"><h2>New cantrips (' + p.cantrips + ')</h2>' + boxes('cantrips', CS[0], cs.cantripList || [], p.cantrips) + '</div>';
+      if (p.known) f += '<div class="card"><h2>New spells known (' + p.known + ')</h2>' + boxes('known', CS[1], cs.knownSpells || [], p.known) + '</div>';
+      if (p.book) f += '<div class="card"><h2>Add to spellbook (' + p.book + ')</h2>' + boxes('book', CS[1], cs.knownSpells || [], p.book) + '</div>';
+      if (p.prepared) { var pool = ch.cls === 'Wizard' ? (cs.knownSpells || []) : CS[1]; f += '<div class="card"><h2>Prepared spells (choose exactly ' + p.prepared + ')</h2><div class="note">' + (ch.cls === 'Wizard' ? 'Your spellbook spells (new ones can be prepared after you add them).' : 'Any spell on your class list.') + '</div><div id="prepared" data-n="' + p.prepared + '">' + pool.map(function (x) { return '<label class="chk"><input type="checkbox" value="' + x + '"' + ((cs.preparedSpells || []).indexOf(x) >= 0 ? ' checked' : '') + '>' + x + '</label>'; }).join('') + '</div></div>'; }
+    }
+    if (p.expertise) f += '<div class="card"><h2>Expertise (' + p.expertise + ')</h2>' + '<div id="expertise">' + Object.keys(ch.skills).filter(function (k) { return ch.skills[k].proficient && !ch.skills[k].expertise; }).map(function (k) { return '<label class="chk"><input type="checkbox" value="' + k + '">' + k + '</label>'; }).join('') + '</div></div>';
+    f += '<div class="card"><button class="btn" id="go">Level up</button> <span id="err" class="err"></span></div>';
+    root.innerHTML = h + f; $('go').onclick = go;
+  }
+  function go() {
+    var c = {}, asi = {}; ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(function (a) { var e = $('asi_' + a); if (e) asi[a] = +e.value || 0; }); if ($('asi_str')) c.asi = asi;
+    c.cantrips = picked('cantrips'); c.known = picked('known'); c.book = picked('book'); c.prepared = picked('prepared'); c.expertise = picked('expertise');
+    // a Wizard may prepare a spell they are adding to the spellbook this level; the rules module handles the pool
+    var r = L.apply(ch, c);
+    if (r.errors) { $('err').textContent = r.errors.join(' '); return; }
+    ch = r.sheet; save(ch); render('<div class="ok" style="margin-top:8px"><b>Level ' + ch.level + '!</b><br>' + r.gains.join('<br>') + '</div>');
+  }
+  render();
+})();
+</script></body></html>

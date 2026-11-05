@@ -13,7 +13,7 @@
       hp: src.hpMax || src.hp, hpMax: src.hpMax || src.hp, temp: 0, ac: src.ac, mods: src.mods || { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
       prof: src.profBonus || src.prof || 2, speed: src.speed || 30, saves: src.saves || {}, attacks: src.attacks || [], spellcasting: src.spellcasting || null,
       conditions: {}, resist: src.resist || [], vulnerable: src.vulnerable || [], immune: src.immune || [], dead: false, stable: false, deathSaves: { ok: 0, fail: 0 },
-      concentrating: null, initiative: 0, turn: null, level: src.level || 1, cls: src.cls || null, monster: !src.cls, used: {}, acBonus: 0, dodging: false, rage: false, packTactics: !!src.packTactics, multiattack: src.multiattack || 1, undeadFortitude: !!src.undeadFortitude, layPool: src.cls === 'Paladin' ? 5 * (src.level || 1) : 0, xp: src.xp || 0, slots: src.spellcasting ? JSON.parse(JSON.stringify(src.spellcasting.slots)) : {}
+      concentrating: null, initiative: 0, turn: null, level: src.level || 1, cls: src.cls || null, monster: !src.cls, used: {}, acBonus: 0, dodging: false, rage: false, packTactics: !!src.packTactics, multiattack: src.multiattack || 1, undeadFortitude: !!src.undeadFortitude, layPool: src.cls === 'Paladin' ? 5 * (src.level || 1) : 0, xp: src.xp || 0, critMin: (src.features || []).some(function (f) { return /Improved Critical/.test(f); }) ? 19 : 20, slots: src.spellcasting ? JSON.parse(JSON.stringify(src.spellcasting.slots)) : {}
     };
     c.baseAC = c.ac; return c;
   }
@@ -34,7 +34,7 @@
   /** Resolve one attack. atk: {name, bonus, dice:'1d8', mod, type, ranged?, magical?}. Returns a log-friendly result and applies damage. */
   function attack(att, tgt, atk, o, rng) {
     o = o || {}; var mode = attackMode(att, tgt, { adv: o.adv, dis: o.dis, range: o.range });
-    var r = DND.d20(atk.bonus, mode, rng), autoCrit = (has(tgt, 'paralyzed') || has(tgt, 'unconscious')) && (o.range === undefined || o.range <= 5);
+    var r = DND.d20(atk.bonus, mode, rng); if (att.critMin < 20 && !r.fumble && r.natural >= att.critMin) r.crit = true; var autoCrit = (has(tgt, 'paralyzed') || has(tgt, 'unconscious')) && (o.range === undefined || o.range <= 5);
     var hit = r.crit || (!r.fumble && r.total >= tgt.ac), crit = r.crit || (hit && autoCrit), out = { attacker: att.name, target: tgt.name, attack: atk.name, roll: r, mode: mode, hit: hit, crit: crit, damage: 0 };
     if (!hit) return out;
     var dmg = rollDamage(atk.dice, atk.mod || 0, crit, rng); out.damage = dmg; out.applied = damage(tgt, dmg, atk.type, { crit: crit, magical: atk.magical, melee: !atk.ranged });
@@ -94,7 +94,7 @@
   Encounter.prototype.next = function () {
     var guard = 0; do {
       this.index++; if (this.index >= this.order.length) { this.index = 0; this.round++; }
-      var u = this.order[this.index]; if (u && !u.dead) { u.dodging = false; u.acBonus = 0; u.turn = { action: true, bonus: true, reaction: true, move: u.speed * (has(u, 'grappled') || has(u, 'restrained') ? 0 : 1) }; if (u.hp === 0 && !u.stable) { var ds = deathSave(u, this.rng); this.log.push(u.name + ' death save: ' + ds.outcome); } return u; }
+      var u = this.order[this.index]; if (u && !u.dead) { u.dodging = false; u.disengaged = false; u.acBonus = 0; u.turn = { action: true, bonus: true, reaction: true, move: u.speed * (has(u, 'grappled') || has(u, 'restrained') ? 0 : 1) }; if (u.hp === 0 && !u.stable) { var ds = deathSave(u, this.rng); this.log.push(u.name + ' death save: ' + ds.outcome); } return u; }
     } while (++guard < this.order.length + 1); return null;
   };
   Encounter.prototype.winner = function () { var teams = {}; this.units.forEach(function (u) { if (!u.dead && u.hp > 0) teams[u.team] = 1; }); var k = Object.keys(teams); return k.length === 1 ? k[0] : k.length === 0 ? 'none' : null; };
@@ -131,7 +131,7 @@
     if (!r.hit) { log.push(line + 'miss.'); return r; }
     var dealt = r.applied ? r.applied.hp + r.applied.absorbed : 0, text = (r.crit ? 'CRITICAL HIT, ' : 'hit, ') + r.damage + ' ' + atk.type;
     if (actor.cls === 'Rogue' && !actor.used.sneak && (r.mode === 'adv' || o.allyNear) && (atk.ranged || (atk.props || []).indexOf('finesse') >= 0)) {
-      var sn = rollDamage('1d6', 0, r.crit, rng); damage(tgt, sn, atk.type, { magical: false }); actor.used.sneak = true; text += ' + ' + sn + ' sneak attack'; }
+      var sn = rollDamage(Math.ceil((actor.level || 1) / 2) + 'd6', 0, r.crit, rng); damage(tgt, sn, atk.type, { magical: false }); actor.used.sneak = true; text += ' + ' + sn + ' sneak attack'; }
     if (atk.rider && !tgt.dead) { var rd = atk.rider, sv = save(tgt, rd.save, rd.dc, null, rng);
       if (rd.cond && !sv.success) { addCondition(tgt, rd.cond); text += ', ' + tgt.name + ' falls ' + rd.cond; }
       if (rd.dmg) { var d2 = rollDamage(rd.dmg, 0, false, rng); if (sv.success && rd.half) d2 = Math.floor(d2 / 2); if (!sv.success || rd.half) { damage(tgt, d2, rd.type, {}); text += ', +' + d2 + ' ' + rd.type; } } }
@@ -171,9 +171,11 @@
       return { ok: true, log: log };
     }
     if (id === 'dodge') { if (!enc.spend('action')) return fail('No action left.'); actor.dodging = true; return { ok: true, log: [actor.name + ' takes the Dodge action.'] }; }
+    if (id === 'disengage') { if (!enc.spend('action')) return fail('No action left.'); actor.disengaged = true; return { ok: true, log: [actor.name + ' disengages (no opportunity attacks this turn).'] }; }
+    if (id === 'actionSurge') { if (actor.cls !== 'Fighter' || actor.level < 2 || actor.used.surge) return fail('Action Surge is not available.'); actor.used.surge = true; actor.turn.action = true; return { ok: true, log: [actor.name + ' uses Action Surge: one additional action.'] }; }
     if (id === 'dash') { if (!enc.spend('action')) return fail('No action left.'); actor.turn.move += actor.speed; return { ok: true, log: [actor.name + ' dashes.'] }; }
     if (id === 'secondWind') { if (actor.cls !== 'Fighter' || actor.used.secondWind) return fail('Second Wind is not available.'); if (!enc.spend('bonus')) return fail('No bonus action left.'); actor.used.secondWind = true; var g = heal(actor, rollDamage('1d10', actor.level, false, rng)); return { ok: true, log: [actor.name + ' uses Second Wind: +' + g + ' HP.'] }; }
-    if (id === 'rage') { if (actor.cls !== 'Barbarian' || actor.rage) return fail('Rage is not available.'); if ((actor.used.rage || 0) >= 2) return fail('No rages left.'); if (!enc.spend('bonus')) return fail('No bonus action left.'); actor.rage = true; actor.used.rage = (actor.used.rage || 0) + 1; ['bludgeoning', 'piercing', 'slashing'].forEach(function (x) { if (actor.resist.indexOf(x) < 0) actor.resist.push(x); }); return { ok: true, log: [actor.name + ' flies into a Rage! (+2 damage, resistance to weapon damage)'] }; }
+    if (id === 'rage') { if (actor.cls !== 'Barbarian' || actor.rage) return fail('Rage is not available.'); if ((actor.used.rage || 0) >= (actor.level >= 3 ? 3 : 2)) return fail('No rages left.'); if (!enc.spend('bonus')) return fail('No bonus action left.'); actor.rage = true; actor.used.rage = (actor.used.rage || 0) + 1; ['bludgeoning', 'piercing', 'slashing'].forEach(function (x) { if (actor.resist.indexOf(x) < 0) actor.resist.push(x); }); return { ok: true, log: [actor.name + ' flies into a Rage! (+2 damage, resistance to weapon damage)'] }; }
     if (id === 'layOnHands') { var w2 = t || actor; if (actor.cls !== 'Paladin' || actor.layPool <= 0) return fail('Lay on Hands is not available.'); if (!enc.spend('action')) return fail('No action left.'); var amt2 = Math.min(actor.layPool, action.amount || 5, w2.hpMax - w2.hp); actor.layPool -= amt2; heal(w2, amt2); return { ok: true, log: [actor.name + ' lays hands on ' + w2.name + ': +' + amt2 + ' HP.'] }; }
     return fail('Unknown action.');
   }
@@ -182,9 +184,9 @@
     var o = [], i; c.attacks.forEach(function (a, i2) { o.push({ id: 'attack', attack: i2, label: a.name + ' (' + (a.bonus >= 0 ? '+' : '') + a.bonus + ', ' + (/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + (a.mod || 0)) : a.dice + ((a.mod || 0) ? (a.mod > 0 ? '+' : '') + a.mod : '')) + ')', target: 'enemy' }); });
     var sc = c.spellcasting; if (sc) (sc.cantripList || []).concat(sc.preparedSpells || [], sc.domainSpells || []).filter(function (n, k, a) { return a.indexOf(n) === k; }).forEach(function (n) { var fx = SPELL_FX[n]; if (!fx) return;
       o.push({ id: 'cast', spell: n, label: n + (fx.slot ? ' (L' + fx.slot + ', ' + (c.slots[fx.slot] || 0) + ' left)' : ''), target: fx.kind === 'heal' || fx.kind === 'magearmor' ? 'ally' : fx.kind === 'shield' ? 'none' : 'enemy', aoe: !!fx.aoe || fx.kind === 'sleep' }); });
-    if (c.cls === 'Fighter' && !c.used.secondWind) o.push({ id: 'secondWind', label: 'Second Wind', target: 'none' }); if (c.cls === 'Barbarian' && !c.rage) o.push({ id: 'rage', label: 'Rage', target: 'none' });
+    if (c.cls === 'Fighter' && !c.used.secondWind) o.push({ id: 'secondWind', label: 'Second Wind', target: 'none' }); if (c.cls === 'Fighter' && c.level >= 2 && !c.used.surge) o.push({ id: 'actionSurge', label: 'Action Surge', target: 'none' }); if (c.cls === 'Barbarian' && !c.rage) o.push({ id: 'rage', label: 'Rage', target: 'none' });
     if (c.cls === 'Paladin' && c.layPool > 0) o.push({ id: 'layOnHands', label: 'Lay on Hands (' + c.layPool + ' HP pool)', target: 'ally' });
-    o.push({ id: 'dodge', label: 'Dodge', target: 'none' }); o.push({ id: 'dash', label: 'Dash', target: 'none' }); return o;
+    o.push({ id: 'dodge', label: 'Dodge', target: 'none' }); o.push({ id: 'dash', label: 'Dash', target: 'none' }); o.push({ id: 'disengage', label: 'Disengage', target: 'none' }); return o;
   }
   /** Simple monster / auto AI: attack the weakest living enemy. */
   function aiTurn(enc, actor, rng) {
@@ -200,7 +202,7 @@
   }
   function DNDavg(a) { var m = /^(\d*)d(\d+)$/.exec(a.dice); return m ? (+(m[1] || 1)) * (+m[2] + 1) / 2 + (a.mod || 0) : (+a.dice || 0) + (a.mod || 0); }
 
-  var api = { SPELL_FX: SPELL_FX, act: act, actions: actions, aiTurn: aiTurn, effectiveAC: effectiveAC, CONDITIONS: CONDITIONS, combatant: combatant, attackMode: attackMode, attack: attack, rollDamage: rollDamage, damage: damage, heal: heal, save: save, deathSave: deathSave,
+  var api = { doAttack: doAttack, SPELL_FX: SPELL_FX, act: act, actions: actions, aiTurn: aiTurn, effectiveAC: effectiveAC, CONDITIONS: CONDITIONS, combatant: combatant, attackMode: attackMode, attack: attack, rollDamage: rollDamage, damage: damage, heal: heal, save: save, deathSave: deathSave,
     concentrationCheck: concentrationCheck, abilityCheck: abilityCheck, castSave: castSave, useSlot: useSlot, longRest: longRest, addCondition: addCondition, removeCondition: removeCondition, Encounter: Encounter };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DNDCOMBAT = api;
 })(typeof window !== 'undefined' ? window : this);

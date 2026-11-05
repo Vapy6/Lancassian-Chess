@@ -1041,15 +1041,16 @@ var fl = (function () {
       var pick = pool[Math.floor(Math.random() * pool.length)], n = /Ogre|Bear|Spider|Orc/.test(pick) ? 1 + (lv >= 4 && r < 0.4 ? 1 : 0) : 1 + Math.floor(Math.random() * (lv >= 3 ? 4 : 3));
       var b = document.createElement('div'); b.style.cssText = 'position:fixed;top:0;right:0;bottom:0;width:min(470px,94vw);z-index:50;background:rgba(10,12,18,.9);display:flex;flex-direction:column;padding:10px;box-shadow:-6px 0 24px rgba(0,0,0,.5)';
       b.innerHTML = '<div style="color:#fff;font:600 16px sans-serif;margin-bottom:8px">A wild encounter: ' + n + ' x ' + pick + ' <button id="encx" style="margin-left:12px;padding:4px 12px">Close / flee</button> <button id="encm" style="padding:4px 10px">Hide menu</button></div><iframe style="width:100%;flex:1;border:0;border-radius:8px;background:#111"></iframe>';
-      document.body.appendChild(b); ENC.box = b; ENC.foes = []; for (var fi = 0; fi < n; fi++) { var a = WALK.body + (fi - (n - 1) / 2) * 0.7, dd = (12 + 4 * (fi % 2)) * FT, fx = WALK.x - Math.sin(cam.yaw) * dd * 1.0 + Math.cos(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT, fz = WALK.z - Math.cos(cam.yaw) * dd - Math.sin(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT; ENC.foes.push({ x: fx, z: fz, y: groundAt(fx, fz), body: Math.atan2(WALK.x - fx, WALK.z - fz), pick: pick }); }
+      document.body.appendChild(b); ENC.box = b; ENC.ack = false; ENC.lp = null; ENC.left = 0; ENC.mine = false; ENC.foes = []; for (var fi = 0; fi < n; fi++) { var a = WALK.body + (fi - (n - 1) / 2) * 0.7, dd = (28 + 6 * (fi % 2)) * FT, fx = WALK.x - Math.sin(cam.yaw) * dd * 1.0 + Math.cos(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT, fz = WALK.z - Math.cos(cam.yaw) * dd - Math.sin(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT; ENC.foes.push({ x: fx, z: fz, y: groundAt(fx, fz), body: Math.atan2(WALK.x - fx, WALK.z - fz), pick: pick }); }
       b.querySelector('iframe').src = 'battle.html?enc=' + encodeURIComponent(pick + ':' + n);
       b.querySelector('#encm').onclick = function () { var fr = b.querySelector('iframe'), h = fr.style.display === 'none'; fr.style.display = h ? '' : 'none'; b.style.bottom = h ? '0' : 'auto'; this.textContent = h ? 'Hide menu' : 'Show menu'; };
       b.querySelector('#encx').onclick = function () { b.remove(); ENC.box = null; if (ENC.won) ENC.foes = []; ENC.won = false; for (var k in keys) keys[k] = false; };
     }
-    window.addEventListener('message', function (e) { if (e.data && e.data.dndState && ENC.box) { ENC.tgt = e.data.tgt; e.data.foes.forEach(function (u, i) { var f = ENC.foes[i]; if (f) { if (f.hp !== undefined && u.hp < f.hp) f.hit = performance.now(); f.dead = u.dead; f.cur = u.cur; f.hp = u.hp; f.max = u.max; f.name = u.name; } }); return; } if (e.data && e.data.dndBattle && ENC.box) { ENC.won = e.data.winner === 'party'; if (ENC.won && HERO) { HERO.xp = (HERO.xp || 0) + e.data.xp; try { localStorage.setItem('dnd.active', JSON.stringify(HERO)); } catch (x) { } } var t = ENC.box.firstChild; t.firstChild.textContent = (e.data.winner === 'party' ? 'Victory! +' + e.data.xp + ' XP' + (HERO ? ' (total ' + HERO.xp + ')' : '') + '. ' : 'Defeat. ') + ' '; } });
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndFoeMove && ENC.foes[e.data.i]) { var ff = ENC.foes[e.data.i]; ff.tx = e.data.x * FT; ff.tz = e.data.z * FT; return; } if (e.data && e.data.dndState && ENC.box) { ENC.ack = true; ENC.tgt = e.data.tgt; ENC.left = e.data.left; ENC.mine = e.data.mine; e.data.foes.forEach(function (u, i) { var f = ENC.foes[i]; if (f) { if (f.hp !== undefined && u.hp < f.hp) f.hit = performance.now(); f.dead = u.dead; f.cur = u.cur; f.hp = u.hp; f.max = u.max; f.name = u.name; } }); return; } if (e.data && e.data.dndBattle && ENC.box) { ENC.won = e.data.winner === 'party'; if (ENC.won && HERO) { HERO.xp = (HERO.xp || 0) + e.data.xp; try { localStorage.setItem('dnd.active', JSON.stringify(HERO)); } catch (x) { } } var XPT = [0, 300, 900, 2700, 6500, 14000]; if (ENC.won && HERO && (HERO.level || 1) < 5 && (HERO.xp || 0) >= XPT[HERO.level || 1]) { var hd = ENC.box.firstChild; if (!hd.querySelector('a')) { var la = document.createElement('a'); la.href = 'levelup.html'; la.textContent = ' LEVEL UP available!'; la.style.cssText = 'color:#fc3;margin-left:10px'; hd.appendChild(la); } } var t = ENC.box.firstChild; t.firstChild.textContent = (e.data.winner === 'party' ? 'Victory! +' + e.data.xp + ' XP' + (HERO ? ' (total ' + HERO.xp + ')' : '') + '. ' : 'Defeat. ') + ' '; } });
     var FUI = [];
     function foeUI(vp, w, hh) {
       var on = !!ENC.box, i;
+      if (on) { var tn = performance.now(); if (tn - (ENC.ps || 0) > 120) { var px = WALK.x / FT, pz = WALK.z / FT; if (!ENC.lp || Math.hypot(px - ENC.lp[0], pz - ENC.lp[1]) > 0.05 || !ENC.ack) { ENC.ps = tn; ENC.lp = [px, pz]; try { ENC.box.querySelector('iframe').contentWindow.postMessage({ dndPos: { p: [px, pz], f: ENC.foes.map(function (q) { return [q.x / FT, q.z / FT]; }) } }, '*'); } catch (x) { } } } }
       for (i = 0; i < Math.max(FUI.length, ENC.foes.length); i++) {
         var f = ENC.foes[i], el = FUI[i];
         if (!el && f) { el = FUI[i] = document.createElement('div'); el.style.cssText = 'position:fixed;z-index:40;transform:translate(-50%,-100%);font:600 12px sans-serif;color:#fff;text-align:center;text-shadow:0 1px 3px #000;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.45)'; el.innerHTML = '<div></div><div style="height:5px;margin-top:2px;background:#400;border-radius:3px;overflow:hidden"><div style="height:100%;background:#d44"></div></div>'; el.dataset.i = i; el.onclick = (function (k) { return function () { if (ENC.box && ENC.tgt) ENC.box.querySelector('iframe').contentWindow.postMessage({ dndTarget: k }, '*'); }; })(i); document.body.appendChild(el); }
@@ -1060,7 +1061,7 @@ var fl = (function () {
         var cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz;
         if (cw <= 0.0001) { el.style.display = 'none'; continue; }
         el.style.display = 'block'; el.style.left = (cx / cw * 0.5 + 0.5) * w + 'px'; el.style.top = (1 - (cy / cw * 0.5 + 0.5)) * hh + 'px';
-        el.firstChild.textContent = (f.name || f.pick) + (f.hp !== undefined ? ' ' + Math.max(0, f.hp) + '/' + f.max : '');
+        el.firstChild.textContent = (f.name || f.pick) + (f.hp !== undefined ? ' ' + Math.max(0, f.hp) + '/' + f.max : '') + ' · ' + Math.round(Math.hypot(f.x - WALK.x, f.z - WALK.z) / FT) + ' ft';
         el.lastChild.firstChild.style.width = f.hp !== undefined ? Math.max(0, f.hp / f.max * 100) + '%' : '100%';
         el.style.cursor = ENC.tgt ? 'pointer' : 'default'; el.style.outline = ENC.tgt ? '2px solid #fc3' : 'none'; el.style.background = f.cur ? 'rgba(160,30,20,.7)' : 'rgba(0,0,0,.45)';
       }
@@ -1078,13 +1079,13 @@ var fl = (function () {
       var f = [-Math.sin(cam.yaw), -Math.cos(cam.yaw)], r = [Math.cos(cam.yaw), -Math.sin(cam.yaw)], mx = 0, mz = 0;
       if (keys.w || keys.arrowup) { mx += f[0]; mz += f[1]; } if (keys.s || keys.arrowdown) { mx -= f[0]; mz -= f[1]; }
       if (keys.d || keys.arrowright) { mx += r[0]; mz += r[1]; } if (keys.a || keys.arrowleft) { mx -= r[0]; mz -= r[1]; }
-      if (ENC.box) { mx = 0; mz = 0; } var len = Math.hypot(mx, mz), sprint = !!keys.shift; WALK.moving = len > 0;
+      if (ENC.box && !(ENC.mine && ENC.left > 0.05)) { mx = 0; mz = 0; } var len = Math.hypot(mx, mz), sprint = !!keys.shift && !ENC.box, ox = WALK.x, oz = WALK.z; WALK.moving = len > 0;
       function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
       if (WALK.moving) {
-        var spd = 13 * FT * (sprint ? 3 : 1) * dt, dx = mx / len * spd, dz = mz / len * spd;
+        var spd = 13 * FT * (sprint ? 3 : 1) * dt; if (ENC.box) spd = Math.min(spd, ENC.left * FT); var spd0 = spd, dx = mx / len * spd, dz = mz / len * spd;
         if (ok(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; } else if (ok(WALK.x + dx, WALK.z)) WALK.x += dx; else if (ok(WALK.x, WALK.z + dz)) WALK.z += dz;
         var tgt = Math.atan2(mx, mz), diff = tgt - WALK.body; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); WALK.body += diff * Math.min(1, dt * 12);
-        WALK.phase += dt * (sprint ? 11 : 7.5);
+        WALK.phase += dt * (sprint ? 11 : 7.5); if (ENC.box) ENC.left = Math.max(0, ENC.left - Math.hypot(WALK.x - ox, WALK.z - oz) / FT);
       }
       if (!WALK.third) WALK.body = cam.yaw + Math.PI;
       var gnd = groundAt(WALK.x, WALK.z);
@@ -1096,8 +1097,10 @@ var fl = (function () {
     }
     function drawPlayer(vpRot, far) {
       if (!WP || !WALK.on) return;
+      var tnow = performance.now(), fdt = Math.min(0.1, (tnow - (ENC.t || tnow)) / 1000); ENC.t = tnow;
+      ENC.foes.forEach(function (f) { f.mv = false; if (f.tx === undefined) return; var ddx = f.tx - f.x, ddz = f.tz - f.z, dl = Math.hypot(ddx, ddz), st = 30 * FT * fdt; if (dl > 1e-9) { f.mv = true; if (dl <= st) { f.x = f.tx; f.z = f.tz; f.mv = false; } else { f.x += ddx / dl * st; f.z += ddz / dl * st; } f.y = groundAt(f.x, f.z); } if (f.mv || true) f.body = Math.atan2(WALK.x - f.x, WALK.z - f.z); });
       if (WALK.third) drawFig(WALK.x, WALK.y, WALK.z, WALK.body, WALK.phase, WALK.moving, !!keys.shift, vpRot, far, 1);
-      var sv = COL.tunic, sp = COL.pants, ss = COL.skin; ENC.foes.forEach(function (f) { if (f.dead) return; var c = FC[f.pick] || [0.5, 0.2, 0.2]; if (f.hit && performance.now() - f.hit < 350) c = [1, 0.15, 0.1]; COL.tunic = c; COL.pants = [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]; COL.skin = [c[0] * 0.9 + 0.1, c[1] * 0.9 + 0.1, c[2] * 0.9]; drawFig(f.x, f.y, f.z, f.body, f.cur ? performance.now() / 120 : 0, !!f.cur, false, vpRot, far, /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1); }); COL.tunic = sv; COL.pants = sp; COL.skin = ss;
+      var sv = COL.tunic, sp = COL.pants, ss = COL.skin; ENC.foes.forEach(function (f) { if (f.dead) return; var c = FC[f.pick] || [0.5, 0.2, 0.2]; if (f.hit && performance.now() - f.hit < 350) c = [1, 0.15, 0.1]; COL.tunic = c; COL.pants = [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]; COL.skin = [c[0] * 0.9 + 0.1, c[1] * 0.9 + 0.1, c[2] * 0.9]; drawFig(f.x, f.y, f.z, f.body, f.mv ? performance.now() / 110 : 0, !!f.mv, false, vpRot, far, /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1); }); COL.tunic = sv; COL.pants = sp; COL.skin = ss;
     }
     function drawFig(px, py, pz, body, phase, moving, sprint, vpRot, far, sc) {
       var m = buildFigure(phase, moving, sprint);

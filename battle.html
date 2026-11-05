@@ -37,6 +37,12 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     $('foes').innerHTML = M.LIST.map(function (m) { return '<div class="row"><span class="n">' + m.name + ' <span class="note">CR ' + (m.cr < 1 ? (m.cr === 0.125 ? '1/8' : m.cr === 0.25 ? '1/4' : '1/2') : m.cr) + ' - HP ' + m.hp + ' AC ' + m.ac + '</span></span><button data-f="' + m.name + '" data-d="-1">-</button><b>' + foes[m.name] + '</b><button data-f="' + m.name + '" data-d="1">+</button></div>'; }).join('');
   }
   var enc, sel = null, pending = null, busy = false;
+  var P = null, F = null, oaRound = {}; // positions in feet, supplied by the 3D world when embedded
+  function dst(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  function foeList() { return enc ? enc.units.filter(function (u) { return u.team === 'foe'; }) : []; }
+  function meleeAtk(u) { var m = null; u.attacks.forEach(function (a) { if (!a.ranged && !m) m = a; }); return m; }
+  function reachOf(a) { return a && (a.props || []).indexOf('reach') >= 0 ? 10 : 5; }
+  function say(l) { log(l, /hit|slain|drops/.test(l) ? 'hit' : ''); }
   function log(t, cls) { var d = document.createElement('div'); d.textContent = t; if (cls) d.className = cls; $('log').appendChild(d); $('log').scrollTop = 1e9; }
   function start() {
     var party = roster.filter(function (r) { return r.on; }); var fl = []; Object.keys(foes).forEach(function (k) { for (var i = 0; i < foes[k]; i++) fl.push(k); });
@@ -47,11 +53,19 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     $('setup').style.display = 'none'; $('fight').style.display = 'block'; $('log').innerHTML = ''; enc.start(); log('Battle begins! Initiative: ' + enc.order.map(function (u) { return u.name; }).join(', '), 'sys'); begin();
   }
   function begin() { sel = null; pending = null; var w = enc.winner(); if (w) { finish(w); return; } var u = enc.current(); render(); if (u.team === 'party' && (u.hp <= 0 || u.dead) && !busy) { setTimeout(advance, 700); return; } if (u.team === 'foe' && !busy) setTimeout(function () { monsterTurn(); }, 500); }
-  function monsterTurn() { var u = enc.current(); if (!u || u.team !== 'foe') return; C.aiTurn(enc, u, null).forEach(function (l) { log(l, /hit|slain|drops/.test(l) ? 'hit' : ''); }); advance(); }
+  function monsterTurn() { var u = enc.current(); if (!u || u.team !== 'foe') return; var i = foeList().indexOf(u), skipAtk = false, wait = 0;
+    if (P && F && F[i] && u.turn && !(u.conditions && (u.conditions.paralyzed || u.conditions.stunned || u.conditions.unconscious))) {
+      var m = meleeAtk(u), want = m ? 4.5 : 60, moved = 0;
+      function go() { var d = dst(F[i], P); if (d <= want + 0.1 || u.turn.move <= 0) return; var step = Math.min(u.turn.move, d - want); F[i] = [F[i][0] + (P[0] - F[i][0]) / d * step, F[i][1] + (P[1] - F[i][1]) / d * step]; u.turn.move -= step; moved += step; }
+      go(); if (dst(F[i], P) > (m ? 5.6 : 80) && u.turn.action) { u.turn.action = false; u.turn.move += u.speed; log(u.name + ' dashes.', 'sys'); go(); }
+      if (moved > 0) { log(u.name + ' moves ' + Math.round(moved) + ' ft.', 'sys'); window.parent.postMessage({ dndFoeMove: true, i: i, x: F[i][0], z: F[i][1] }, '*'); wait = moved / 30 * 1000 + 150; }
+      skipAtk = !u.turn.action || dst(F[i], P) > (m ? 5.6 : 80);
+      if (skipAtk && u.turn.action) log(u.name + ' cannot reach anyone this turn.', 'sys'); }
+    setTimeout(function () { if (!skipAtk) C.aiTurn(enc, u, null).forEach(say); advance(); }, wait); }
   function advance() { var w = enc.winner(); if (w) { finish(w); return; } enc.next(); (enc.log || []).splice(0).forEach(function (l) { log(l, 'sys'); }); var u = enc.current(); if (u) log('-- ' + u.name + "'s turn --", 'sys'); begin(); }
   function finish(w) { try { var xx = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (window.parent !== window) window.parent.postMessage({ dndBattle: true, winner: w, xp: xx }, '*'); } catch (e) { } render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.'; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0); if (w === 'party') log('XP earned: ' + xp, 'sys'); }
   function render() {
-    try { if (window.parent !== window) window.parent.postMessage({ dndState: true, foes: enc.units.filter(function (u) { return u.team === 'foe'; }).map(function (u) { return { name: u.name, dead: !!u.dead || u.hp <= 0, hp: u.hp, max: u.hpMax, cur: enc.current() === u }; }), tgt: !!(pending && pending.target === 'enemy') }, '*'); } catch (e) { }
+    try { if (window.parent !== window) window.parent.postMessage({ dndState: true, foes: enc.units.filter(function (u) { return u.team === 'foe'; }).map(function (u) { return { name: u.name, dead: !!u.dead || u.hp <= 0, hp: u.hp, max: u.hpMax, cur: enc.current() === u }; }), tgt: !!(pending && pending.target === 'enemy'), left: (enc.current() && enc.current().turn) ? enc.current().turn.move : 0, mine: !!(enc.current() && enc.current().team === 'party') }, '*'); } catch (e) { }
     $('rnd').textContent = enc.round; var cur = enc.current(); $('cur').textContent = cur ? cur.name : '';
     $('order').innerHTML = enc.order.map(function (u, i) {
       var conds = Object.keys(u.conditions).join(', '), pct = Math.max(0, u.hp / u.hpMax * 100), need = pending && pending.target === 'enemy' ? u.team !== (cur && cur.team) : pending && pending.target === 'ally' ? u.team === (cur && cur.team) : false;
@@ -59,10 +73,16 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     }).join('');
     var mine = cur && cur.team === 'party' && !enc.winner();
     $('acts').innerHTML = mine ? C.actions(cur).map(function (a, i) { var spent = (a.id === 'cast' && C.SPELL_FX[a.spell].bonus) ? !cur.turn.bonus : (a.id === 'secondWind' || a.id === 'rage') ? !cur.turn.bonus : !cur.turn.action; return '<button class="btn' + (pending && pending._i === i ? '' : ' g') + '" data-a="' + i + '"' + (spent ? ' disabled' : '') + '>' + a.label + '</button>'; }).join('') : '';
-    $('hint').textContent = mine ? (pending ? (pending.target === 'enemy' ? 'Pick an enemy target' + (pending.aoe ? ' (area spells hit all foes)' : '') : 'Pick an ally') : 'Choose an action. Action: ' + (cur.turn.action ? 'ready' : 'used') + ' - Bonus: ' + (cur.turn.bonus ? 'ready' : 'used')) : (cur && !enc.winner() ? cur.name + ' is acting...' : '');
+    $('hint').textContent = mine ? (pending ? (pending.target === 'enemy' ? 'Pick an enemy target' + (pending.aoe ? ' (area spells hit all foes)' : '') : 'Pick an ally') : 'Choose an action. Action: ' + (cur.turn.action ? 'ready' : 'used') + ' - Bonus: ' + (cur.turn.bonus ? 'ready' : 'used') + ' - Movement left: ' + Math.round(cur.turn.move) + ' ft (walk in the world; Dash doubles it)') : (cur && !enc.winner() ? cur.name + ' is acting...' : '');
     $('end').disabled = !mine; $('auto').disabled = !!enc.winner();
   }
-  function run(a, target) { var cur = enc.current(), tg = a.aoe ? enc.units.filter(function (u) { return u.team !== cur.team && !u.dead; }) : target ? [target] : [];
+  function run(a, target) { var cur = enc.current();
+    if (P && F && target && (a.id === 'attack' || a.id === 'cast')) { var ti = foeList().indexOf(target), d = ti >= 0 && F[ti] ? dst(P, F[ti]) : 0;
+      if (a.id === 'attack') { var at = cur.attacks[a.attack || 0], rr = at.ranged ? 80 : reachOf(at);
+        if (d > (at.ranged ? 320 : rr) + 0.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - ' + (at.ranged ? 'out of range (320 ft max).' : 'out of reach (' + rr + ' ft). Walk closer.'), 'sys'); pending = null; render(); return; }
+        if (at.ranged && d > 80) a.dis = true; if (at.ranged) a.range = d; }
+      else { var fxx = C.SPELL_FX[a.spell]; if (fxx && fxx.melee && d > 5.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - touch/melee spell needs 5 ft.', 'sys'); pending = null; render(); return; } if (d > 120) { log(target.name + ' is out of spell range (' + Math.round(d) + ' ft).', 'sys'); pending = null; render(); return; } } }
+    var cur3 = null, tg = a.aoe ? enc.units.filter(function (u) { return u.team !== cur.team && !u.dead; }) : target ? [target] : [];
     var r = C.act(enc, cur, a, tg, null); r.log.forEach(function (l) { log(l, /hit|slain|down|drops/.test(l) ? 'hit' : ''); }); pending = null; if (enc.winner()) finish(enc.winner()); else render(); }
   document.addEventListener('click', function (e) {
     var t = e.target; if (!t.closest) return;
@@ -74,7 +94,12 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
     if (t.dataset && t.dataset.a !== undefined) { var a = C.actions(enc.current())[+t.dataset.a]; a._i = +t.dataset.a; if (a.target === 'none') run(a); else if (a.aoe) run(a); else { pending = a; render(); } return; }
     var ue = t.closest('[data-u]'); if (ue && pending) { var u = enc.order[+ue.dataset.u]; if (u.dead) return; var cur = enc.current(); if ((pending.target === 'enemy') === (u.team !== cur.team)) { var a2 = pending; run(a2, u); } }
   });
-  window.addEventListener('message', function (e) { var d = e.data; if (!d || d.dndTarget === undefined || !enc || !pending || pending.target !== 'enemy') return;
+  window.addEventListener('message', function (e) { var dp = e.data; if (dp && dp.dndPos) { var np = dp.dndPos.p; if (!F) F = dp.dndPos.f.slice(); if (!enc) { P = np; return; }
+      var cur = enc.current(), moved = P ? dst(P, np) : 0;
+      if (P && moved > 0 && cur && cur.team === 'party' && cur.turn && !enc.winner()) { cur.turn.move = Math.max(0, cur.turn.move - moved);
+        foeList().forEach(function (fu, i) { var m = meleeAtk(fu), r = reachOf(m); if (!m || fu.dead || fu.hp <= 0 || !F[i] || cur.disengaged || oaRound[i] === enc.round) return; if (dst(P, F[i]) <= r + 0.1 && dst(np, F[i]) > r + 0.1) { oaRound[i] = enc.round; log('Opportunity attack from ' + fu.name + '!', 'sys'); var lg = []; C.doAttack(enc, fu, cur, m, { range: 5 }, null, lg); lg.forEach(say); } }); }
+      P = np; if (moved > 0) { if (enc.winner()) finish(enc.winner()); else render(); } return; }
+    var d = e.data; if (!d || d.dndTarget === undefined || !enc || !pending || pending.target !== 'enemy') return;
     var u = enc.units.filter(function (x) { return x.team === 'foe'; })[d.dndTarget]; if (!u || u.dead) return; var a2 = pending; run(a2, u); });
   setup();
   var qs = /[?&]enc=([^&]+)/.exec(location.search);
