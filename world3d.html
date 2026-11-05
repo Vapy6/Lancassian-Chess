@@ -1034,18 +1034,19 @@ var fl = (function () {
       var k = rs[HERO.race]; if (k) COL.skin = k;
     })();
     // ---- turn-based encounters (E key): opens the battle screen with the active character ----
-    var ENC = { box: null };
+    var ENC = { box: null, foes: [], won: false }, FC = { 'Skeleton': [0.85, 0.85, 0.78], 'Zombie': [0.35, 0.5, 0.3], 'Wolf': [0.4, 0.4, 0.42], 'Giant Rat': [0.35, 0.28, 0.22], 'Goblin': [0.25, 0.5, 0.2], 'Kobold': [0.6, 0.3, 0.15], 'Orc': [0.3, 0.4, 0.25], 'Bandit': [0.3, 0.2, 0.2], 'Brown Bear': [0.35, 0.22, 0.12], 'Giant Spider': [0.12, 0.1, 0.12], 'Ogre': [0.55, 0.45, 0.2] };
     function startEncounter() {
       if (ENC.box) return; var lv = (HERO && HERO.level) || 1, r = Math.random();
       var pool = ['Giant Rat', 'Kobold', 'Goblin', 'Wolf', 'Bandit', 'Skeleton', 'Zombie']; if (lv >= 3) pool = pool.concat(['Orc', 'Brown Bear', 'Giant Spider', 'Orc']); if (lv >= 5) pool.push('Ogre');
       var pick = pool[Math.floor(Math.random() * pool.length)], n = /Ogre|Bear|Spider|Orc/.test(pick) ? 1 + (lv >= 4 && r < 0.4 ? 1 : 0) : 1 + Math.floor(Math.random() * (lv >= 3 ? 4 : 3));
       var b = document.createElement('div'); b.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.72);display:flex;flex-direction:column;align-items:center;padding:3vh 3vw';
       b.innerHTML = '<div style="color:#fff;font:600 16px sans-serif;margin-bottom:8px">A wild encounter: ' + n + ' x ' + pick + ' <button id="encx" style="margin-left:12px;padding:4px 12px">Close / flee</button></div><iframe style="width:min(1100px,100%);flex:1;border:0;border-radius:8px;background:#111"></iframe>';
-      document.body.appendChild(b); ENC.box = b; b.querySelector('iframe').src = 'battle.html?enc=' + encodeURIComponent(pick + ':' + n);
-      b.querySelector('#encx').onclick = function () { b.remove(); ENC.box = null; for (var k in keys) keys[k] = false; };
+      document.body.appendChild(b); ENC.box = b; ENC.foes = []; for (var fi = 0; fi < n; fi++) { var a = WALK.body + (fi - (n - 1) / 2) * 0.7, dd = (12 + 4 * (fi % 2)) * FT, fx = WALK.x - Math.sin(cam.yaw) * dd * 1.0 + Math.cos(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT, fz = WALK.z - Math.cos(cam.yaw) * dd - Math.sin(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT; ENC.foes.push({ x: fx, z: fz, y: groundAt(fx, fz), body: Math.atan2(WALK.x - fx, WALK.z - fz), pick: pick }); }
+      b.querySelector('iframe').src = 'battle.html?enc=' + encodeURIComponent(pick + ':' + n);
+      b.querySelector('#encx').onclick = function () { b.remove(); ENC.box = null; if (ENC.won) ENC.foes = []; ENC.won = false; for (var k in keys) keys[k] = false; };
     }
-    window.addEventListener('message', function (e) { if (e.data && e.data.dndBattle && ENC.box) { var t = ENC.box.firstChild; t.firstChild.textContent = (e.data.winner === 'party' ? 'Victory! +' + e.data.xp + ' XP. ' : 'Defeat. ') + ' '; } });
-    var WSTAT = false;
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndBattle && ENC.box) { ENC.won = e.data.winner === 'party'; if (ENC.won && HERO) { HERO.xp = (HERO.xp || 0) + e.data.xp; try { localStorage.setItem('dnd.active', JSON.stringify(HERO)); } catch (x) { } } var t = ENC.box.firstChild; t.firstChild.textContent = (e.data.winner === 'party' ? 'Victory! +' + e.data.xp + ' XP' + (HERO ? ' (total ' + HERO.xp + ')' : '') + '. ' : 'Defeat. ') + ' '; } });
+    window.__ENC = ENC; window.__WALK = WALK; var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
       if (WALK.on) { WALK.on = false; walkMsg('Fly mode.'); return; }
@@ -1075,11 +1076,15 @@ var fl = (function () {
       if (WALK.third) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
     }
     function drawPlayer(vpRot, far) {
-      if (!WP || !WALK.on || !WALK.third) return;
-      var m = buildFigure(WALK.phase, WALK.moving, !!keys.shift);
+      if (!WP || !WALK.on) return;
+      if (WALK.third) drawFig(WALK.x, WALK.y, WALK.z, WALK.body, WALK.phase, WALK.moving, !!keys.shift, vpRot, far, 1);
+      var sv = COL.tunic, sp = COL.pants, ss = COL.skin; ENC.foes.forEach(function (f) { var c = FC[f.pick] || [0.5, 0.2, 0.2]; COL.tunic = c; COL.pants = [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]; COL.skin = [c[0] * 0.9 + 0.1, c[1] * 0.9 + 0.1, c[2] * 0.9]; drawFig(f.x, f.y, f.z, f.body, 0, false, false, vpRot, far, /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1); }); COL.tunic = sv; COL.pants = sp; COL.skin = ss;
+    }
+    function drawFig(px, py, pz, body, phase, moving, sprint, vpRot, far, sc) {
+      var m = buildFigure(phase, moving, sprint);
       gl.bindBuffer(gl.ARRAY_BUFFER, WB.p); gl.bufferData(gl.ARRAY_BUFFER, m.P, gl.DYNAMIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, WB.n); gl.bufferData(gl.ARRAY_BUFFER, m.N, gl.DYNAMIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, WB.c); gl.bufferData(gl.ARRAY_BUFFER, m.C, gl.DYNAMIC_DRAW);
       gl.useProgram(WP); gl.disable(gl.CULL_FACE); setAtmoUniforms(WP, far);
-      gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, WALK.x - cam.x, WALK.y - cam.y, WALK.z - cam.z); gl.uniform2f(WP.u.uRot, Math.cos(WALK.body), Math.sin(WALK.body)); gl.uniform1f(WP.u.uScale, FT);
+      gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, px - cam.x, py - cam.y, pz - cam.z); gl.uniform2f(WP.u.uRot, Math.cos(body), Math.sin(body)); gl.uniform1f(WP.u.uScale, FT * sc);
       [[WB.p, 0], [WB.n, 1], [WB.c, 2]].forEach(function (q) { gl.bindBuffer(gl.ARRAY_BUFFER, q[0]); gl.enableVertexAttribArray(q[1]); gl.vertexAttribPointer(q[1], 3, gl.FLOAT, false, 0, 0); });
       gl.drawArrays(gl.TRIANGLES, 0, m.P.length / 3);
       for (var q2 = 0; q2 < 3; q2++) gl.disableVertexAttribArray(q2);
