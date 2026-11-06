@@ -1148,8 +1148,28 @@ var fl = (function () {
       if (QS.done.length) h += '<div style="margin-top:8px;color:#9aa0ad;font-size:12px">Completed: ' + QS.done.length + '</div>';
       b.innerHTML = h; document.body.appendChild(b); TK.log = b;
     }
+    var VIS = []; try { VIS = JSON.parse(localStorage.getItem('dnd.visited') || '[]'); } catch (x) { }
+    function markVisited(pl) { if (pl && VIS.indexOf(pl.n) < 0) { VIS.push(pl.n); try { localStorage.setItem('dnd.visited', JSON.stringify(VIS)); } catch (x) { } } }
+    function toggleTravel() {
+      if (INV.box) { if (INV.box._tv) { INV.box.remove(); INV.box = null; for (var k in keys) keys[k] = false; } return; }
+      if (!WALK.on || ENC.box || TK.box) { walkMsg('Fast travel works in walk mode (press F), not in a battle or conversation.'); return; }
+      markVisited(nearTown());
+      var list = meta.places.filter(function (p) { return VIS.indexOf(p.n) >= 0; }).map(function (p) { return { p: p, d: Math.hypot(p.x - WALK.x, p.y - WALK.z) * 3 }; }).sort(function (a, b) { return a.d - b.d; });
+      var b = document.createElement('div'); b.style.cssText = 'position:fixed;inset:0;z-index:48;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
+      var h = '<div style="width:min(460px,94vw);max-height:80vh;overflow:auto;background:linear-gradient(180deg,#1d1812,#100d0a);border:1px solid #8a6a3f;border-radius:4px;padding:16px 18px;color:#e8dfcb;font:15px Georgia,serif;box-shadow:0 10px 50px #000"><div style="color:#dcb96c;font:600 16px Georgia,serif;letter-spacing:.14em;text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid #5b4630;margin-bottom:8px">Fast travel</div>';
+      if (list.length <= 1) h += '<div style="color:#8f8575;margin:8px 0">You have only found ' + (list.length ? 'one place' : 'no places') + ' so far. Walk up to a town (T to talk) to discover it; then it appears here.</div>';
+      list.forEach(function (o, i) { h += '<button data-i="' + i + '" style="display:flex;justify-content:space-between;width:100%;margin:4px 0;padding:8px 10px;background:#1a1510;color:#e8dfcb;border:1px solid #5b4630;border-radius:3px;cursor:pointer;font:14px Georgia,serif"><span>' + o.p.n + '</span><span style="color:#8f8575">' + (o.d < 1 ? 'here' : Math.round(o.d).toLocaleString() + ' mi') + '</span></button>'; });
+      h += '<div style="color:#8f8575;font-size:12px;margin-top:8px">N or Esc to close.</div></div>'; b.innerHTML = h; document.body.appendChild(b); INV.box = b; b._tv = true;
+      b.addEventListener('click', function (e) {
+        var t = e.target.closest('button'); if (!t) { if (e.target === b) toggleTravel(); return; }
+        var p = list[+t.getAttribute('data-i')].p, x = p.x, z = p.y + 0.002, ok = landSafe(x, z);
+        if (!ok) for (var r = 0.004; r < 0.05 && !ok; r += 0.004) for (var a = 0; a < 6.28 && !ok; a += 0.785) { var xx = p.x + Math.cos(a) * r, zz = p.y + Math.sin(a) * r; if (landSafe(xx, zz)) { x = xx; z = zz; ok = true; } }
+        toggleTravel(); if (!ok) { walkMsg('Could not find safe ground near ' + p.n + '.'); return; }
+        WALK.x = cam.x = x; WALK.z = cam.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; walkMsg('You arrive in ' + p.n + '.');
+      });
+    }
     function npcTick() {
-      var show = WALK.on && !ENC.box && !TK.box, pl = show ? nearTown() : null;
+      var show = WALK.on && !ENC.box && !TK.box, pl = show ? nearTown() : null; if (pl) markVisited(pl);
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
       if (TK.prompt) { if (pl) TK.prompt.textContent = 'Press T to talk to someone in ' + pl.n; TK.prompt.style.display = pl ? 'block' : 'none'; }
     }
@@ -1215,7 +1235,7 @@ var fl = (function () {
     cv.addEventListener('pointerup', function () { drag = false; });
     cv.addEventListener('pointermove', function (e) { if (!drag) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
     cv.addEventListener('wheel', function (e) { e.preventDefault(); if (WALK.on) { WALK.dist = Math.max(2, Math.min(80, WALK.dist * (e.deltaY < 0 ? 1 / 1.15 : 1.15))); return; } speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
-    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
+    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     var exEl = document.getElementById('ex');
     exEl.addEventListener('input', function () { EX = +exEl.value; EXV.textContent = EX; });
