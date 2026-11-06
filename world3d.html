@@ -1078,12 +1078,23 @@ var fl = (function () {
     // ---- inventory panel (I key): character sheet + equipment in a side iframe ----
     var INV = { box: null };
     function toggleInv() {
-      if (INV.box) { INV.box.remove(); INV.box = null; for (var k in keys) keys[k] = false; return; }
+      if (INV.box) { if (INV.shopTown) { closeShop(); return; } INV.box.remove(); INV.box = null; for (var k in keys) keys[k] = false; return; }
       if (!WALK.on || ENC.box || TK.box) return; heroRefresh();
       var b = document.createElement('div'); b.style.cssText = 'position:fixed;top:0;right:0;bottom:0;width:min(520px,96vw);z-index:48;background:rgba(10,12,18,.94);display:flex;flex-direction:column;padding:8px;box-shadow:-6px 0 24px rgba(0,0,0,.5)';
       b.innerHTML = '<div style="color:#fff;font:600 15px sans-serif;margin-bottom:6px">Character &amp; inventory <button id="invx" style="margin-left:12px;padding:3px 12px">Close (I)</button></div><iframe src="inventory.html" style="width:100%;flex:1;border:0;border-radius:8px;background:#111"></iframe>';
       document.body.appendChild(b); INV.box = b; b.querySelector('#invx').onclick = toggleInv;
     }
+    // ---- shop (BG3-style barter screen in a big iframe; re-uses INV.box so walking and keys stay locked) ----
+    function openShop(pl) {
+      if (!HERO) { talkMenu(pl, 'You have no active character to trade with. Create one in the character creator first.'); return; }
+      var n = npcFor(pl); closeTalk(); heroRefresh();
+      var b = document.createElement('div'); b.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
+      var src = 'shop.html?town=' + encodeURIComponent(pl.n) + '&role=' + encodeURIComponent(n.role) + '&npc=' + encodeURIComponent(n.name) + '&disp=' + (QS.disp[pl.n] || 0);
+      b.innerHTML = '<iframe src="' + src + '" style="width:min(1180px,98vw);height:min(780px,95vh);border:1px solid #5b4630;border-radius:6px;background:#0d0b09;box-shadow:0 10px 50px #000"></iframe>';
+      document.body.appendChild(b); INV.box = b; INV.shopTown = pl;
+    }
+    function closeShop() { var pl = INV.shopTown; INV.shopTown = null; if (INV.box) { INV.box.remove(); INV.box = null; } for (var k in keys) keys[k] = false; heroRefresh(); if (pl) talkMenu(pl, 'Pleasure doing business.'); }
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndShopClose) closeShop(); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndHero) heroRefresh(); });
     function hseed(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
     var NM1 = ['Ari', 'Bram', 'Cora', 'Dunstan', 'Edda', 'Fenn', 'Garrick', 'Hilde', 'Ivo', 'Jessa', 'Kell', 'Lorna', 'Marek', 'Nessa', 'Orin', 'Petra', 'Quill', 'Rhosyn', 'Sten', 'Tilda', 'Ulric', 'Vesna', 'Wren', 'Yara'];
@@ -1110,6 +1121,7 @@ var fl = (function () {
       if (q && q.have >= q.need) opts.push(['Report back: the job is done (' + q.have + '/' + q.need + ')', function () { turnIn(pl, q); }]);
       else if (q) opts.push(['About the job (' + q.have + '/' + q.need + ' defeated)', function () { talkUI(pl, 'Still ' + (q.need - q.have) + ' to go. Press E while walking to look for trouble on the roads; each battle you win counts.', [['Back', function () { talkMenu(pl); }]]); }]);
       else opts.push(['Is there any work for me?', function () { offer(pl); }]);
+      opts.push(['Trade: browse their wares and sell your loot', function () { openShop(pl); }]);
       opts.push(['What are people talking about? (rumours)', function () { talkMenu(pl, '"' + RUMOR[(n.h + (QS.seq || 0)) % RUMOR.length] + '"'); }]);
       opts.push(['Persuade: ask for a better rate (Persuasion DC 13)', function () { var c = check('Persuasion', 13); QS.disp[pl.n] = disp + (c.ok ? 1 : 0); qsave(); talkMenu(pl, c.line + (c.ok ? 'They smile. "Fine, for you I will pay more for any work."' : 'They shake their head. "No."')); }]);
       opts.push(['Intimidate (Intimidation DC 15)', function () { var c = check('Intimidation', 15); QS.disp[pl.n] = disp + (c.ok ? 1 : -1); qsave(); talkMenu(pl, c.line + (c.ok ? 'They flinch. "All right, all right - I will pay more."' : 'They scowl. "Get out of my sight."')); }]);

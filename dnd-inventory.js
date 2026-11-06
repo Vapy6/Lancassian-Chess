@@ -184,7 +184,52 @@
   function saveActive(s) {
     try { localStorage.setItem('dnd.active', JSON.stringify(s)); var l = JSON.parse(localStorage.getItem('dnd.characters') || '[]'); for (var i = 0; i < l.length; i++) if (l[i].name === s.name && l[i].cls === s.cls) l[i] = s; localStorage.setItem('dnd.characters', JSON.stringify(l)); return true; } catch (e) { return false; }
   }
-  var api = { SLOTS: SLOTS, MAGIC: MAGIC, ensure: ensure, recompute: recompute, equip: equip, unequip: unequip, drop: drop, addItem: addItem, qty: qty, kind: kind, describe: describe,
+
+  // ---------- shops: prices, money in copper, merchant stock ----------
+  var PACK_PRICE = { "Burglar's Pack": 16, "Diplomat's Pack": 39, "Dungeoneer's Pack": 12, "Entertainer's Pack": 40, "Explorer's Pack": 10, "Priest's Pack": 19, "Scholar's Pack": 40 };
+  var EXTRA_PRICE = { '20 bolts': 1, '20 arrows': 1, 'Quiver of 20 arrows': 1, '10 darts': 0.5, "Thieves' tools": 25, 'Holy symbol': 5, 'Component pouch': 25, 'Arcane focus': 10, 'Spellbook': 50, 'Druidic focus': 1, 'Lute': 35, 'Wooden shield': 10 };
+  function costGp(str) { var m = /([\d.,]+)\s*(cp|sp|ep|gp|pp)/.exec(str || ''); return m ? parseFloat(m[1].replace(/,/g, '')) * { cp: 0.01, sp: 0.1, ep: 0.5, gp: 1, pp: 10 }[m[2]] : null; }
+  /** Base value in gp, or null when merchants do not deal in it. */
+  function price(name) {
+    var w = DATA.WEAPONS[name], a = DATA.ARMOR[name]; if (w) return costGp(w.cost); if (a) return costGp(a.cost); if (MAGIC[name]) return MAGIC[name].value;
+    if (PACK_PRICE[name] !== undefined) return PACK_PRICE[name]; return EXTRA_PRICE[name] !== undefined ? EXTRA_PRICE[name] : null;
+  }
+  function priceCp(name) { var g = price(name); return g === null ? null : Math.max(1, Math.round(g * 100)); }
+  /** weapons | armor | consumables | magic | gear */
+  function category(name) { var k = kind(name); if (k === 'weapon') return 'weapons'; if (k === 'armor' || k === 'shield') return 'armor'; if (MAGIC[name]) return MAGIC[name].type === 'potion' ? 'consumables' : 'magic'; return 'gear'; }
+  function wealthCp(s) { var c = s.currency || {}; return (c.cp || 0) + 10 * (c.sp || 0) + 50 * (c.ep || 0) + 100 * (c.gp || 0) + 1000 * (c.pp || 0); }
+  function setWealthCp(s, t) { t = Math.max(0, Math.round(t)); s.currency = { cp: t % 10, sp: Math.floor(t / 10) % 10, ep: 0, gp: Math.floor(t / 100), pp: 0 }; }
+  function rngFor(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return function () { h += 0x6D2B79F5; var t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  var POOLS = {
+    simple: ['Club', 'Dagger', 'Handaxe', 'Javelin', 'Light hammer', 'Mace', 'Quarterstaff', 'Spear', 'Light crossbow', 'Shortbow', 'Sickle'],
+    martial: ['Battleaxe', 'Flail', 'Glaive', 'Greataxe', 'Greatsword', 'Halberd', 'Longsword', 'Morningstar', 'Rapier', 'Scimitar', 'Shortsword', 'Trident', 'War pick', 'Warhammer', 'Longbow', 'Heavy crossbow', 'Hand crossbow', 'Maul'],
+    bows: ['Shortbow', 'Longbow', 'Light crossbow', 'Hand crossbow', 'Heavy crossbow', 'Javelin', 'Spear', 'Dagger'],
+    light: ['Padded', 'Leather', 'Studded leather'], medium: ['Hide', 'Chain shirt', 'Scale mail', 'Breastplate', 'Half plate'], heavy: ['Ring mail', 'Chain mail', 'Splint', 'Plate'],
+    shield: ['Shield'], ammo: ['20 arrows', '20 bolts'], packs: Object.keys(PACK_PRICE), tools: ['Holy symbol', 'Component pouch', 'Arcane focus', "Thieves' tools", 'Druidic focus'],
+    healing: ['Potion of Healing'], greater: ['Potion of Greater Healing'], magic: ['Ring of Protection', 'Amulet of Health']
+  };
+  // role -> merchant gold and what they stock: [pool, how many kinds, chance]
+  var SHOPS = {
+    'blacksmith': { gold: 700, p: [['simple', 2], ['martial', 4], ['light', 1], ['medium', 2], ['heavy', 2], ['shield', 1], ['ammo', 1]] },
+    'merchant': { gold: 900, p: [['simple', 2], ['martial', 2], ['light', 1], ['medium', 1], ['shield', 1], ['healing', 1], ['greater', 1, 0.4], ['packs', 3], ['ammo', 1], ['tools', 2], ['magic', 1, 0.3]] },
+    'city official': { gold: 1800, p: [['martial', 3], ['medium', 2], ['heavy', 1], ['shield', 1], ['healing', 1], ['greater', 1], ['packs', 2], ['tools', 2], ['magic', 1, 0.6]] },
+    'priest': { gold: 350, p: [['healing', 1], ['greater', 1, 0.5], ['tools', 2], ['simple', 1], ['shield', 1], ['light', 1], ['packs', 1]] },
+    'innkeeper': { gold: 300, p: [['healing', 1], ['packs', 3], ['simple', 2], ['ammo', 1], ['light', 1]] },
+    'hunter': { gold: 300, p: [['bows', 5], ['ammo', 2], ['light', 2], ['packs', 1]] },
+    'guard captain': { gold: 450, p: [['simple', 1], ['martial', 3], ['medium', 1], ['heavy', 1], ['shield', 1], ['ammo', 1], ['healing', 1]] },
+    'village elder': { gold: 250, p: [['simple', 3], ['light', 1], ['healing', 1, 0.7], ['packs', 2], ['tools', 1]] },
+    'ferrywoman': { gold: 220, p: [['simple', 2], ['packs', 2], ['ammo', 1], ['healing', 1, 0.5]] }
+  };
+  /** A merchant's starting stock and purse (in copper), the same every time for the same town + role. */
+  function shopFor(town, role) {
+    var def = SHOPS[role] || SHOPS.merchant, rng = rngFor(town + '|' + role), stock = {};
+    def.p.forEach(function (e) {
+      if (e[2] !== undefined && rng() > e[2]) return; var pool = POOLS[e[0]].slice(), n = Math.min(e[1], pool.length);
+      for (var i = 0; i < n; i++) { var nm = pool.splice(Math.floor(rng() * pool.length), 1)[0], c = category(nm), q = (c === 'weapons' || c === 'armor' || c === 'magic') ? 1 : nm.indexOf('arrows') > 0 || nm.indexOf('bolts') > 0 ? 2 + Math.floor(rng() * 5) : 1 + Math.floor(rng() * 3); stock[nm] = (stock[nm] || 0) + q; }
+    });
+    return { role: role, town: town, cp: Math.round(def.gold * (0.8 + rng() * 0.5)) * 100, stock: Object.keys(stock).map(function (k) { return { name: k, qty: stock[k] }; }) };
+  }
+  var api = { price: price, priceCp: priceCp, category: category, wealthCp: wealthCp, setWealthCp: setWealthCp, shopFor: shopFor, SLOTS: SLOTS, MAGIC: MAGIC, ensure: ensure, recompute: recompute, equip: equip, unequip: unequip, drop: drop, addItem: addItem, qty: qty, kind: kind, describe: describe,
     usePotion: usePotion, shortRest: shortRest, longRest: longRest, lootFor: lootFor, giveLoot: giveLoot, hdInfo: hdInfo, resetRes: resetRes, resLines: resLines, saveActive: saveActive, armorProf: armorProf, weaponProf: weaponProf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DNDINV = api;
 })(typeof window !== 'undefined' ? window : this);
