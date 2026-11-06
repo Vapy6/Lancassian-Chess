@@ -15,9 +15,10 @@ table{width:100%;border-collapse:collapse}td,th{padding:3px 6px;text-align:left;
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.two{grid-template-columns:1fr}}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid var(--dim);margin-right:5px}.dot.p{background:var(--acc);border-color:var(--acc)}
 #msg{min-height:18px;color:var(--acc);font-size:13px;margin:4px 0}select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}.chip{background:#252c36;border:1px solid var(--line);border-radius:14px;padding:2px 10px;cursor:pointer;font-size:12px}.chip.on{background:var(--acc);color:#1a1405;border-color:var(--acc);font-weight:600}
 </style></head><body><div class="wrap">
 <div id="app"></div>
-<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script><script src="dnd-inventory.js"></script>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script><script src="dnd-combat.js"></script><script src="dnd-inventory.js"></script>
 <script>
 (function () {
   var I = window.DNDINV, DATA = window.DNDDATA, app = document.getElementById('app'), S = null, tab = 'equip', msg = '';
@@ -38,9 +39,17 @@ table{width:100%;border-collapse:collapse}td,th{padding:3px 6px;text-align:left;
     o += '<div class="two"><div class="card"><h2>Skills</h2><table>' + Object.keys(S.skills).map(function (k) { var x = S.skills[k]; return '<tr><td><span class="dot' + (x.proficient ? ' p' : '') + '"></span>' + esc(k) + (x.expertise ? ' *' : '') + '</td><td>' + sg(x.bonus) + '</td></tr>'; }).join('') + '</table><div class="note">Passive Perception ' + S.passivePerception + ' - Initiative ' + sg(S.initiative) + '</div></div>';
     o += '<div><div class="card"><h2>Attacks</h2>' + S.attacks.map(function (a) { return '<div class="row"><span class="n">' + esc(a.name) + '</span><span class="note">' + sg(a.bonus) + ', ' + esc(/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + a.mod) : a.dice + (a.mod ? sg(a.mod) : '')) + ' ' + esc(a.type) + (a.rng ? ', range ' + a.rng[0] + '/' + a.rng[1] : '') + '</span></div>'; }).join('') + '</div>';
     var rl = I.resLines(S); if (rl.length) o += '<div class="card"><h2>Per-rest resources</h2>' + rl.map(function (x) { return '<div style="margin:3px 0">' + esc(x) + '</div>'; }).join('') + '<div class="note">Short rest restores Second Wind and Action Surge (and Warlock slots); a long rest restores everything.</div></div>'; var sc = S.spellcasting; if (sc) { o += '<div class="card"><h2>Spells</h2><div class="note">Save DC ' + sc.saveDC + ', attack ' + sg(sc.attackBonus) + '. Slots: ' + Object.keys(sc.slots).map(function (k) { return sc.slots[k] + ' x L' + k; }).join(', ') + '</div>' +
-      ((sc.cantripList || []).length ? '<div style="margin-top:4px"><b>Cantrips:</b> ' + esc(sc.cantripList.join(', ')) + '</div>' : '') + ((sc.preparedSpells || []).length ? '<div style="margin-top:4px"><b>Prepared:</b> ' + esc(sc.preparedSpells.concat(sc.domainSpells || []).filter(function (n, i, a) { return a.indexOf(n) === i; }).join(', ')) + '</div>' : '') + '</div>'; }
+      ((sc.cantripList || []).length ? '<div style="margin-top:4px"><b>Cantrips:</b> ' + esc(sc.cantripList.join(', ')) + '</div>' : '') + (sc.kind !== 'prepared' && (sc.preparedSpells || []).length ? '<div style="margin-top:4px"><b>Prepared:</b> ' + esc(sc.preparedSpells.concat(sc.domainSpells || []).filter(function (n, i, a) { return a.indexOf(n) === i; }).join(', ')) + '</div>' : '') + prepBlock(sc) + '</div>'; }
     o += '</div></div><div class="card"><h2>Features</h2>' + S.features.map(function (f) { return '<div style="margin:3px 0">' + esc(f) + '</div>'; }).join('') + '</div>';
     return o;
+  }
+  /** Prepared casters (Wizard, Cleric, Druid) choose today's spells from the spellbook / class list. */
+  function prepBlock(sc) {
+    if (sc.kind !== 'prepared') return '';
+    var CS = window.DNDDATA.CLASS_SPELLS[S.cls], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), cur = sc.preparedSpells || [], FX = window.DNDCOMBAT ? window.DNDCOMBAT.SPELL_FX : {},
+      pool = (S.cls === 'Wizard' ? (sc.knownSpells || []) : (CS ? CS[1] : [])).filter(function (n) { return dom.indexOf(n) < 0; }), n = cur.filter(function (x) { return dom.indexOf(x) < 0; }).length;
+    return '<div style="margin-top:10px"><b>Prepare spells</b> <span class="note">' + n + '/' + max + ' prepared - tap a spell to prepare or un-prepare it</span><div class="chips">' + pool.map(function (x) { return '<span class="chip' + (cur.indexOf(x) >= 0 ? ' on' : '') + '" data-sp="' + esc(x) + '">' + esc(x) + (FX[x] ? '' : ' *') + '</span>'; }).join('') + '</div>' +
+      (dom.length ? '<div class="note" style="margin-top:4px">Always prepared: ' + esc(dom.join(', ')) + '</div>' : '') + '<div class="note" style="margin-top:4px">* no combat effect in the game yet, so it will not appear as a battle action.</div></div>';
   }
   function equipTab() {
     var eq = S.equipped, o = '<div class="card"><h2>Equipped</h2>' + I.SLOTS.map(function (k) { var n = eq[k]; return '<div class="row"><span class="note" style="width:70px">' + SLOTN[k] + '</span><span class="n">' + (n ? esc(n) + ' <span class="note">' + esc(I.describe(n)) + '</span>' : '<span class="note">empty</span>') + '</span>' + (n ? '<button class="btn" data-u="' + k + '">Unequip</button>' : '') + '</div>'; }).join('') +
@@ -64,6 +73,11 @@ table{width:100%;border-collapse:collapse}td,th{padding:3px 6px;text-align:left;
   function done(r) { msg = r.msg || ''; if (r.ok !== false) save(); render(); }
   document.addEventListener('click', function (e) {
     var t = e.target; if (!S || !t.dataset) return;
+    if (t.dataset.sp) {
+      var sc = S.spellcasting, cur = sc.preparedSpells = sc.preparedSpells || [], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), i = cur.indexOf(t.dataset.sp);
+      if (i >= 0) cur.splice(i, 1); else if (cur.filter(function (x) { return dom.indexOf(x) < 0; }).length >= max) return done({ ok: false, msg: 'You can prepare ' + max + ' spells. Tap a prepared one to swap it out.' }); else cur.push(t.dataset.sp);
+      return done({ ok: true, msg: 'Prepared spells updated.' });
+    }
     if (t.dataset.t) { tab = t.dataset.t; msg = ''; return render(); }
     if (t.dataset.u) return done(I.unequip(S, t.dataset.u)); if (t.dataset.e) return done(I.equip(S, t.dataset.e, t.dataset.s));
     if (t.dataset.d) return done(I.drop(S, t.dataset.d, 1)); if (t.dataset.p) return done(I.usePotion(S, t.dataset.p));

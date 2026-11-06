@@ -182,6 +182,7 @@
     ['alignment', 'deity', 'gender', 'age', 'height', 'weight', 'eyes', 'skin', 'hair', 'appearance', 'personality', 'ideals', 'bonds', 'flaws', 'backstory', 'allies', 'treasure', 'notes', 'xp'].forEach(function (k) { det[k] = String(dt[k] === undefined ? '' : dt[k]).slice(0, 4000); });
     sheet.details = det; sheet.inspiration = false; sheet.deathSaves = { ok: 0, fail: 0 }; sheet.hitDiceTotal = '1' + sheet.hitDie; sheet.tempHp = 0; sheet.conditions = [];
     if (errors.length) return { ok: false, errors: errors };
+    try { sheet.creation = JSON.parse(JSON.stringify(o)); } catch (e) { }
     return { ok: true, errors: [], sheet: sheet };
   }
 

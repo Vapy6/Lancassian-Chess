@@ -47,13 +47,14 @@ ul{margin:4px 0 0 18px;padding:0}textarea{width:100%;min-height:80px;background:
   </div>
  </div>
  <div>
-  <div class="card"><div id="errs"></div><div id="sheet" class="sheet"></div>
-   <div style="margin-top:8px"><button class="btn" id="save">Save</button><button class="btn g" id="export">Export JSON</button><button class="btn g" id="print">Print</button></div></div>
+  <div class="card"><div id="editbar"></div><div id="errs"></div><div id="sheet" class="sheet"></div>
+   <div style="margin-top:8px"><button class="btn" id="save">Save</button><button class="btn g" id="saveas" style="display:none">Save as new copy</button><button class="btn g" id="export">Export JSON</button><button class="btn g" id="print">Print</button></div></div>
   <div class="card"><h2>Saved characters</h2><div id="saved" class="note"></div></div>
  </div>
 </div>
 <script src="dnd-data.js"></script>
 <script src="dnd-rules.js"></script>
+<script src="dnd-inventory.js"></script>
 <script>
 (function () {
   var D = window.DND, X = window.DNDDATA, $ = function (id) { return document.getElementById(id); };
@@ -177,11 +178,49 @@ ul{margin:4px 0 0 18px;padding:0}textarea{width:100%;min-height:80px;background:
   });
   document.addEventListener('change', function (e) { var t = e.target; if (t.dataset && t.dataset.sel) { S[t.dataset.sel] = t.value; render(); return; } if (t.dataset && t.dataset.kit !== undefined) { S.kit.choices[+t.dataset.kit] = t.value === '' ? undefined : +t.value; Object.keys(S.kit.picks).forEach(function (k) { if (k.split('.')[0] === t.dataset.kit) delete S.kit.picks[k]; }); render(); } if (t.dataset && t.dataset.pick) { S.kit.picks[t.dataset.pick] = t.value; render(); } if (t.dataset && t.dataset.sa) { S.base[t.dataset.sa] = +t.value; render(); } if (t.dataset && t.dataset.na) { S.base[t.dataset.na] = Math.max(3, Math.min(20, +t.value || 10)); render(); } });
   function load() { try { return JSON.parse(localStorage.getItem('dnd.characters') || '[]'); } catch (e) { return []; } }
-  function listSaved() { var l = load(); $('saved').innerHTML = l.length ? l.map(function (c, i) { return '<div>' + c.name + ' - ' + (c.subrace || c.race) + ' ' + c.cls + ' <a href="#" data-play="' + i + '" style="color:var(--ok,#7c7)">play in 3D</a> <a href="#" data-del="' + i + '" style="color:var(--bad)">delete</a></div>'; }).join('') : 'Nothing saved yet.'; }
-  $('save').onclick = function () { if (!S.last || !S.last.ok) return; var l = load(); l.push(S.last.sheet); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (e) { } listSaved(); };
+  function listSaved() { var l = load(); $('saved').innerHTML = l.length ? l.map(function (c, i) { return '<div>' + c.name + ' - ' + (c.subrace || c.race) + ' ' + c.cls + ' <a href="#" data-edit="' + i + '" style="color:var(--acc,#d9b45a)">edit</a> <a href="#" data-play="' + i + '" style="color:var(--ok,#7c7)">play in 3D</a> <a href="#" data-del="' + i + '" style="color:var(--bad)">delete</a></div>'; }).join('') : 'Nothing saved yet.'; }
+  // ---- edit a saved character ----
+  var EDIT = null;
+  function activeIs(c) { try { var a = JSON.parse(localStorage.getItem('dnd.active') || 'null'); return !!a && a.name === c.name && a.cls === c.cls; } catch (e) { return false; } }
+  function editUI() {
+    var ch = EDIT && EDIT.old, lv = ch && (ch.level || 1), t = '';
+    if (ch) t = '<div class="note" style="border:1px solid var(--acc,#d9b45a);border-radius:8px;padding:8px;margin-bottom:8px"><b>Editing ' + esc(ch.name || 'character') + '.</b> ' + (lv > 1 ? 'This character is level ' + lv + ', so only the name and Character details can be changed here (the level-up screen handles the rest). ' : EDIT.legacy ? 'This character was saved before editing existed, so skills and starting equipment must be picked again; everything else was restored. ' : '') + (lv > 1 ? '' : 'Saving replaces the saved character; XP, gold and magic items you found are kept. ') + '<a href="#" data-cancel="1" style="color:var(--bad)">cancel</a></div>';
+    $('editbar').innerHTML = t; $('save').textContent = ch ? 'Save changes' : 'Save'; $('saveas').style.display = ch && lv <= 1 ? '' : 'none';
+  }
+  $('editbar').onclick = function (e) { if (e.target.dataset && e.target.dataset.cancel) { e.preventDefault(); EDIT = null; editUI(); } };
+  function loadEdit(i) {
+    var ch = load()[i]; if (!ch) return; var cr = ch.creation, legacy = !cr, race = D.RACES[ch.race], sub = ch.subrace && race.subraces[ch.subrace], cls = D.CLASSES[ch.cls];
+    if (legacy) {
+      var base = {}; D.ABILITIES.forEach(function (a) { base[a] = Math.max(3, Math.min(20, ch.scores[a] - (race.asi[a] || 0) - (sub && sub.asi && sub.asi[a] || 0))); }); var sc = ch.spellcasting || {};
+      cr = { name: ch.name, race: ch.race, subrace: ch.subrace || null, cls: ch.cls, background: ch.background, method: 'manual', base: base, skills: [], bgSkills: [], raceSkills: [], halfElfAsi: [], expertise: [], kit: { choices: [], picks: {} },
+        spells: { cantrips: sc.cantripList || [], known: cls.spell && (cls.spell.known || cls.spell.spellbook) ? (sc.knownSpells || []) : [], prepared: cls.spell && cls.spell.kind === 'prepared' ? (sc.preparedSpells || []) : [] }, details: ch.details || {}, gp: 0, fightingStyle: ch.fightingStyle || '', dragon: ch.dragonAncestry || '' };
+    }
+    EDIT = { i: i, old: ch, legacy: legacy };
+    $('name').value = cr.name || ''; $('race').value = cr.race; $('cls').value = cr.cls; $('bg').value = cr.background; render(); if (cr.subrace) $('subrace').value = cr.subrace;
+    S.method = cr.method || 'manual'; S.assign = {}; D.ABILITIES.forEach(function (a) { S.base[a] = cr.base[a]; });
+    S.skills = (cr.skills || []).slice(); S.bgSkills = (cr.bgSkills || []).slice(); S.raceSkills = (cr.raceSkills || []).slice(); S.halfElfAsi = (cr.halfElfAsi || []).slice(); S.expertise = (cr.expertise || []).slice();
+    S.style = cr.fightingStyle || ''; S.dragon = cr.dragon || ''; S.kit = { choices: ((cr.kit || {}).choices || []).map(function (x) { return x === null ? undefined : x; }), picks: JSON.parse(JSON.stringify((cr.kit || {}).picks || {})) };
+    S.cantrips = ((cr.spells || {}).cantrips || []).slice(); S.known = ((cr.spells || {}).known || []).slice(); S.prepared = ((cr.spells || {}).prepared || []).slice();
+    $('gp').value = cr.gp || 0; var d = cr.details || {}; Array.prototype.forEach.call(document.querySelectorAll('[id^=d_]'), function (e) { var k = e.id.slice(2); e.value = d[k] || (k === 'alignment' ? '(unaligned)' : ''); });
+    editUI(); render(); window.scrollTo(0, 0);
+  }
+  function storeAll(l, replaced, was) { try { localStorage.setItem('dnd.characters', JSON.stringify(l)); if (was) localStorage.setItem('dnd.active', JSON.stringify(replaced)); } catch (e) { } }
+  $('save').onclick = function () {
+    var l = load();
+    if (EDIT) {
+      var old = l[EDIT.i]; if (!old) { EDIT = null; editUI(); return; } var was = activeIs(old);
+      if ((old.level || 1) > 1) { var d = details(); Object.keys(d).forEach(function (k) { d[k] = String(d[k]).slice(0, 4000); }); old.details = d; if ($('name').value) old.name = $('name').value; l[EDIT.i] = old; storeAll(l, old, was); }
+      else { if (!S.last || !S.last.ok) return; var ns = S.last.sheet; if (old.xp) ns.xp = old.xp; if (old.currency) { ns.currency = old.currency; delete ns.gold; }
+        if (old.invInit) { ns.invInit = true; ns.inventory = ns.inventory || []; (old.inventory || []).forEach(function (x) { if (!window.DNDINV.MAGIC[x.name]) return; var m = ns.inventory.filter(function (y) { return y.name === x.name; })[0]; if (m) m.qty = x.qty; else ns.inventory.push({ name: x.name, qty: x.qty }); }); }
+        l[EDIT.i] = ns; storeAll(l, ns, was); }
+      EDIT = null; editUI(); listSaved(); return;
+    }
+    if (!S.last || !S.last.ok) return; l.push(S.last.sheet); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (e) { } listSaved();
+  };
+  $('saveas').onclick = function () { if (!S.last || !S.last.ok) return; var l = load(); l.push(S.last.sheet); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (e) { } EDIT = null; editUI(); listSaved(); };
   $('export').onclick = function () { if (!S.last || !S.last.ok) return; var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(S.last.sheet, null, 2)], { type: 'application/json' })); a.download = (S.last.sheet.name || 'character') + '.json'; a.click(); };
   $('print').onclick = function () { window.print(); };
-  $('saved').onclick = function (e) { var pl = e.target.dataset && e.target.dataset.play; if (pl !== undefined) { e.preventDefault(); var ch = load()[+pl]; if (ch) { try { localStorage.setItem('dnd.active', JSON.stringify(ch)); } catch (x) { } location.href = 'world3d.html'; } return; } var i = e.target.dataset && e.target.dataset.del; if (i !== undefined) { e.preventDefault(); var l = load(); l.splice(+i, 1); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (x) { } listSaved(); } };
+  $('saved').onclick = function (e) { var ed = e.target.dataset && e.target.dataset.edit; if (ed !== undefined) { e.preventDefault(); loadEdit(+ed); return; } var pl = e.target.dataset && e.target.dataset.play; if (pl !== undefined) { e.preventDefault(); var ch = load()[+pl]; if (ch) { try { localStorage.setItem('dnd.active', JSON.stringify(ch)); } catch (x) { } location.href = 'world3d.html'; } return; } var i = e.target.dataset && e.target.dataset.del; if (i !== undefined) { e.preventDefault(); var l = load(); l.splice(+i, 1); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (x) { } listSaved(); } };
   setMethod('pointbuy'); listSaved();
 })();
 </script></body></html>
