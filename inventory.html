@@ -2,89 +2,158 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Character &amp; Inventory</title>
 <style>
-:root{--bg:#14171c;--card:#1d222a;--ink:#e8e4da;--dim:#9aa3ad;--acc:#d9b45a;--bad:#e07a6a;--ok:#7fc08a;--line:#2e3540}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:760px;margin:0 auto;padding:12px}h1{font:600 20px Georgia,serif;margin:0;color:var(--acc)}h2{font:600 12px system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 6px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}.note{font-size:12px;color:var(--dim)}
-.tabs{display:flex;gap:6px;margin:8px 0}.tab{flex:1;background:#252c36;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px;font-weight:600;cursor:pointer}.tab.on{background:var(--acc);color:#1a1405}
-.btn{background:#2a313b;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer;margin-left:4px;font-size:12px}.btn.a{background:var(--acc);color:#1a1405;border:0;font-weight:600}.btn:disabled{opacity:.4;cursor:default}
-.bar{height:8px;background:#2a313b;border-radius:4px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--ok)}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px}.stat{background:#12151a;border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}.stat b{display:block;font-size:18px}
-table{width:100%;border-collapse:collapse}td,th{padding:3px 6px;text-align:left;font-size:13px}th{color:var(--dim);font-weight:500}tr+tr td{border-top:1px solid var(--line)}
-.row{display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid var(--line)}.row:first-of-type{border-top:0}.row .n{flex:1;min-width:0}.tag{font-size:11px;color:#1a1405;background:var(--acc);border-radius:4px;padding:0 5px;margin-left:4px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.two{grid-template-columns:1fr}}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid var(--dim);margin-right:5px}.dot.p{background:var(--acc);border-color:var(--acc)}
-#msg{min-height:18px;color:var(--acc);font-size:13px;margin:4px 0}select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px}
-.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}.chip{background:#252c36;border:1px solid var(--line);border-radius:14px;padding:2px 10px;cursor:pointer;font-size:12px}.chip.on{background:var(--acc);color:#1a1405;border-color:var(--acc);font-weight:600}
-</style></head><body><div class="wrap">
-<div id="app"></div>
-<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script><script src="dnd-combat.js"></script><script src="dnd-inventory.js"></script>
+:root{--bg:#0d0b09;--edge:#5b4630;--edge2:#8a6a3f;--gold:#dcb96c;--ink:#e8dfcb;--dim:#8f8575;--good:#7fc08a;--bad:#e0705f;--c0:#7d7566;--c1:#5fa36a;--c2:#5b8fd9;--c3:#a06bd6}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:radial-gradient(ellipse at 50% 0%,#241b12 0,#0d0b09 70%);color:var(--ink);font:14px/1.4 Georgia,'Palatino Linotype',serif;overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;padding:10px 12px;gap:8px}
+button{font-family:inherit}
+.top{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--edge);padding-bottom:8px;flex-wrap:wrap}
+.crest{width:46px;height:46px;border-radius:50%;border:2px solid var(--edge2);background:radial-gradient(circle at 50% 35%,#3a2d1d,#15110c);display:flex;align-items:center;justify-content:center;font:700 22px Georgia,serif;color:var(--gold)}
+.top h1{margin:0;font:600 21px Georgia,serif;color:var(--gold);letter-spacing:.04em}.sub{color:var(--dim);font-size:12px}
+.vit{flex:1;min-width:220px;max-width:340px}.bar{height:12px;background:#0b0907;border:1px solid var(--edge);border-radius:2px;position:relative;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(#b23a2e,#7a241b)}.bar i.ok{background:linear-gradient(#5a9a62,#35693d)}.bar span{position:absolute;inset:0;text-align:center;font:700 10px/12px system-ui;color:#fff;text-shadow:0 0 3px #000}
+.xp{height:4px;background:#0b0907;margin-top:4px}.xp i{display:block;height:100%;background:var(--gold)}
+.badge{min-width:54px;text-align:center;border:1px solid var(--edge);border-radius:4px;padding:3px 8px;background:#120f0b}.badge b{display:block;font:700 18px Georgia,serif;color:var(--gold)}.badge small{color:var(--dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.sp{flex:1}.x{background:none;border:1px solid var(--edge);color:var(--ink);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px}.x:hover{border-color:var(--gold);color:var(--gold)}
+.tabs{display:flex;gap:2px;flex-wrap:wrap}.tab{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--dim);padding:5px 14px;cursor:pointer;font:600 12px Georgia,serif;letter-spacing:.1em;text-transform:uppercase}.tab.on{color:var(--gold);border-color:var(--gold)}.tab:hover{color:var(--ink)}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:300px 1fr 300px;gap:10px}
+.pane{background:linear-gradient(#1a1510,#120f0b);border:1px solid var(--edge);border-radius:4px;box-shadow:inset 0 0 0 1px #000,inset 0 0 24px rgba(0,0,0,.5);display:flex;flex-direction:column;min-height:0}
+.ph{padding:8px 12px;border-bottom:1px solid var(--edge);display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.ph b{font:600 13px Georgia,serif;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}.ph span{color:var(--dim);font-size:12px}
+.pb{padding:10px 12px;overflow:auto;flex:1;min-height:0}
+.doll{display:grid;grid-template-columns:repeat(3,70px);grid-template-areas:". am ." "mh ar oh" "r1 . r2";gap:10px 14px;justify-content:center;padding:6px 0 4px}
+.slot{display:flex;flex-direction:column;align-items:center;gap:2px}.slot small{color:var(--dim);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.tile{position:relative;width:62px;height:62px;border:2px solid var(--c0);border-radius:4px;background:radial-gradient(circle at 50% 35%,#2a2218,#15110c);cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none}
+.tile:hover{filter:brightness(1.35);box-shadow:0 0 0 1px var(--gold)}.tile.r1{border-color:var(--c1)}.tile.r2{border-color:var(--c2)}.tile.r3{border-color:var(--c3)}.tile.sel{box-shadow:0 0 0 2px var(--gold),0 0 10px #dcb96c80}
+.tile.empty{border-style:dashed;border-color:#3a2d1d;cursor:default;color:#3f3424}.tile.empty:hover{filter:none;box-shadow:none}
+.tile svg{width:38px;height:38px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tile .q{position:absolute;right:3px;bottom:1px;font:700 11px system-ui;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000}.tile .e{position:absolute;left:3px;top:1px;font:700 10px system-ui;color:var(--gold);text-shadow:0 0 3px #000}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,62px);gap:6px;align-content:start}
+.empty-msg{color:var(--dim);font-style:italic;padding:8px 0}
+.kv{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2017;font-size:13px}.kv:last-child{border:0}.kv b{color:var(--gold);font-weight:600}.kv span:first-child{color:var(--dim)}
+h3{margin:12px 0 4px;font:600 11px Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}h3:first-child{margin-top:0}
+.btn{background:#1f1913;border:1px solid var(--edge);color:var(--ink);padding:6px 12px;border-radius:3px;cursor:pointer;font:600 12px Georgia,serif;letter-spacing:.06em;margin:2px 4px 2px 0}.btn:hover{border-color:var(--gold);color:var(--gold)}.btn:disabled{opacity:.35;cursor:default;border-color:var(--edge);color:var(--ink)}
+.go{background:linear-gradient(#8a6a3f,#5d4526);border-color:var(--gold);color:#fff3d6}.go:hover{filter:brightness(1.15);color:#fff3d6}
+.bd{display:flex;gap:10px;align-items:center;margin-bottom:6px}.bd .tile{cursor:default;flex:none}.bd .tile:hover{filter:none;box-shadow:none}.bd h2{margin:0;font:600 17px Georgia,serif}
+.warn{color:var(--bad);font-size:12px;margin:4px 0}#msg{min-height:18px;font-size:12px;color:var(--gold);padding:4px 12px}
+select{background:#0f0c09;color:var(--ink);border:1px solid var(--edge);border-radius:3px;padding:3px}
+.ab{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.abx{border:1px solid var(--edge);border-radius:4px;background:#120f0b;text-align:center;padding:8px 2px}.abx small{display:block;color:var(--dim);font-size:10px;letter-spacing:.1em;text-transform:uppercase}.abx b{display:block;font:700 24px Georgia,serif;color:var(--gold)}.abx em{font-style:normal;color:var(--dim);font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sk{columns:2;column-gap:18px}.sk div{display:flex;justify-content:space-between;padding:2px 0;break-inside:avoid;font-size:13px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid var(--dim);margin-right:6px}.dot.p{background:var(--gold);border-color:var(--gold)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{background:#1a1510;border:1px solid var(--edge);border-radius:14px;padding:3px 11px;cursor:default;font-size:13px}.chip.pick{cursor:pointer}.chip.on{background:var(--gold);color:#1a1405;border-color:var(--gold);font-weight:700}.chip.pick:hover{border-color:var(--gold)}
+.pips{letter-spacing:3px;color:var(--gold)}.note{color:var(--dim);font-size:12px}
+.row{display:flex;gap:8px;justify-content:space-between;padding:3px 0;border-bottom:1px solid #2a2017;font-size:13px}.row:last-child{border:0}.row .note{white-space:nowrap}
+#tip{position:fixed;z-index:9;display:none;max-width:280px;background:#0b0907f2;border:1px solid var(--edge2);border-radius:4px;padding:9px 11px;box-shadow:0 6px 20px #000c;pointer-events:none}
+#tip h4{margin:0 0 2px;font:600 15px Georgia,serif}#tip .t{color:var(--dim);font-size:12px;margin-bottom:5px}#tip .w{color:var(--bad);font-size:12px;margin-top:4px}#tip .pr{margin-top:6px;padding-top:5px;border-top:1px solid #2c2219;font-size:12px;color:var(--gold)}
+@media(max-width:900px){body{overflow:auto}#app{height:auto;min-height:100%}.cols{grid-template-columns:1fr;overflow:visible}.pane{min-height:200px}.ab{grid-template-columns:repeat(3,1fr)}.two{grid-template-columns:1fr}}
+</style></head><body><div id="app"></div><div id="tip"></div>
+<script src="dnd-data.js"></script><script src="dnd-rules.js"></script><script src="dnd-levels.js"></script><script src="dnd-combat.js"></script><script src="dnd-inventory.js"></script><script src="dnd-ui.js"></script>
 <script>
 (function () {
-  var I = window.DNDINV, DATA = window.DNDDATA, app = document.getElementById('app'), S = null, tab = 'equip', msg = '';
-  var AB = [['str', 'Strength'], ['dex', 'Dexterity'], ['con', 'Constitution'], ['int', 'Intelligence'], ['wis', 'Wisdom'], ['cha', 'Charisma']], SLOTN = { mainHand: 'Main hand', offHand: 'Off hand', armor: 'Armor', amulet: 'Amulet', ring1: 'Ring 1', ring2: 'Ring 2' };
-  function esc(t) { return String(t === undefined || t === null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var I = window.DNDINV, DATA = window.DNDDATA, U = window.DNDUI, esc = U.esc, app = document.getElementById('app'), tip = document.getElementById('tip');
+  var S = null, tab = 'inv', cat = 'all', sel = null, msg = '', lastBag = { n: null, t: 0 };
+  var AB = [['str', 'STR'], ['dex', 'DEX'], ['con', 'CON'], ['int', 'INT'], ['wis', 'WIS'], ['cha', 'CHA']];
+  var SLOTN = { mainHand: 'Main hand', offHand: 'Off hand', armor: 'Armour', amulet: 'Amulet', ring1: 'Ring', ring2: 'Ring' }, AREA = { mainHand: 'mh', offHand: 'oh', armor: 'ar', amulet: 'am', ring1: 'r1', ring2: 'r2' };
+  var CATS = [['all', 'All'], ['weapons', 'Weapons'], ['armor', 'Armour'], ['consumables', 'Consumables'], ['magic', 'Magic'], ['gear', 'Gear']];
   function sg(n) { return (n >= 0 ? '+' : '') + n; }
   function load() { try { S = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { S = null; } if (S) I.ensure(S); }
   function save() { I.saveActive(S); try { if (window.parent !== window) window.parent.postMessage({ dndHero: true }, '*'); } catch (e) { } }
   function sv(a) { var x = S.saves && S.saves[a]; return x && typeof x === 'object' ? x.bonus : (x || S.mods[a]); }
+  function eqCount(n) { var c = 0; I.SLOTS.forEach(function (k) { if (S.equipped[k] === n) c++; }); return c; }
+  function isCaster() { return !!S.spellcasting; }
+  // ---------- header ----------
   function head() {
-    var pct = Math.max(0, Math.min(100, S.hp / S.hpMax * 100)), h = I.hdInfo(S), nx = window.DNDLEVELS ? window.DNDLEVELS.nextXp(S) : null;
-    return '<div class="card"><h1>' + esc(S.name) + '</h1><div class="note">Level ' + S.level + ' ' + esc(S.subrace || S.race) + ' ' + esc(S.cls) + ' - ' + (S.xp || 0) + ' XP' + (nx ? ' / ' + nx : '') + '</div>' +
-      '<div class="stats" style="margin-top:8px"><div class="stat"><b>' + S.hp + '/' + S.hpMax + '</b>HP</div><div class="stat"><b>' + S.ac + '</b>AC</div><div class="stat"><b>' + S.speed + '</b>Speed</div><div class="stat"><b>' + sg(S.profBonus) + '</b>Prof.</div><div class="stat"><b>' + S.hdLeft + '/' + h.total + '</b>Hit dice (d' + h.die + ')</div><div class="stat"><b>' + S.currency.gp + '</b>gp</div></div><div class="bar"><i style="width:' + pct + '%"></i></div></div>' +
-      '<div class="tabs"><button class="tab' + (tab === 'sheet' ? ' on' : '') + '" data-t="sheet">Sheet</button><button class="tab' + (tab === 'equip' ? ' on' : '') + '" data-t="equip">Equipment</button></div><div id="msg">' + esc(msg) + '</div>';
+    var pct = Math.max(0, Math.min(100, S.hp / S.hpMax * 100)), h = I.hdInfo(S), nx = window.DNDLEVELS && window.DNDLEVELS.nextXp ? window.DNDLEVELS.nextXp(S) : null, xpPct = nx ? Math.min(100, (S.xp || 0) / nx * 100) : 100;
+    var tabs = [['inv', 'Inventory'], ['sheet', 'Character']].concat(isCaster() ? [['spells', 'Spells']] : []);
+    return '<div class="top"><div class="crest">' + esc((S.cls || '?').charAt(0)) + '</div><div><h1>' + esc(S.name) + '</h1><div class="sub">Level ' + S.level + ' ' + esc(S.subrace || S.race) + ' ' + esc(S.cls) + ' - ' + (S.xp || 0) + (nx ? ' / ' + nx : '') + ' XP</div></div>' +
+      '<div class="vit"><div class="bar"><i class="' + (pct > 35 ? 'ok' : '') + '" style="width:' + pct + '%"></i><span>' + S.hp + ' / ' + S.hpMax + ' HP</span></div><div class="xp"><i style="width:' + xpPct + '%"></i></div></div>' +
+      '<div class="badge"><b>' + S.ac + '</b><small>Armour</small></div><div class="badge"><b>' + S.speed + '</b><small>Speed</small></div><div class="badge"><b>' + U.fmt(I.wealthCp(S)).replace(/ gp$/, '') + '</b><small>Gold</small></div>' +
+      '<div class="sp"></div><div class="tabs">' + tabs.map(function (x) { return '<button class="tab' + (tab === x[0] ? ' on' : '') + '" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div><button class="x" id="close" title="Close (I or Esc)">&#10005;</button></div>';
   }
+  // ---------- inventory tab ----------
+  function slotTile(k) {
+    var n = S.equipped[k], on = sel && sel.slot === k;
+    return '<div class="slot" style="grid-area:' + AREA[k] + '"><div class="tile ' + (n ? 'r' + U.rarity(n) : 'empty') + (on ? ' sel' : '') + '" ' + (n ? 'style="color:' + U.RC[U.rarity(n)] + '" data-slot="' + k + '" data-n="' + esc(n) + '"' : '') + '>' + (n ? U.icon(n) : U.slotIcon(k)) + '</div><small>' + SLOTN[k] + '</small></div>';
+  }
+  function bagTile(x) { var on = sel && !sel.slot && sel.name === x.name, e = eqCount(x.name); return '<div class="tile r' + U.rarity(x.name) + (on ? ' sel' : '') + '" style="color:' + U.RC[U.rarity(x.name)] + '" data-bag="' + esc(x.name) + '" data-n="' + esc(x.name) + '">' + U.icon(x.name) + (x.qty > 1 ? '<span class="q">' + x.qty + '</span>' : '') + (e ? '<span class="e">E</span>' : '') + '</div>'; }
+  function atk(a) { return '<div class="row"><span>' + esc(a.name) + '</span><span class="note">' + sg(a.bonus) + ' - ' + esc(/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + a.mod) : a.dice + (a.mod ? sg(a.mod) : '')) + ' ' + esc(a.type) + (a.rng ? ' (' + a.rng[0] + '/' + a.rng[1] + ')' : '') + '</span></div>'; }
+  function details() {
+    if (!sel) return '<div class="empty-msg">Click an item to see what it does. Double-click a backpack item to equip or use it.</div>';
+    var n = sel.name, inf = U.itemInfo(n, S), k = I.kind(n), b = '', M = I.MAGIC[n], inBag = I.SLOTS.some(function (x) { return true; });
+    if (sel.slot) b = '<button class="btn" data-u="' + sel.slot + '">Unequip</button>';
+    else {
+      if (M && M.type === 'potion') b = '<button class="btn go" data-p="' + esc(n) + '"' + (S.hp >= S.hpMax ? ' disabled' : '') + '>Drink</button>';
+      else if (k === 'weapon') b = '<button class="btn go" data-e="' + esc(n) + '" data-s="mainHand">Main hand</button><button class="btn" data-e="' + esc(n) + '" data-s="offHand">Off hand</button>';
+      else if (k !== 'gear') b = '<button class="btn go" data-e="' + esc(n) + '">Equip</button>';
+      b += '<button class="btn" data-d="' + esc(n) + '">Drop one</button>';
+    }
+    var it = S.inventory.filter(function (x) { return x.name === n; })[0], worth = I.priceCp(n);
+    return '<div class="bd"><div class="tile r' + U.rarity(n) + '" style="color:' + inf.color + '">' + U.icon(n) + '</div><div><h2 style="color:' + inf.color + '">' + esc(n) + '</h2><div class="note">' + inf.type + (it && it.qty > 1 ? ' - x' + it.qty : '') + '</div></div></div><div>' + esc(inf.desc) + '</div>' + (inf.warn ? '<div class="warn">' + inf.warn + '</div>' : '') +
+      (worth ? '<div class="note" style="margin-top:6px">Worth ' + U.fmt(worth) + '</div>' : '') + '<div style="margin-top:10px">' + b + '</div>';
+  }
+  function invTab() {
+    var items = S.inventory.filter(function (x) { return cat === 'all' || I.category(x.name) === cat; }), h = I.hdInfo(S), sel2 = ''; for (var i = 1; i <= S.hdLeft; i++) sel2 += '<option>' + i + '</option>';
+    return '<div class="cols"><div class="pane"><div class="ph"><b>Equipment</b></div><div class="pb"><div class="doll">' + I.SLOTS.map(slotTile).join('') + '</div>' +
+      '<h3>Armour &amp; attacks</h3><div class="kv"><span>Armour class</span><b>' + S.ac + '</b></div><div class="note">' + esc(S.acNote) + (S.stealthDisadvantage ? ' - stealth disadvantage' : '') + '</div>' + (S.armorWarning ? '<div class="warn">' + esc(S.armorWarning) + '</div>' : '') + '<div style="margin-top:6px">' + S.attacks.map(atk).join('') + '</div></div></div>' +
+      '<div class="pane"><div class="ph"><b>Backpack</b><span>' + S.inventory.length + ' kinds of item</span><div class="sp" style="flex:1"></div><div class="tabs">' + CATS.map(function (x) { return '<button class="tab' + (cat === x[0] ? ' on' : '') + '" style="padding:2px 8px;font-size:11px" data-c="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div><div class="pb"><div class="grid">' + (items.length ? items.map(bagTile).join('') : '') + '</div>' + (items.length ? '' : '<div class="empty-msg">Nothing here.</div>') + '</div></div>' +
+      '<div class="pane"><div class="ph"><b>Details</b></div><div class="pb">' + details() + '</div><div id="msg">' + esc(msg) + '</div>' +
+      '<div class="ph" style="border-top:1px solid var(--edge);border-bottom:0"><b>Rest</b><span>Hit dice ' + S.hdLeft + '/' + h.total + ' (d' + h.die + ' ' + sg(S.mods.con) + ')</span></div><div class="pb" style="flex:none;padding-top:0"><div><select id="hd"' + (S.hdLeft ? '' : ' disabled') + '>' + sel2 + '</select> <button class="btn" id="sr"' + (S.hdLeft && S.hp < S.hpMax ? '' : ' disabled') + '>Short rest</button><button class="btn go" id="lr">Long rest</button></div><div class="note">Short: spend hit dice, regain Second Wind and Action Surge. Long: full HP and all resources.</div></div></div></div>';
+  }
+  // ---------- character tab ----------
   function sheetTab() {
-    var o = '<div class="card"><h2>Abilities</h2><table><tr><th></th><th>Score</th><th>Mod</th><th>Save</th></tr>' + AB.map(function (a) { var p = S.saves && S.saves[a[0]] && S.saves[a[0]].proficient; return '<tr><td>' + a[1] + '</td><td>' + S.scores[a[0]] + '</td><td>' + sg(S.mods[a[0]]) + '</td><td><span class="dot' + (p ? ' p' : '') + '"></span>' + sg(sv(a[0])) + '</td></tr>'; }).join('') + '</table></div>';
-    o += '<div class="two"><div class="card"><h2>Skills</h2><table>' + Object.keys(S.skills).map(function (k) { var x = S.skills[k]; return '<tr><td><span class="dot' + (x.proficient ? ' p' : '') + '"></span>' + esc(k) + (x.expertise ? ' *' : '') + '</td><td>' + sg(x.bonus) + '</td></tr>'; }).join('') + '</table><div class="note">Passive Perception ' + S.passivePerception + ' - Initiative ' + sg(S.initiative) + '</div></div>';
-    o += '<div><div class="card"><h2>Attacks</h2>' + S.attacks.map(function (a) { return '<div class="row"><span class="n">' + esc(a.name) + '</span><span class="note">' + sg(a.bonus) + ', ' + esc(/^\d+$/.test(a.dice) ? Math.max(0, +a.dice + a.mod) : a.dice + (a.mod ? sg(a.mod) : '')) + ' ' + esc(a.type) + (a.rng ? ', range ' + a.rng[0] + '/' + a.rng[1] : '') + '</span></div>'; }).join('') + '</div>';
-    var rl = I.resLines(S); if (rl.length) o += '<div class="card"><h2>Per-rest resources</h2>' + rl.map(function (x) { return '<div style="margin:3px 0">' + esc(x) + '</div>'; }).join('') + '<div class="note">Short rest restores Second Wind and Action Surge (and Warlock slots); a long rest restores everything.</div></div>'; var sc = S.spellcasting; if (sc) { o += '<div class="card"><h2>Spells</h2><div class="note">Save DC ' + sc.saveDC + ', attack ' + sg(sc.attackBonus) + '. Slots: ' + Object.keys(sc.slots).map(function (k) { return sc.slots[k] + ' x L' + k; }).join(', ') + '</div>' +
-      ((sc.cantripList || []).length ? '<div style="margin-top:4px"><b>Cantrips:</b> ' + esc(sc.cantripList.join(', ')) + '</div>' : '') + (sc.kind !== 'prepared' && (sc.preparedSpells || []).length ? '<div style="margin-top:4px"><b>Prepared:</b> ' + esc(sc.preparedSpells.concat(sc.domainSpells || []).filter(function (n, i, a) { return a.indexOf(n) === i; }).join(', ')) + '</div>' : '') + prepBlock(sc) + '</div>'; }
-    o += '</div></div><div class="card"><h2>Features</h2>' + S.features.map(function (f) { return '<div style="margin:3px 0">' + esc(f) + '</div>'; }).join('') + '</div>';
+    var o = '<div class="pane" style="flex:1"><div class="pb"><h3>Abilities</h3><div class="ab">' + AB.map(function (a) { var p = S.saves && S.saves[a[0]] && S.saves[a[0]].proficient; return '<div class="abx"><small>' + a[1] + '</small><b>' + S.scores[a[0]] + '</b><em>' + sg(S.mods[a[0]]) + '</em><div class="note" style="margin-top:4px"><span class="dot' + (p ? ' p' : '') + '"></span>Save ' + sg(sv(a[0])) + '</div></div>'; }).join('') + '</div>' +
+      '<div class="two" style="margin-top:14px"><div><h3>Skills</h3><div class="sk">' + Object.keys(S.skills).map(function (k) { var x = S.skills[k]; return '<div><span><span class="dot' + (x.proficient ? ' p' : '') + '"></span>' + esc(k) + (x.expertise ? ' *' : '') + '</span><b style="color:var(--gold);font-weight:600">' + sg(x.bonus) + '</b></div>'; }).join('') + '</div><div class="note" style="margin-top:6px">Passive Perception ' + S.passivePerception + ' - Initiative ' + sg(S.initiative) + ' - Proficiency ' + sg(S.profBonus) + '</div></div>' +
+      '<div><h3>Attacks</h3>' + S.attacks.map(atk).join('');
+    var rl = I.resLines(S); if (rl.length) o += '<h3>Per-rest resources</h3>' + rl.map(function (x) { return '<div class="row"><span>' + esc(x) + '</span></div>'; }).join('');
+    o += '<h3>Features</h3>' + S.features.map(function (f) { return '<div style="margin:3px 0;font-size:13px">' + esc(f) + '</div>'; }).join('') + '</div></div></div></div>';
     return o;
   }
-  /** Prepared casters (Wizard, Cleric, Druid) choose today's spells from the spellbook / class list. */
-  function prepBlock(sc) {
-    if (sc.kind !== 'prepared') return '';
-    var CS = window.DNDDATA.CLASS_SPELLS[S.cls], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), cur = sc.preparedSpells || [], FX = window.DNDCOMBAT ? window.DNDCOMBAT.SPELL_FX : {},
-      pool = (S.cls === 'Wizard' ? (sc.knownSpells || []) : (CS ? CS[1] : [])).filter(function (n) { return dom.indexOf(n) < 0; }), n = cur.filter(function (x) { return dom.indexOf(x) < 0; }).length;
-    return '<div style="margin-top:10px"><b>Prepare spells</b> <span class="note">' + n + '/' + max + ' prepared - tap a spell to prepare or un-prepare it</span><div class="chips">' + pool.map(function (x) { return '<span class="chip' + (cur.indexOf(x) >= 0 ? ' on' : '') + '" data-sp="' + esc(x) + '">' + esc(x) + (FX[x] ? '' : ' *') + '</span>'; }).join('') + '</div>' +
-      (dom.length ? '<div class="note" style="margin-top:4px">Always prepared: ' + esc(dom.join(', ')) + '</div>' : '') + '<div class="note" style="margin-top:4px">* no combat effect in the game yet, so it will not appear as a battle action.</div></div>';
-  }
-  function equipTab() {
-    var eq = S.equipped, o = '<div class="card"><h2>Equipped</h2>' + I.SLOTS.map(function (k) { var n = eq[k]; return '<div class="row"><span class="note" style="width:70px">' + SLOTN[k] + '</span><span class="n">' + (n ? esc(n) + ' <span class="note">' + esc(I.describe(n)) + '</span>' : '<span class="note">empty</span>') + '</span>' + (n ? '<button class="btn" data-u="' + k + '">Unequip</button>' : '') + '</div>'; }).join('') +
-      '<div class="note" style="margin-top:6px">AC ' + S.ac + ' (' + esc(S.acNote) + ')' + (S.stealthDisadvantage ? ' - stealth disadvantage' : '') + (S.armorWarning ? ' - ' + esc(S.armorWarning) : '') + '</div></div>';
-    o += '<div class="card"><h2>Backpack</h2>' + (S.inventory.length ? S.inventory.map(function (x) {
-      var k = I.kind(x.name), eqn = I.SLOTS.filter(function (s) { return eq[s] === x.name; }).length, b = '';
-      if (k === 'weapon') { b = '<button class="btn" data-e="' + esc(x.name) + '" data-s="mainHand">Main hand</button><button class="btn" data-e="' + esc(x.name) + '" data-s="offHand">Off hand</button>'; }
-      else if (k !== 'gear') b = '<button class="btn" data-e="' + esc(x.name) + '">Equip</button>';
-      if (I.MAGIC[x.name] && I.MAGIC[x.name].type === 'potion') b = '<button class="btn a" data-p="' + esc(x.name) + '">Drink</button>';
-      var pk = DATA.PACKS[x.name] ? ' title="' + esc(DATA.PACKS[x.name].join(', ')) + '"' : '';
-      return '<div class="row"><span class="n"' + pk + '>' + esc(x.name) + (x.qty > 1 ? ' x' + x.qty : '') + (eqn ? '<span class="tag">equipped' + (eqn > 1 ? ' x' + eqn : '') + '</span>' : '') + '<div class="note">' + esc(I.describe(x.name) || (DATA.PACKS[x.name] ? 'Adventuring gear (hover to see contents)' : '')) + '</div></span>' + b + '<button class="btn" data-d="' + esc(x.name) + '">Drop</button></div>';
-    }).join('') : '<div class="note">Nothing in your pack.</div>') + '</div>';
-    var h = I.hdInfo(S), sel = ''; for (var i = 1; i <= S.hdLeft; i++) sel += '<option>' + i + '</option>';
-    o += '<div class="card"><h2>Money &amp; rest</h2><div class="note">' + S.currency.gp + ' gp' + (S.currency.sp ? ', ' + S.currency.sp + ' sp' : '') + (S.currency.cp ? ', ' + S.currency.cp + ' cp' : '') + '</div><div class="row"><span class="n">Short rest: spend hit dice (d' + h.die + ' ' + sg(S.mods.con) + ' each)</span><select id="hd"' + (S.hdLeft ? '' : ' disabled') + '>' + sel + '</select><button class="btn a" id="sr"' + (S.hdLeft && S.hp < S.hpMax ? '' : ' disabled') + '>Rest</button></div><div class="row"><span class="n">Long rest: full HP, all resources, regain half your hit dice</span><button class="btn a" id="lr">Rest</button></div></div>';
+  // ---------- spells tab ----------
+  function spellChip(n, cls, extra) { return '<span class="chip ' + cls + '" data-spell="' + esc(n) + '"' + (extra || '') + '>' + esc(n) + '</span>'; }
+  function spellsTab() {
+    var sc = S.spellcasting, FX = window.DNDCOMBAT ? window.DNDCOMBAT.SPELL_FX : {}, dom = sc.domainSpells || [], cur = sc.preparedSpells || [], o = '<div class="pane" style="flex:1"><div class="pb">';
+    o += '<div class="kv"><span>Spell save DC</span><b>' + sc.saveDC + '</b></div><div class="kv"><span>Spell attack</span><b>' + sg(sc.attackBonus) + '</b></div>';
+    o += '<h3>Spell slots</h3>' + Object.keys(sc.slots).map(function (k) { var left = S.res && S.res.slots && S.res.slots[k] !== undefined ? S.res.slots[k] : sc.slots[k]; return '<div class="kv"><span>Level ' + k + '</span><b class="pips">' + new Array(left + 1).join('●') + new Array(sc.slots[k] - left + 1).join('○') + '</b></div>'; }).join('');
+    if ((sc.cantripList || []).length) o += '<h3>Cantrips</h3><div class="chips">' + sc.cantripList.map(function (n) { return spellChip(n, ''); }).join('') + '</div>';
+    if (sc.kind === 'prepared') {
+      var CS = DATA.CLASS_SPELLS[S.cls], max = Math.max(1, S.mods[sc.ability] + S.level), pool = (S.cls === 'Wizard' ? (sc.knownSpells || []) : (CS ? CS[1] : [])).filter(function (n) { return dom.indexOf(n) < 0; }), n = cur.filter(function (x) { return dom.indexOf(x) < 0; }).length;
+      o += '<h3>Prepared spells <span class="note" style="letter-spacing:0;text-transform:none">' + n + ' / ' + max + ' - click to prepare or swap</span></h3><div class="chips">' + pool.map(function (x) { return spellChip(x, 'pick' + (cur.indexOf(x) >= 0 ? ' on' : ''), ' data-sp="' + esc(x) + '"'); }).join('') + '</div>' + (dom.length ? '<div class="note" style="margin-top:6px">Always prepared: ' + esc(dom.join(', ')) + '</div>' : '');
+    } else if ((cur || []).length) o += '<h3>Known spells</h3><div class="chips">' + cur.map(function (n) { return spellChip(n, ''); }).join('') + '</div>';
+    o += '<div class="note" style="margin-top:10px">Hover a spell for its details. Spells with no combat effect yet will not appear as a battle action.</div></div></div>';
     return o;
   }
   function render() {
-    if (!S) { app.innerHTML = '<div class="card"><h1>No active character</h1><div class="note">Create one in <a style="color:var(--acc)" href="character.html">the character creator</a> and press "play in 3D" first.</div></div>'; return; }
-    app.innerHTML = head() + (tab === 'sheet' ? sheetTab() : equipTab());
+    if (!S) { app.innerHTML = '<div class="pane"><div class="pb"><h3>No active character</h3><div>Create one in <a style="color:var(--gold)" href="character.html">the character creator</a> and press "play in 3D" first.</div></div></div>'; return; }
+    if (tab === 'spells' && !isCaster()) tab = 'inv';
+    app.innerHTML = head() + (tab === 'sheet' ? sheetTab() : tab === 'spells' ? spellsTab() : invTab());
   }
-  function done(r) { msg = r.msg || ''; if (r.ok !== false) save(); render(); }
-  document.addEventListener('click', function (e) {
-    var t = e.target; if (!S || !t.dataset) return;
-    if (t.dataset.sp) {
-      var sc = S.spellcasting, cur = sc.preparedSpells = sc.preparedSpells || [], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), i = cur.indexOf(t.dataset.sp);
-      if (i >= 0) cur.splice(i, 1); else if (cur.filter(function (x) { return dom.indexOf(x) < 0; }).length >= max) return done({ ok: false, msg: 'You can prepare ' + max + ' spells. Tap a prepared one to swap it out.' }); else cur.push(t.dataset.sp);
+  // ---------- actions ----------
+  function done(r) { msg = r.msg || ''; if (r.ok !== false) save(); if (sel && !sel.slot && !S.inventory.some(function (x) { return x.name === sel.name; })) sel = null; if (sel && sel.slot && !S.equipped[sel.slot]) sel = null; render(); }
+  function close() { try { if (window.parent !== window) window.parent.postMessage({ dndInvClose: true }, '*'); } catch (e) { } }
+  function quick(n) { var k = I.kind(n), M = I.MAGIC[n]; if (M && M.type === 'potion') return done(I.usePotion(S, n)); if (k !== 'gear') return done(I.equip(S, n)); }
+  app.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-t],[data-c],[data-bag],[data-slot],[data-u],[data-e],[data-d],[data-p],[data-sp],#sr,#lr,#close'); if (!t || !S) return; var d = t.dataset;
+    if (t.id === 'close') return close(); if (d.t) { tab = d.t; msg = ''; return render(); } if (d.c) { cat = d.c; return render(); }
+    if (d.bag) { var now = Date.now(); if (lastBag.n === d.bag && now - lastBag.t < 450) { lastBag = { n: null, t: 0 }; sel = { name: d.bag }; return quick(d.bag); } lastBag = { n: d.bag, t: now }; sel = { name: d.bag }; msg = ''; return render(); } if (d.slot) { sel = { name: d.n, slot: d.slot }; msg = ''; return render(); }
+    if (d.u) { sel = null; return done(I.unequip(S, d.u)); } if (d.e) return done(I.equip(S, d.e, d.s)); if (d.d) return done(I.drop(S, d.d, 1)); if (d.p) return done(I.usePotion(S, d.p));
+    if (t.id === 'sr') return done(I.shortRest(S, +document.getElementById('hd').value)); if (t.id === 'lr') return done(I.longRest(S));
+    if (d.sp) {
+      var sc = S.spellcasting, cur = sc.preparedSpells = sc.preparedSpells || [], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), i = cur.indexOf(d.sp);
+      if (i >= 0) cur.splice(i, 1); else if (cur.filter(function (x) { return dom.indexOf(x) < 0; }).length >= max) return done({ ok: false, msg: 'You can prepare ' + max + ' spells. Click a prepared one to swap it out.' }); else cur.push(d.sp);
       return done({ ok: true, msg: 'Prepared spells updated.' });
     }
-    if (t.dataset.t) { tab = t.dataset.t; msg = ''; return render(); }
-    if (t.dataset.u) return done(I.unequip(S, t.dataset.u)); if (t.dataset.e) return done(I.equip(S, t.dataset.e, t.dataset.s));
-    if (t.dataset.d) return done(I.drop(S, t.dataset.d, 1)); if (t.dataset.p) return done(I.usePotion(S, t.dataset.p));
-    if (t.id === 'sr') return done(I.shortRest(S, +document.getElementById('hd').value)); if (t.id === 'lr') return done(I.longRest(S));
   });
+  // tooltips: items and spells
+  app.addEventListener('mouseover', function (e) {
+    var t = e.target.closest('[data-n],[data-spell]'); if (!t || !S) { tip.style.display = 'none'; return; }
+    if (t.dataset.spell) { var sp = DATA.SPELLS[t.dataset.spell]; if (!sp) { tip.style.display = 'none'; return; } var FX = window.DNDCOMBAT ? window.DNDCOMBAT.SPELL_FX : {};
+      tip.innerHTML = '<h4 style="color:var(--gold)">' + esc(sp.name) + '</h4><div class="t">' + (sp.level ? 'Level ' + sp.level : 'Cantrip') + ' ' + esc(sp.school) + ' - ' + esc(sp.time) + ' - ' + esc(sp.range) + '</div><div>' + esc(sp.text) + '</div>' + (FX[sp.name] ? '' : '<div class="w" style="color:var(--dim)">No combat effect in the game yet.</div>'); }
+    else tip.innerHTML = U.itemTip(t.dataset.n, S, t.dataset.slot ? 'Equipped - ' + SLOTN[t.dataset.slot] : (U.fmt(I.priceCp(t.dataset.n) || 0) !== '0 gp' ? 'Worth ' + U.fmt(I.priceCp(t.dataset.n)) : ''));
+    tip.style.display = 'block';
+  });
+  app.addEventListener('mousemove', function (e) { if (tip.style.display === 'none') return; var x = e.clientX + 16, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight; if (x + w > innerWidth - 6) x = e.clientX - w - 16; if (y + h > innerHeight - 6) y = innerHeight - h - 6; tip.style.left = x + 'px'; tip.style.top = y + 'px'; });
+  app.addEventListener('mouseout', function (e) { if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('[data-n],[data-spell]')) tip.style.display = 'none'; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'i' || e.key === 'I') close(); });
   window.addEventListener('storage', function (e) { if (e.key === 'dnd.active') { load(); render(); } });
   window.addEventListener('message', function (e) { if (e.data && e.data.dndRefresh) { load(); render(); } });
   load(); render();
 })();
-</script></div></body></html>
+</script></body></html>
