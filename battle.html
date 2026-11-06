@@ -68,7 +68,7 @@ select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-r
   function writeBack(w, xp) {
     if (!/[?&]enc=/.test(location.search)) return null; var h = null; try { h = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { } if (!h) return null;
     var u = enc.units.filter(function (x) { return x.team === 'party'; })[0]; if (!u) return null; var I = window.DNDINV; I.ensure(h);
-    h.hp = Math.max(1, Math.min(h.hpMax, u.hp)); if (u.potionsUsed.h) I.drop(h, 'Potion of Healing', u.potionsUsed.h); if (u.potionsUsed.g) I.drop(h, 'Potion of Greater Healing', u.potionsUsed.g);
+    h.hp = Math.max(1, Math.min(h.hpMax, u.hp)); h.res = { used: JSON.parse(JSON.stringify(u.used || {})), slots: JSON.parse(JSON.stringify(u.slots || {})), layPool: u.layPool }; if (u.potionsUsed.h) I.drop(h, 'Potion of Healing', u.potionsUsed.h); if (u.potionsUsed.g) I.drop(h, 'Potion of Greater Healing', u.potionsUsed.g);
     var lines = []; if (w === 'party') { h.xp = (h.xp || 0) + xp; lines = I.giveLoot(h, I.lootFor(enc.units.filter(function (x) { return x.team === 'foe'; }).map(function (x) { return x.name; }), M.BESTIARY)); }
     I.saveActive(h); return { lines: lines, hp: h.hp, hpMax: h.hpMax, totalXp: h.xp || 0 };
   }

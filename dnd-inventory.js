@@ -73,6 +73,23 @@
     list.push({ name: mono ? 'Unarmed strike (Martial Arts)' : 'Unarmed strike', weapon: null, ability: ua, bonus: m[ua] + pb, proficient: true, dice: mono ? '1d4' : '1', mod: mono ? m[ua] : m.str, type: 'bludgeoning', ranged: false, props: [] });
     s.attacks = list; return s;
   }
+  /** Per-rest resources carried between fights: s.res = {used:{rage,surge,secondWind}, slots:{lvl:left}, layPool}. */
+  function maxLay(s) { return s.cls === 'Paladin' ? 5 * (s.level || 1) : 0; }
+  function resetRes(s, which) {
+    var r = s.res = s.res || {}; r.used = r.used || {};
+    if (which === 'long') { r.used = {}; if (s.spellcasting) r.slots = JSON.parse(JSON.stringify(s.spellcasting.slots)); if (s.cls === 'Paladin') r.layPool = maxLay(s); }
+    else { delete r.used.surge; delete r.used.secondWind; if (s.cls === 'Warlock' && s.spellcasting) r.slots = JSON.parse(JSON.stringify(s.spellcasting.slots)); }
+    return r;
+  }
+  /** Readable list for the sheet panel, e.g. ['Rage 1/2', 'Spell slots L1 1/2']. */
+  function resLines(s) {
+    var r = s.res || {}, u = r.used || {}, o = [], sc = s.spellcasting;
+    if (s.cls === 'Barbarian') { var mx = s.level >= 3 ? 3 : 2; o.push('Rage ' + (mx - (u.rage || 0)) + '/' + mx); }
+    if (s.cls === 'Fighter') { o.push('Second Wind ' + (u.secondWind ? '0/1' : '1/1')); if (s.level >= 2) o.push('Action Surge ' + (u.surge ? '0/1' : '1/1')); }
+    if (s.cls === 'Paladin') o.push('Lay on Hands ' + (r.layPool !== undefined ? r.layPool : maxLay(s)) + '/' + maxLay(s));
+    if (sc && sc.slots) Object.keys(sc.slots).forEach(function (k) { o.push('Level ' + k + ' slots ' + ((r.slots && r.slots[k] !== undefined) ? r.slots[k] : sc.slots[k]) + '/' + sc.slots[k]); });
+    return o;
+  }
   function hdInfo(s) { return { total: s.level || 1, die: +String(s.hitDie || 'd8').slice(1), left: s.hdLeft }; }
   /** First-time set-up: equipment from the starting kit, hit dice, currency, one starter potion. Does not change a sheet that is already set up. */
   function ensure(s) {
@@ -128,11 +145,12 @@
   function shortRest(s, spend, rng) {
     ensure(s); var h = hdInfo(s), n = Math.max(0, Math.min(spend | 0, s.hdLeft)), healed = 0, i;
     if (s.hp <= 0) return { ok: false, msg: 'You are down; you need healing first.' };
+    resetRes(s, 'short');
     for (i = 0; i < n && s.hp < s.hpMax; i++) { var g = Math.max(0, d(h.die, rng) + s.mods.con), b = s.hp; s.hp = Math.min(s.hpMax, s.hp + g); healed += s.hp - b; s.hdLeft--; }
-    return { ok: true, healed: healed, used: i, msg: 'Short rest: spent ' + i + ' hit di' + (i === 1 ? 'e' : 'ce') + ', +' + healed + ' HP (' + s.hp + '/' + s.hpMax + ').' };
+    return { ok: true, healed: healed, used: i, msg: 'Short rest (Second Wind, Action Surge' + (s.cls === 'Warlock' ? ', pact slots' : '') + ' restored): spent ' + i + ' hit di' + (i === 1 ? 'e' : 'ce') + ', +' + healed + ' HP (' + s.hp + '/' + s.hpMax + ').' };
   }
   function longRest(s) {
-    ensure(s); var h = hdInfo(s); s.hp = s.hpMax; s.tempHp = 0; s.deathSaves = { ok: 0, fail: 0 }; s.conditions = []; s.hdLeft = Math.min(h.total, s.hdLeft + Math.max(1, Math.floor(h.total / 2)));
+    ensure(s); var h = hdInfo(s); s.hp = s.hpMax; s.tempHp = 0; s.deathSaves = { ok: 0, fail: 0 }; s.conditions = []; s.hdLeft = Math.min(h.total, s.hdLeft + Math.max(1, Math.floor(h.total / 2))); resetRes(s, 'long');
     return { ok: true, msg: 'Long rest: full HP, hit dice ' + s.hdLeft + '/' + h.total + '.' };
   }
   // ---------- loot ----------
@@ -167,6 +185,6 @@
     try { localStorage.setItem('dnd.active', JSON.stringify(s)); var l = JSON.parse(localStorage.getItem('dnd.characters') || '[]'); for (var i = 0; i < l.length; i++) if (l[i].name === s.name && l[i].cls === s.cls) l[i] = s; localStorage.setItem('dnd.characters', JSON.stringify(l)); return true; } catch (e) { return false; }
   }
   var api = { SLOTS: SLOTS, MAGIC: MAGIC, ensure: ensure, recompute: recompute, equip: equip, unequip: unequip, drop: drop, addItem: addItem, qty: qty, kind: kind, describe: describe,
-    usePotion: usePotion, shortRest: shortRest, longRest: longRest, lootFor: lootFor, giveLoot: giveLoot, hdInfo: hdInfo, saveActive: saveActive, armorProf: armorProf, weaponProf: weaponProf };
+    usePotion: usePotion, shortRest: shortRest, longRest: longRest, lootFor: lootFor, giveLoot: giveLoot, hdInfo: hdInfo, resetRes: resetRes, resLines: resLines, saveActive: saveActive, armorProf: armorProf, weaponProf: weaponProf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DNDINV = api;
 })(typeof window !== 'undefined' ? window : this);
