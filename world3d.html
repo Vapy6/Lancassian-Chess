@@ -1039,6 +1039,47 @@ var fl = (function () {
       if (ENC.box || INV.box) return; heroRefresh(); var lv = (HERO && HERO.level) || 1, r = Math.random();
       var pool = ['Giant Rat', 'Kobold', 'Goblin', 'Wolf', 'Bandit', 'Skeleton', 'Zombie']; if (lv >= 3) pool = pool.concat(['Orc', 'Brown Bear', 'Giant Spider', 'Orc']); if (lv >= 5) pool.push('Ogre');
       var pick = pool[Math.floor(Math.random() * pool.length)], n = /Ogre|Bear|Spider|Orc/.test(pick) ? 1 + (lv >= 4 && r < 0.4 ? 1 : 0) : 1 + Math.floor(Math.random() * (lv >= 3 ? 4 : 3));
+      var b = document.createElement('div'); b.style.cssText = 'position:fixed;top:0;right:0;bottom:0;width:min(470px,94vw);z-index:50;background:rgba(10,12,18,.9);display:flex;flex-direction:column;padding:10px;box-shadow:-6px 0 24px rgba(0,0,0,.5)';
+      b.innerHTML = '<div style="color:#fff;font:600 16px sans-serif;margin-bottom:8px">A wild encounter: ' + n + ' x ' + pick + ' <button id="encx" style="margin-left:12px;padding:4px 12px">Close / flee</button> <button id="encm" style="padding:4px 10px">Hide menu</button></div><iframe style="width:100%;flex:1;border:0;border-radius:8px;background:#111"></iframe>';
+      document.body.appendChild(b); ENC.box = b; ENC.n = n; ENC.rewarded = false; ENC.ack = false; ENC.lp = null; ENC.left = 0; ENC.mine = false; ENC.foes = []; for (var fi = 0; fi < n; fi++) { var a = WALK.body + (fi - (n - 1) / 2) * 0.7, dd = (28 + 6 * (fi % 2)) * FT, fx = WALK.x - Math.sin(cam.yaw) * dd * 1.0 + Math.cos(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT, fz = WALK.z - Math.cos(cam.yaw) * dd - Math.sin(cam.yaw) * (fi - (n - 1) / 2) * 6 * FT; ENC.foes.push({ x: fx, z: fz, y: groundAt(fx, fz), body: Math.atan2(WALK.x - fx, WALK.z - fz), pick: pick }); }
+      b.querySelector('iframe').src = 'battle.html?enc=' + encodeURIComponent(pick + ':' + n);
+      b.querySelector('#encm').onclick = function () { var fr = b.querySelector('iframe'), h = fr.style.display === 'none'; fr.style.display = h ? '' : 'none'; b.style.bottom = h ? '0' : 'auto'; this.textContent = h ? 'Hide menu' : 'Show menu'; };
+      b.querySelector('#encx').onclick = function () { b.remove(); ENC.box = null; if (ENC.won) ENC.foes = []; ENC.won = false; for (var k in keys) keys[k] = false; };
+    }
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndFoeMove && ENC.foes[e.data.i]) { var ff = ENC.foes[e.data.i]; ff.tx = e.data.x * FT; ff.tz = e.data.z * FT; return; } if (e.data && e.data.dndState && ENC.box) { ENC.ack = true; ENC.tgt = e.data.tgt; ENC.left = e.data.left; ENC.mine = e.data.mine; e.data.foes.forEach(function (u, i) { var f = ENC.foes[i]; if (f) { if (f.hp !== undefined && u.hp < f.hp) f.hit = performance.now(); f.dead = u.dead; f.cur = u.cur; f.hp = u.hp; f.max = u.max; f.name = u.name; } }); return; } if (e.data && e.data.dndBattle && ENC.box) { if (ENC.rewarded) return; ENC.rewarded = true; ENC.won = e.data.winner === 'party'; if (ENC.won && ENC.n) questKills(ENC.n); if (e.data.saved) heroRefresh(); else if (ENC.won && HERO) { HERO.xp = (HERO.xp || 0) + e.data.xp; hsave(); } var XPT = [0, 300, 900, 2700, 6500, 14000]; if (ENC.won && HERO && (HERO.level || 1) < 5 && (HERO.xp || 0) >= XPT[HERO.level || 1]) { var hd = ENC.box.firstChild; if (!hd.querySelector('a')) { var la = document.createElement('a'); la.href = 'levelup.html'; la.textContent = ' LEVEL UP available!'; la.style.cssText = 'color:#fc3;margin-left:10px'; hd.appendChild(la); } } var t = ENC.box.firstChild; t.firstChild.textContent = (e.data.winner === 'party' ? 'Victory! +' + e.data.xp + ' XP' + (HERO ? ' (total ' + HERO.xp + ')' : '') + '.' + (e.data.loot && e.data.loot.length ? ' Loot: ' + e.data.loot.join(', ') + '.' : '') + ' ' : 'Defeat. ') + ' '; } });
+    var FUI = [];
+    function foeUI(vp, w, hh) {
+      var on = !!ENC.box, i; npcTick();
+      if (on) { var tn = performance.now(); if (tn - (ENC.ps || 0) > 120) { var px = WALK.x / FT, pz = WALK.z / FT; if (!ENC.lp || Math.hypot(px - ENC.lp[0], pz - ENC.lp[1]) > 0.05 || !ENC.ack) { ENC.ps = tn; ENC.lp = [px, pz]; try { ENC.box.querySelector('iframe').contentWindow.postMessage({ dndPos: { p: [px, pz], f: ENC.foes.map(function (q) { return [q.x / FT, q.z / FT]; }) } }, '*'); } catch (x) { } } } }
+      for (i = 0; i < Math.max(FUI.length, ENC.foes.length); i++) {
+        var f = ENC.foes[i], el = FUI[i];
+        if (!el && f) { el = FUI[i] = document.createElement('div'); el.style.cssText = 'position:fixed;z-index:40;transform:translate(-50%,-100%);font:600 12px sans-serif;color:#fff;text-align:center;text-shadow:0 1px 3px #000;padding:3px 6px;border-radius:6px;background:rgba(0,0,0,.45)'; el.innerHTML = '<div></div><div style="height:5px;margin-top:2px;background:#400;border-radius:3px;overflow:hidden"><div style="height:100%;background:#d44"></div></div>'; el.dataset.i = i; el.onclick = (function (k) { return function () { if (ENC.box && ENC.tgt) ENC.box.querySelector('iframe').contentWindow.postMessage({ dndTarget: k }, '*'); }; })(i); document.body.appendChild(el); }
+        if (!el) continue;
+        if (!f || f.dead || !on) { el.style.display = 'none'; continue; }
+        var sc = /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1;
+        var rx = f.x - cam.x, ry = f.y + 6.6 * FT * sc - cam.y, rz = f.z - cam.z;
+        var cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz;
+        if (cw <= 0.0001) { el.style.display = 'none'; continue; }
+        el.style.display = 'block'; el.style.left = (cx / cw * 0.5 + 0.5) * w + 'px'; el.style.top = (1 - (cy / cw * 0.5 + 0.5)) * hh + 'px';
+        el.firstChild.textContent = (f.name || f.pick) + (f.hp !== undefined ? ' ' + Math.max(0, f.hp) + '/' + f.max : '') + ' · ' + Math.round(Math.hypot(f.x - WALK.x, f.z - WALK.z) / FT) + ' ft';
+        el.lastChild.firstChild.style.width = f.hp !== undefined ? Math.max(0, f.hp / f.max * 100) + '%' : '100%';
+        el.style.cursor = ENC.tgt ? 'pointer' : 'default'; el.style.outline = ENC.tgt ? '2px solid #fc3' : 'none'; el.style.background = f.cur ? 'rgba(160,30,20,.7)' : 'rgba(0,0,0,.45)';
+      }
+    }
+
+    // ---- towns: NPCs, dialogue with real ability checks, and quests (T talk, J quest log) ----
+    var QS = (function () { try { return JSON.parse(localStorage.getItem('dnd.quests') || 'null'); } catch (e) { return null; } })() || { active: [], done: [], disp: {}, seq: 0 };
+    function qsave() { try { localStorage.setItem('dnd.quests', JSON.stringify(QS)); } catch (e) { } }
+    function hsave() { try { if (HERO) localStorage.setItem('dnd.active', JSON.stringify(HERO)); } catch (e) { } }
+    // re-read the active character (battle.html and the inventory panel write to it); gold now lives in currency.gp
+    function heroRefresh() { try { var h = JSON.parse(localStorage.getItem('dnd.active') || 'null'); if (h) HERO = h; } catch (e) { } }
+    function gpOf() { return HERO ? ((HERO.currency && HERO.currency.gp) || 0) + (HERO.gold || 0) : 0; }
+    function addGp(n) { if (!HERO) return; HERO.currency = HERO.currency || { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 }; HERO.currency.gp += n + (HERO.gold || 0); delete HERO.gold; }
+    // ---- inventory panel (I key): character sheet + equipment in a side iframe ----
+    var INV = { box: null };
+    function toggleInv() {
+      if (INV.box) { if (INV.shopTown) { closeShop(); return; } INV.box.remove(); INV.box = null; for (var k in keys) keys[k] = false; return; }
+      if (!WALK.on || ENC.box || TK.box) return; heroRefresh();
       var b = document.createElement('div'); b.style.cssText = 'position:fixed;inset:0;z-index:48;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
       b.innerHTML = '<iframe src="inventory.html" style="width:min(1180px,98vw);height:min(780px,95vh);border:1px solid #5b4630;border-radius:6px;background:#0d0b09;box-shadow:0 10px 50px #000"></iframe>';
       document.body.appendChild(b); INV.box = b; var fr = b.querySelector('iframe'); fr.addEventListener('load', function () { try { fr.contentWindow.focus(); } catch (x) { } });
