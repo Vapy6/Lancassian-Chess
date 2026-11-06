@@ -2,16 +2,17 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Battle Tester</title>
 <style>
-:root{--bg:#14171c;--card:#1d222a;--ink:#e8e4da;--dim:#9aa3ad;--acc:#d9b45a;--bad:#e07a6a;--ok:#7fc08a;--line:#2e3540;--foe:#c9675a;--pty:#6aa5d9}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}h1{font:600 22px Georgia,serif;margin:0 0 4px;color:var(--acc)}h2{font:600 13px system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin:0 0 8px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
-.btn{background:var(--acc);color:#1a1405;border:0;border-radius:7px;padding:7px 12px;font-weight:600;cursor:pointer;margin:3px 4px 0 0}.btn.g{background:#2a313b;color:var(--ink)}.btn:disabled{opacity:.4;cursor:default}
-.row{display:flex;align-items:center;gap:8px;margin:4px 0}.row span.n{flex:1}.row button{width:26px;height:26px;background:#252c36;color:var(--ink);border:1px solid var(--line);border-radius:5px;cursor:pointer}
-.u{border:1px solid var(--line);border-left:4px solid var(--pty);border-radius:8px;padding:8px 10px;margin:6px 0;cursor:default;background:#12151a}.u.foe{border-left-color:var(--foe)}.u.cur{outline:2px solid var(--acc)}.u.dead{opacity:.35}.u.tgt{cursor:pointer}.u.sel{background:#2a2410}
-.bar{height:6px;background:#2a313b;border-radius:3px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:var(--ok)}.u.foe .bar i{background:var(--foe)}
-.note{font-size:12px;color:var(--dim)}#log{height:300px;overflow:auto;font-size:13px;background:#12151a;border:1px solid var(--line);border-radius:8px;padding:8px}#log div{margin:2px 0}.hit{color:#f0c27a}.sys{color:var(--acc)}
-select{background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px}
+:root{--bg:#0d0b09;--card:#16120e;--card2:#1d1812;--ink:#e8dfcb;--dim:#8f8575;--acc:#dcb96c;--bad:#e0705f;--ok:#7fc08a;--line:#5b4630;--line2:#8a6a3f;--foe:#c9675a;--pty:#6aa5d9}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0%,#241b12 0,#0d0b09 70%);color:var(--ink);font:14px/1.4 Georgia,'Palatino Linotype',serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}h1{font:600 22px Georgia,serif;margin:0 0 4px;color:var(--acc);letter-spacing:.04em}h2{font:600 13px Georgia,serif;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin:0 0 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:14px;box-shadow:inset 0 0 0 1px #0007,0 4px 18px #0008}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+.btn{background:linear-gradient(180deg,#3a2c1b,#241a0f);color:var(--acc);border:1px solid var(--line2);border-radius:3px;padding:7px 14px;font:600 13px Georgia,serif;letter-spacing:.04em;cursor:pointer;margin:3px 4px 0 0}.btn:hover{border-color:var(--acc);color:#fff1c9}.btn.g{background:#1a1510;color:var(--ink);border-color:var(--line)}.btn:disabled{opacity:.4;cursor:default}
+.row{display:flex;align-items:center;gap:8px;margin:4px 0}.row span.n{flex:1}.row button{width:24px;height:24px;background:none;color:var(--ink);border:1px solid var(--line);border-radius:3px;cursor:pointer}.row button:hover{border-color:var(--acc);color:var(--acc)}
+.u{border:1px solid var(--line);border-left:4px solid var(--pty);border-radius:3px;padding:8px 10px;margin:6px 0;cursor:default;background:#0f0c09}.u.foe{border-left-color:var(--foe)}.u.cur{outline:2px solid var(--acc);box-shadow:0 0 12px #dcb96c55}.u.dead{opacity:.35}.u.tgt{cursor:pointer}.u.tgt:hover{border-color:var(--bad)}.u.sel{background:#2a2010}
+.bar{height:7px;background:#000;border:1px solid #3a2c1b;border-radius:2px;overflow:hidden;margin-top:4px}.bar i{display:block;height:100%;background:linear-gradient(180deg,#9bd6a4,#5fa36a)}.u.foe .bar i{background:linear-gradient(180deg,#e58a7b,#b24d40)}
+.note{font-size:12px;color:var(--dim)}#log{height:300px;overflow:auto;font-size:13px;background:#0a0806;border:1px solid var(--line);border-radius:3px;padding:8px}#log div{margin:2px 0}.hit{color:#f0c27a}.sys{color:var(--acc)}
+select{background:#0f0c09;color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:6px}
+input[type=checkbox]{accent-color:#b8923f}
 </style></head><body><div class="wrap">
 <h1>Battle Tester</h1><div class="note">Turn-based D&amp;D 5e SRD combat. Pick a party and some monsters, then fight. Characters saved in the creator appear here too.</div>
 <div id="setup" class="grid" style="margin-top:12px">
