@@ -194,7 +194,12 @@ canvas:active{cursor:grabbing}
       return h1 + (bed - h1) * cw;
     }
     function riverNear(x, z) { var r = rvAt(x, z); return r[1] > 0.02 && Math.abs(r[0]) / r[1] < 1.6; }
-    function hgtC(x, z, wt) {
+    // ---- Lanca plateau (the 'undercity' stone cube): a flat square the city stands on, shared by CPU and GPU height code ----
+    var PL = { cx: 1014.0, cz: 579.0, S: 0.62, B: 0.035, hp: 0 };
+    (function () { var m = 0, x, z; for (x = PL.cx - PL.S - PL.B; x <= PL.cx + PL.S + PL.B + 1e-6; x += 0.1) for (z = PL.cz - PL.S - PL.B; z <= PL.cz + PL.S + PL.B + 1e-6; z += 0.1) m = Math.max(m, baseAtC(x, z)[0]); PL.hp = m + 0.003; })();
+    function platC(x, z, h) { var d = Math.max(Math.abs(x - PL.cx), Math.abs(z - PL.cz)); if (d >= PL.S + PL.B) return h; var m = 1 - sstep(PL.S, PL.S + PL.B, d), hp = PL.hp * (1 + (EX - 1) * sstep(0.0004, 0.005, PL.hp)); return h + (hp - h) * m; }
+    function hgtC(x, z, wt) { return platC(x, z, hgt0C(x, z, wt)); }
+    function hgt0C(x, z, wt) {
       var bl = baseAtC(x, z), by = bl[0]; if (bl[1] <= 0.5) return 0;
       var lf = sstep(0.0003, 0.0025, by), rough = Math.max(0.2, Math.min(1, 0.2 + (Math.sqrt(by * FTPX) - 2) / 50)), det = 0;
       for (var k2 = 0; k2 < NOCT; k2++) {
@@ -310,7 +315,7 @@ canvas:active{cursor:grabbing}
       'float by=mix(mix(dec(a),dec(b),f.x),mix(dec(c),dec(d),f.x),f.y);float L=mix(mix(a.a,b.a,f.x),mix(c.a,d.a,f.x),f.y);byOut=by;if(L<=0.5)return 0.0;' +
       'float lf=smoothstep(0.0003,0.0025,by);float rough=clamp(0.2+(sqrt(by*15840.0)-2.0)/50.0,0.2,1.0);float det=0.0;' +
       'for(int k=0;k<12;k++){float w=cs>0.5?uWc[k]:uW[k];if(w<=0.0)break;vec2 p=uOct[k]+vec2(uRot[k].x*loc.x-uRot[k].y*loc.y,uRot[k].y*loc.x+uRot[k].x*loc.y);det+=w*uA[k]*(vnz(p)*2.0-1.0);}' +
-      'float h0=by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by));return rcut(wp,max(h0+det*rough*lf*(1.0+uEx/50.0)+lform(wp,h0),0.0003));}\n' +
+      'float h0=by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by));float hh=rcut(wp,max(h0+det*rough*lf*(1.0+uEx/50.0)+lform(wp,h0),0.0003));float dd=max(abs(wp.x-' + PL.cx.toFixed(4) + '),abs(wp.y-' + PL.cz.toFixed(4) + '));float pm=1.0-smoothstep(' + PL.S.toFixed(4) + ',' + (PL.S + PL.B).toFixed(4) + ',dd);float hpE=' + PL.hp.toFixed(6) + '*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,' + PL.hp.toFixed(6) + '));return mix(hh,hpE,pm);}\n' +
       'void main(){vec2 loc=(aIJ-32.0)*uS;float t0;float h=hgt(loc,0.0,t0);float by0=t0;vec3 rel=vec3(loc.x+uRel.x,0.0,loc.y+uRel.y);' +
       'float dch=max(abs(rel.x),abs(rel.z));float a=uMorph*smoothstep(uMr.x,uMr.y,dch);float e=uS;vec3 n;' +
       'float hxm=hgt(loc-vec2(e,0.0),0.0,t0);float hxp=hgt(loc+vec2(e,0.0),0.0,t0);float hzm=hgt(loc-vec2(0.0,e),0.0,t0);float hzp=hgt(loc+vec2(0.0,e),0.0,t0);' +
@@ -368,7 +373,7 @@ canvas:active{cursor:grabbing}
       ' float gz=1.0-smoothstep(16.0,44.0,length(vW-uGal));if(gz>0.0){vec3 rdp=normalize(rd+vec3(n.x,0.0,n.z)*0.10);vec3 gc=galaxy(uFO1+vLocFt,rdp,dist)+refl*F*0.22+uSunCol*spec*2.0;col=mix(col,gc,gz);}\n' +
       '}else{\n' +
       ' vec2 warp=(vec2(dtex(uFO0,16384.0,vec2(0.0)).r,dtex(uFO0,16384.0,vec2(0.37,0.11)).g)-0.5)*1.5;vec4 bz=texture2D(uB,(floor(vW+warp+0.5)+0.5)/uWH)*255.0;float sty=bz.g;float wgt=bz.b/255.0;\n' +
-      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,0.92);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;\n' +
+      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,0.92);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;float pm2=1.0-smoothstep(' + PL.S.toFixed(4) + ',' + (PL.S + PL.B).toFixed(4) + ',max(abs(vW.x-' + PL.cx.toFixed(4) + '),abs(vW.y-' + PL.cz.toFixed(4) + ')));alb=mix(alb,vec3(0.2,0.19,0.17),pm2*0.85);\n' +
       ' vec3 n=normalize(vN);float h0;float fadeA=1.0-smoothstep(1500.0,9000.0,dist*15840.0);float fadeB=1.0-smoothstep(120.0,1400.0,dist*15840.0);\n' +
       ' vec2 gA=dgrad(uFO1,2048.0,8.0,vec2(0.0),h0);float hA=h0;vec2 gB=dgrad(uFO2,256.0,1.1,vec2(0.0),h0);float hB=h0;\n' +
       ' vec2 gd=gA*fadeA+gB*fadeB;n=normalize(n+vec3(-gd.x,0.0,-gd.y));\n' +
@@ -1221,8 +1226,9 @@ var fl = (function () {
       if (WALK.third) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
     }
     // ================= Lanca city layout (lanca-city.json, from the city generator export) =================
-    var CITY = null, LANCA = [1017.9, 572.9];
-    function inLanca(x, z) { return Math.abs(x - LANCA[0]) < 0.62 && Math.abs(z - LANCA[1]) < 0.62; }
+    var CITY = null;
+    meta.places.forEach(function (p) { if (p.n === 'Lanca') { p.x = PL.cx; p.y = PL.cz; } });
+    function inLanca(x, z) { return Math.abs(x - PL.cx) < PL.S + PL.B && Math.abs(z - PL.cz) < PL.S + PL.B; }
     function cityBlocked(wx, wz) {
       if (!CITY) return false; var lx = (wx - CITY.cx) / FT, lz = (wz - CITY.cz) / FT; if (Math.abs(lx) > 9200 || Math.abs(lz) > 9200) return false;
       var L = CITY.cell, c = CITY.grid[Math.floor(lx / L) * 4096 + Math.floor(lz / L)]; if (!c) return false;
@@ -1252,7 +1258,7 @@ var fl = (function () {
       if (idx.length === 3) out.push(idx[0], idx[1], idx[2]); return out;
     }
     function* cityBuild(D) {
-      var FTM = 3.28084, P = [], N = [], Cc = [], cxw = D.c[0], czw = D.c[1], t0 = performance.now(), grid = {}, CELL = 80;
+      var FTM = 3.28084, P = [], N = [], Cc = [], cxw = PL.cx, czw = PL.cz, t0 = performance.now(), grid = {}, CELL = 80;
       function g(xf, zf) { return groundAt(cxw + xf * FT, czw + zf * FT) / FT; }
       function hs(i) { var x = Math.sin(i * 12.9898 + 4.1) * 43758.5453; return x - Math.floor(x); }
       function tri(a, b, c, col, n) { P.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); for (var k = 0; k < 3; k++) { N.push(n[0], n[1], n[2]); Cc.push(col[0], col[1], col[2]); } }
