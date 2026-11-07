@@ -1121,6 +1121,7 @@ var fl = (function () {
     window.addEventListener('message', function (e) { if (e.data && e.data.dndShopClose) closeShop(); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndInvClose && INV.box && !INV.shopTown) toggleInv(); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndHero) heroRefresh(); });
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndHotKey && ENC.box) hbUse(e.data.dndHotKey === '0' ? 9 : +e.data.dndHotKey - 1); });
     function hseed(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
     var NM1 = ['Ari', 'Bram', 'Cora', 'Dunstan', 'Edda', 'Fenn', 'Garrick', 'Hilde', 'Ivo', 'Jessa', 'Kell', 'Lorna', 'Marek', 'Nessa', 'Orin', 'Petra', 'Quill', 'Rhosyn', 'Sten', 'Tilda', 'Ulric', 'Vesna', 'Wren', 'Yara'];
     var NM2 = ['Ashdown', 'Brightwater', 'Coldbrook', 'Dunmere', 'Fairweather', 'Greystone', 'Harrowgate', 'Ironbridge', 'Longfield', 'Millbrook', 'Oakhand', 'Redfern', 'Stonehelm', 'Thorne', 'Underhill', 'Wyndham'];
@@ -1207,6 +1208,13 @@ var fl = (function () {
       talk: { n: 'Talk', k: 'T', d: 'Talk to someone nearby (stand near a town).', f: function () { talkKey(); } },
       fight: { n: 'Seek a fight', k: 'E', d: 'Start an encounter with local monsters.', f: function () { startEncounter(); } },
       shortrest: { n: 'Short rest', d: 'Spend hit dice to heal and restore Second Wind and Action Surge.', f: function () { var r = DNDINV.shortRest(HERO, HERO.hdLeft || 0); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); } },
+      dodge: { n: 'Dodge', k: 'Battle', bt: 'dodge', d: 'Battle only: Dodge.', f: function () { } },
+      dash: { n: 'Dash', k: 'Battle', bt: 'dash', d: 'Battle only: Dash.', f: function () { } },
+      disengage: { n: 'Disengage', k: 'Battle', bt: 'disengage', d: 'Battle only: Disengage.', f: function () { } },
+      secondWind: { n: 'Second Wind', k: 'Battle', bt: 'secondWind', d: 'Battle only (Fighter).', f: function () { } },
+      actionSurge: { n: 'Action Surge', k: 'Battle', bt: 'actionSurge', d: 'Battle only (Fighter).', f: function () { } },
+      rage: { n: 'Rage', k: 'Battle', bt: 'rage', d: 'Battle only (Barbarian).', f: function () { } },
+      layOnHands: { n: 'Lay on Hands', k: 'Battle', bt: 'layOnHands', d: 'Battle only (Paladin).', f: function () { } },
       longrest: { n: 'Long rest', d: 'Full HP, all spell slots and abilities restored.', f: function () { var r = DNDINV.longRest(HERO); DNDINV.saveActive(HERO); walkMsg(r.msg); } }
     };
     function hbKey() { return 'dnd.hotbar.' + (HERO ? HERO.name : ''); }
@@ -1242,9 +1250,11 @@ var fl = (function () {
       walkMsg(name + ' heals ' + (HERO.hp - before) + ' HP (level ' + lvl + ' slot used).');
     }
     function hbUse(i) {
-      if (!window.DNDINV || !WALK.on || ENC.box || TK.box || INV.box) return; heroRefresh(); if (!HERO) return; DNDINV.ensure(HERO); var sl = HB.slots[i];
+      if (!window.DNDINV || !WALK.on || TK.box || INV.box) return;
+      if (ENC.box) { var fr = ENC.box.querySelector('iframe'), s0 = HB.slots && HB.slots[i]; if (!s0) { hbPicker(i); return; } if (fr && fr.contentWindow) { var bt = s0.t === 'act' ? (HBA[s0.n] && HBA[s0.n].bt) : null; fr.contentWindow.postMessage({ dndHotbar: { t: s0.t, n: s0.n, bt: bt } }, '*'); } return; }
+      heroRefresh(); if (!HERO) return; DNDINV.ensure(HERO); var sl = HB.slots[i];
       if (!sl) { hbPicker(i); return; }
-      if (sl.t === 'act') HBA[sl.n].f();
+      if (sl.t === 'act') { if (HBA[sl.n].bt) walkMsg(HBA[sl.n].n + ' is used in battle.'); else HBA[sl.n].f(); }
       else if (sl.t === 'spell') { if (sl.n === 'Cure Wounds' || sl.n === 'Healing Word') hbCastHeal(sl.n); else walkMsg(sl.n + ' is cast in battle (press E to seek an encounter).'); }
       else { var kd = DNDINV.kind(sl.n), r; if (!hbQty(sl.n)) { walkMsg('You do not have ' + sl.n + ' any more.'); return; }
         if (/Potion/.test(sl.n)) { r = DNDINV.usePotion(HERO, sl.n); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); }
@@ -1270,7 +1280,7 @@ var fl = (function () {
     }
     function hbClosePick() { if (HB.pick) { HB.pick.remove(); HB.pick = null; } }
     function hudTick() {
-      var show = WALK.on && !ENC.box && !TK.box && !INV.box; heroRefresh();
+      var show = WALK.on && !TK.box && !INV.box; heroRefresh();
       if (!show || !HERO || !window.DNDINV || !window.DNDUI) { if (HB.bar) HB.bar.style.display = 'none'; hbClosePick(); return; }
       if (HB.key !== hbKey()) { DNDINV.ensure(HERO); HB.key = hbKey(); HB.slots = hbLoad(); HB.sig = ''; }
       var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), sig = [hp, mx, HERO.ac, gpOf(), JSON.stringify(HB.slots), JSON.stringify(HERO.inventory), JSON.stringify(HERO.equipped), HERO.level].join('|');

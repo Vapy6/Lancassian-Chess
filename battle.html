@@ -115,8 +115,22 @@ input[type=checkbox]{accent-color:#b8923f}
       if (P && moved > 0 && cur && cur.team === 'party' && cur.turn && !enc.winner()) { cur.turn.move = Math.max(0, cur.turn.move - moved);
         foeList().forEach(function (fu, i) { var m = meleeAtk(fu), r = reachOf(m); if (!m || fu.dead || fu.hp <= 0 || !F[i] || cur.disengaged || oaRound[i] === enc.round) return; if (dst(P, F[i]) <= r + 0.1 && dst(np, F[i]) > r + 0.1) { oaRound[i] = enc.round; log('Opportunity attack from ' + fu.name + '!', 'sys'); var lg = []; C.doAttack(enc, fu, cur, m, { range: 5 }, null, lg); lg.forEach(say); } }); }
       P = np; if (moved > 0) { if (enc.winner()) finish(enc.winner()); else render(); } return; }
-    var d = e.data; if (!d || d.dndTarget === undefined || !enc || !pending || pending.target !== 'enemy') return;
+    var d = e.data; if (d && d.dndHotbar) { hotbar(d.dndHotbar); return; }
+    if (!d || d.dndTarget === undefined || !enc || !pending || pending.target !== 'enemy') return;
     var u = enc.units.filter(function (x) { return x.team === 'foe'; })[d.dndTarget]; if (!u || u.dead) return; var a2 = pending; run(a2, u); });
+  function hotbar(h) {
+    if (!enc || busy) return; var cur = enc.current(); if (!cur || cur.team !== 'party' || enc.winner()) { return; }
+    var L = C.actions(cur), idx = -1, n = h.n || '';
+    L.forEach(function (a, i) { if (idx >= 0) return;
+      if (h.t === 'spell') { if (a.id === 'cast' && a.spell === n) idx = i; }
+      else if (h.t === 'act') { if (a.id === h.bt) idx = i; }
+      else if (/Greater Healing/.test(n)) { if (a.id === 'potion' && a.kind === 'g') idx = i; }
+      else if (/Potion of Healing/.test(n)) { if (a.id === 'potion' && a.kind === 'h') idx = i; }
+      else if (a.id === 'attack' && a.label.indexOf(n) === 0) idx = i; });
+    if (idx < 0) { log(n + (h.t === 'item' ? ' cannot be used in battle.' : ' is not available right now.'), 'sys'); return; }
+    var a = L[idx]; a._i = idx; if (a.target === 'none' || a.aoe) run(a); else { pending = a; render(); }
+  }
+  window.addEventListener('keydown', function (e) { if (/^[0-9]$/.test(e.key) && window.parent !== window) window.parent.postMessage({ dndHotKey: e.key }, '*'); });
   setup();
   var qs = /[?&]enc=([^&]+)/.exec(location.search);
   if (qs) { var act = null; try { act = JSON.parse(localStorage.getItem('dnd.active') || 'null'); } catch (e) { }
