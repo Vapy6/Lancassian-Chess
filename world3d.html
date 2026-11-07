@@ -33,7 +33,7 @@ canvas:active{cursor:grabbing}
 <div class="k" style="margin-top:6px"><a href="map.html">← 2D map</a> · <a href="index.html">Chess</a></div></div>
 <div id="info"><div id="place" style="font-weight:600">—</div><div class="k" id="alt"></div><div class="k" id="pos"></div><div class="k" id="fps"></div></div>
 <div id="mini"><canvas id="mc"></canvas><div id="mdot"></div></div>
-<script src="dnd-data.js"></script><script src="dnd-inventory.js"></script>
+<script src="dnd-data.js"></script><script src="dnd-inventory.js"></script><script src="dnd-ui.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1192,22 +1192,104 @@ var fl = (function () {
         WALK.x = cam.x = x; WALK.z = cam.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; walkMsg('You arrive in ' + p.n + '.');
       });
     }
-    var QP = ['Potion of Healing', 'Potion of Greater Healing'], HUD = null;
-    function qpCount(n) { if (!HERO || !HERO.inventory) return 0; for (var i = 0; i < HERO.inventory.length; i++) if (HERO.inventory[i].name === n) return HERO.inventory[i].qty; return 0; }
+    // ================= hotbar (bottom centre, keys 1-9 and 0; click a slot to use it, right-click or click an empty slot to assign) =================
+    var HB = { bar: null, pick: null, slots: [], key: '', sig: '' };
+    var HBI = {
+      spell: '<path d="M16 3 L19 12 L28 13 L21 19 L23 28 L16 23 L9 28 L11 19 L4 13 L13 12 Z"/>', inv: '<path d="M11 11 Q16 2 21 11"/><path d="M9 11 H23 L26 27 H6 Z"/><path d="M12 17 H20"/>',
+      quests: '<path d="M8 5 H22 Q25 5 25 8 V27 H11 Q8 27 8 24 Z"/><path d="M12 11 H21 M12 16 H21 M12 21 H18"/>', travel: '<circle cx="16" cy="16" r="11"/><path d="M20 12 L14 14 L12 20 L18 18 Z"/>',
+      talk: '<path d="M5 7 H27 V21 H15 L9 27 V21 H5 Z"/><path d="M10 12 H22 M10 16 H18"/>', fight: '<path d="M25 7 L12 20 M9 17 L15 23 M12 20 L7 25"/><path d="M7 7 L20 20 M23 17 L17 23 M20 20 L25 25"/>',
+      shortrest: '<path d="M16 6 Q22 12 20 18 Q18 14 16 16 Q14 14 12 18 Q10 12 16 6 Z"/><path d="M7 26 H25"/>', longrest: '<path d="M22 6 Q12 7 12 16 Q12 25 22 26 Q16 22 16 16 Q16 10 22 6 Z"/><circle cx="24" cy="9" r="1.2"/>'
+    };
+    var HBA = {
+      inv: { n: 'Inventory', k: 'I', d: 'Open your inventory, character sheet and spells.', f: function () { toggleInv(); } },
+      quests: { n: 'Quest log', k: 'J', d: 'Show your quests.', f: function () { toggleLog(); } },
+      travel: { n: 'Fast travel', k: 'N', d: 'Travel to a place you have discovered.', f: function () { toggleTravel(); } },
+      talk: { n: 'Talk', k: 'T', d: 'Talk to someone nearby (stand near a town).', f: function () { talkKey(); } },
+      fight: { n: 'Seek a fight', k: 'E', d: 'Start an encounter with local monsters.', f: function () { startEncounter(); } },
+      shortrest: { n: 'Short rest', d: 'Spend hit dice to heal and restore Second Wind and Action Surge.', f: function () { var r = DNDINV.shortRest(HERO, HERO.hdLeft || 0); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); } },
+      longrest: { n: 'Long rest', d: 'Full HP, all spell slots and abilities restored.', f: function () { var r = DNDINV.longRest(HERO); DNDINV.saveActive(HERO); walkMsg(r.msg); } }
+    };
+    function hbKey() { return 'dnd.hotbar.' + (HERO ? HERO.name : ''); }
+    function hbLoad() {
+      var h = null; try { h = JSON.parse(localStorage.getItem(hbKey()) || 'null'); } catch (e) { }
+      if (!h || !h.length) { h = [{ t: 'item', n: 'Potion of Healing' }, { t: 'item', n: 'Potion of Greater Healing' }, null, null, null, { t: 'act', n: 'inv' }, { t: 'act', n: 'quests' }, { t: 'act', n: 'travel' }, { t: 'act', n: 'shortrest' }, { t: 'act', n: 'longrest' }];
+        var sp = (HERO.spellcasting || {}), spl = (sp.cantripList || []).concat(sp.preparedSpells || []); for (var i = 0, j = 2; i < spl.length && j < 5; i++, j++) h[j] = { t: 'spell', n: spl[i] };
+        if (HERO.equipped && HERO.equipped.mainHand) h[2] = h[2] && h[2].t === 'spell' ? h[2] : { t: 'item', n: HERO.equipped.mainHand }; }
+      h.length = 10; return h;
+    }
+    function hbSave() { try { localStorage.setItem(hbKey(), JSON.stringify(HB.slots)); } catch (e) { } }
+    function hbQty(n) { if (!HERO || !HERO.inventory) return 0; for (var i = 0; i < HERO.inventory.length; i++) if (HERO.inventory[i].name === n) return HERO.inventory[i].qty; return 0; }
+    function hbEquipped(n) { var e = HERO && HERO.equipped; if (!e) return false; for (var k in e) if (e[k] === n) return true; return false; }
+    function hbIcon(sl) {
+      var d = window.DNDUI; if (!sl) return '';
+      var inner = sl.t === 'spell' ? HBI.spell : sl.t === 'act' ? (HBI[sl.n] || HBI.inv) : (d ? d.IC[d.iconKey(sl.n)] || d.IC.tool : '');
+      return '<svg viewBox="0 0 32 32" style="width:30px;height:30px;fill:none;stroke:' + (sl.t === 'spell' ? '#9fc4f0' : '#dcb96c') + ';stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round">' + inner + '</svg>';
+    }
+    function hbTip(sl) {
+      if (!sl) return 'Empty slot: click to assign';
+      if (sl.t === 'act') return HBA[sl.n].n + (HBA[sl.n].k ? ' (' + HBA[sl.n].k + ')' : '') + ' - ' + HBA[sl.n].d;
+      if (sl.t === 'spell') { var s = DNDDATA.SPELLS[sl.n]; return sl.n + (s ? ' - ' + (s.level ? 'Level ' + s.level : 'Cantrip') + ', ' + s.range + '. ' + s.text : ''); }
+      return sl.n + ' - ' + (DNDINV.describe(sl.n) || '');
+    }
+    function hbCastHeal(name) {
+      var sc = HERO.spellcasting || {}, lvl = null, k; HERO.res = HERO.res || {}; HERO.res.slots = HERO.res.slots || {};
+      Object.keys(sc.slots || {}).sort().forEach(function (key) { if (lvl === null && +key >= 1) { var left = HERO.res.slots[key] !== undefined ? HERO.res.slots[key] : sc.slots[key]; if (left > 0) lvl = key; } });
+      if (lvl === null) { walkMsg('You have no spell slots left. Rest to recover them.'); return; }
+      if (HERO.hp >= HERO.hpMax) { walkMsg('You are already at full health.'); return; }
+      var cur = HERO.res.slots[lvl] !== undefined ? HERO.res.slots[lvl] : sc.slots[lvl]; HERO.res.slots[lvl] = cur - 1;
+      var die = name === 'Cure Wounds' ? 8 : 4, mod = (HERO.mods && HERO.mods[sc.ability]) || 0, roll = 0, n = name === 'Cure Wounds' || name === 'Healing Word' ? 1 + (+lvl - 1) : 1, i;
+      for (i = 0; i < n; i++) roll += 1 + Math.floor(Math.random() * die); roll += mod; roll = Math.max(1, roll); var before = HERO.hp; HERO.hp = Math.min(HERO.hpMax, HERO.hp + roll); DNDINV.saveActive(HERO);
+      walkMsg(name + ' heals ' + (HERO.hp - before) + ' HP (level ' + lvl + ' slot used).');
+    }
+    function hbUse(i) {
+      if (!window.DNDINV || !WALK.on || ENC.box || TK.box || INV.box) return; heroRefresh(); if (!HERO) return; DNDINV.ensure(HERO); var sl = HB.slots[i];
+      if (!sl) { hbPicker(i); return; }
+      if (sl.t === 'act') HBA[sl.n].f();
+      else if (sl.t === 'spell') { if (sl.n === 'Cure Wounds' || sl.n === 'Healing Word') hbCastHeal(sl.n); else walkMsg(sl.n + ' is cast in battle (press E to seek an encounter).'); }
+      else { var kd = DNDINV.kind(sl.n), r; if (!hbQty(sl.n)) { walkMsg('You do not have ' + sl.n + ' any more.'); return; }
+        if (/Potion/.test(sl.n)) { r = DNDINV.usePotion(HERO, sl.n); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); }
+        else if (kd === 'gear') walkMsg(sl.n + ': ' + (DNDINV.describe(sl.n) || 'useful kit.'));
+        else { r = DNDINV.equip(HERO, sl.n); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); } }
+      hudTick();
+    }
+    function hbPicker(i) {
+      hbClosePick(); if (!HERO) return; var sc = HERO.spellcasting || {}, tab = 'item', p = document.createElement('div'); HB.pick = p;
+      p.style.cssText = 'position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:45;width:min(520px,94vw);max-height:52vh;overflow:auto;background:linear-gradient(180deg,#1d1812,#100d0a);border:1px solid #8a6a3f;border-radius:4px;padding:10px 12px;color:#e8dfcb;font:13px Georgia,serif;box-shadow:0 8px 30px #000c';
+      function chip(label, sub, f) { var b = document.createElement('button'); b.style.cssText = 'margin:3px 4px 0 0;padding:5px 9px;background:#1a1510;color:#e8dfcb;border:1px solid #5b4630;border-radius:3px;cursor:pointer;font:13px Georgia,serif'; b.innerHTML = label + (sub ? ' <span style="color:#8f8575">' + sub + '</span>' : ''); b.onclick = f; return b; }
+      function draw() {
+        p.innerHTML = '<div style="color:#dcb96c;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Slot ' + (i === 9 ? 0 : i + 1) + '</div>';
+        var tabs = document.createElement('div'); [['item', 'Items'], ['spell', 'Spells'], ['act', 'Actions']].forEach(function (t) { var b = chip(t[1], '', function () { tab = t[0]; draw(); }); if (t[0] === tab) b.style.borderColor = '#dcb96c'; tabs.appendChild(b); }); p.appendChild(tabs);
+        var box = document.createElement('div'); box.style.marginTop = '6px'; p.appendChild(box);
+        function put(v) { HB.slots[i] = v; hbSave(); hbClosePick(); hudTick(); }
+        if (tab === 'item') (HERO.inventory || []).forEach(function (it) { box.appendChild(chip(it.name, 'x' + it.qty, function () { put({ t: 'item', n: it.name }); })); });
+        else if (tab === 'spell') { var L = (sc.cantripList || []).concat(sc.preparedSpells || [], sc.domainSpells || []).filter(function (x, k, a) { return a.indexOf(x) === k; }); if (!L.length) box.textContent = 'Your character has no prepared spells (prepare them in the inventory, Spells tab).'; L.forEach(function (n) { box.appendChild(chip(n, '', function () { put({ t: 'spell', n: n }); })); }); }
+        else Object.keys(HBA).forEach(function (a) { box.appendChild(chip(HBA[a].n, HBA[a].k || '', function () { put({ t: 'act', n: a }); })); });
+        var f = document.createElement('div'); f.style.marginTop = '8px'; f.appendChild(chip('Clear slot', '', function () { put(null); })); f.appendChild(chip('Close', '', hbClosePick)); p.appendChild(f);
+      }
+      draw(); document.body.appendChild(p);
+    }
+    function hbClosePick() { if (HB.pick) { HB.pick.remove(); HB.pick = null; } }
     function hudTick() {
       var show = WALK.on && !ENC.box && !TK.box && !INV.box; heroRefresh();
-      if (!show || !HERO) { if (HUD) HUD.style.display = 'none'; return; }
-      if (!HUD) { HUD = document.createElement('div'); HUD.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:40;width:230px;background:linear-gradient(180deg,rgba(29,24,18,.92),rgba(16,13,10,.92));border:1px solid #8a6a3f;border-radius:4px;padding:8px 10px;color:#e8dfcb;font:13px Georgia,serif;box-shadow:0 4px 16px #000a;pointer-events:none'; document.body.appendChild(HUD); }
-      var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), pc = Math.min(100, hp / mx * 100), col = pc > 50 ? '#5fa36a' : pc > 25 ? '#c9a23c' : '#c9675a';
-      var sl = QP.map(function (n, i) { var c = qpCount(n); return '<span style="display:inline-block;margin-right:6px;padding:2px 7px;border:1px solid ' + (c ? '#8a6a3f' : '#3a2c1b') + ';border-radius:3px;color:' + (c ? '#e8dfcb' : '#5d5446') + '">' + (i + 1) + ' ' + (i ? 'Greater' : 'Healing') + ' x' + c + '</span>'; }).join('');
-      HUD.style.display = 'block';
-      HUD.innerHTML = '<div style="color:#dcb96c;font-weight:600;letter-spacing:.04em">' + HERO.name + ' <span style="color:#8f8575;font-weight:400">Lv ' + (HERO.level || 1) + ' ' + HERO.cls + '</span></div><div style="height:9px;background:#000;border:1px solid #3a2c1b;border-radius:2px;margin:5px 0 3px;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + col + '"></div></div><div style="display:flex;justify-content:space-between;color:#8f8575"><span>HP ' + hp + '/' + mx + '</span><span>AC ' + HERO.ac + '</span><span>' + gpOf() + ' gp</span></div><div style="margin-top:6px;font-size:12px">' + sl + '</div>';
+      if (!show || !HERO || !window.DNDINV || !window.DNDUI) { if (HB.bar) HB.bar.style.display = 'none'; hbClosePick(); return; }
+      if (HB.key !== hbKey()) { DNDINV.ensure(HERO); HB.key = hbKey(); HB.slots = hbLoad(); HB.sig = ''; }
+      var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), sig = [hp, mx, HERO.ac, gpOf(), JSON.stringify(HB.slots), JSON.stringify(HERO.inventory), JSON.stringify(HERO.equipped), HERO.level].join('|');
+      if (!HB.bar) { HB.bar = document.createElement('div'); HB.bar.style.cssText = 'position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;display:flex;align-items:stretch;gap:10px;padding:8px 12px;background:linear-gradient(180deg,rgba(35,28,20,.95),rgba(14,11,8,.96));border:1px solid #8a6a3f;border-radius:6px;box-shadow:inset 0 0 0 1px #000a,0 6px 24px #000c;user-select:none;font:13px Georgia,serif;color:#e8dfcb'; document.body.appendChild(HB.bar); }
+      HB.bar.style.display = 'flex'; if (sig === HB.sig) return; HB.sig = sig;
+      var pc = Math.min(100, hp / mx * 100), col = pc > 50 ? '#5fa36a' : pc > 25 ? '#c9a23c' : '#c9675a', ini = (HERO.name || '?').charAt(0).toUpperCase();
+      var h = '<div style="display:flex;flex-direction:column;align-items:center;width:78px"><div style="width:46px;height:46px;border-radius:50%;border:2px solid #dcb96c;background:radial-gradient(circle at 35% 30%,#4a3a26,#1a140d);display:flex;align-items:center;justify-content:center;font:600 22px Georgia,serif;color:#dcb96c">' + ini + '</div>' +
+        '<div style="width:100%;height:8px;margin-top:5px;background:#000;border:1px solid #3a2c1b;border-radius:2px;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + col + '"></div></div><div style="font-size:11px;color:#b8ae9a;margin-top:2px">' + hp + '/' + mx + ' HP</div></div>';
+      h += '<div style="display:flex;gap:5px;align-items:center">';
+      for (var i = 0; i < 10; i++) {
+        var sl = HB.slots[i], q = sl && sl.t === 'item' ? hbQty(sl.n) : -1, dim = sl && sl.t === 'item' && !q, on = sl && sl.t === 'item' && hbEquipped(sl.n);
+        h += '<div data-i="' + i + '" title="' + DNDUI.esc(hbTip(sl)) + '" style="position:relative;width:48px;height:48px;border:1px solid ' + (on ? '#dcb96c' : '#5b4630') + ';border-radius:4px;background:linear-gradient(180deg,#241c13,#120e09);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:' + (dim ? 0.4 : 1) + '">' + hbIcon(sl) +
+          '<span style="position:absolute;left:3px;top:1px;font-size:10px;color:#8f8575">' + (i === 9 ? 0 : i + 1) + '</span>' + (q > 1 ? '<span style="position:absolute;right:3px;bottom:1px;font-size:11px;color:#e8dfcb">' + q + '</span>' : '') + (on ? '<span style="position:absolute;right:3px;top:2px;width:5px;height:5px;border-radius:50%;background:#dcb96c"></span>' : '') + '</div>';
+      }
+      h += '</div><div style="display:flex;flex-direction:column;justify-content:center;font-size:11px;color:#b8ae9a;min-width:56px"><div>Lv ' + (HERO.level || 1) + '</div><div>AC ' + HERO.ac + '</div><div>' + gpOf() + ' gp</div></div>';
+      HB.bar.innerHTML = h;
+      Array.prototype.forEach.call(HB.bar.querySelectorAll('[data-i]'), function (el) { var i = +el.getAttribute('data-i'); el.onclick = function () { hbUse(i); }; el.oncontextmenu = function (e) { e.preventDefault(); hbPicker(i); }; });
     }
     setInterval(hudTick, 400);
-    function quickDrink(i) {
-      if (!WALK.on || ENC.box || TK.box || INV.box || !window.DNDINV) return; heroRefresh(); if (!HERO) return;
-      var r = DNDINV.usePotion(HERO, QP[i]); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); hudTick();
-    }
     function npcTick() {
       var show = WALK.on && !ENC.box && !TK.box, pl = show ? nearTown() : null; if (pl) markVisited(pl);
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
@@ -1496,7 +1578,7 @@ var fl = (function () {
     cv.addEventListener('pointerup', function () { drag = false; });
     cv.addEventListener('pointermove', function (e) { if (!drag) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
     cv.addEventListener('wheel', function (e) { e.preventDefault(); if (WALK.on) { WALK.dist = Math.max(2, Math.min(80, WALK.dist * (e.deltaY < 0 ? 1 / 1.15 : 1.15))); return; } speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
-    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'g') toggleSculpt(); else if (kk === '1') quickDrink(0); else if (kk === '2') quickDrink(1); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
+    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'g') toggleSculpt(); else if (/^[0-9]$/.test(kk) && WALK.on) hbUse(kk === '0' ? 9 : +kk - 1); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     var exEl = document.getElementById('ex');
     exEl.addEventListener('input', function () { EX = +exEl.value; EXV.textContent = EX; });
