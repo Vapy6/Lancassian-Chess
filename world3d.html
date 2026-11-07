@@ -923,7 +923,7 @@ var fl = (function () {
               var cl = 0.3 + 1.5 * vnz(x / 0.03 + L.seed, z / 0.03 - L.seed); if (L.name === 'grass') cl = 0.6 + 0.8 * vnz(x / 0.012 + L.seed, z / 0.012);
               sp = pick(tab, r0 / cl); if (!sp) continue;
             }
-            var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z) || riverNear(x, z)) continue;
+            var by = baseAt(x, z); if (by <= 0) continue; if (!landSafe(x, z) || riverNear(x, z) || inLanca(x, z)) continue;
             var hg = hG(x, z), sl = EX * Math.hypot(baseAt(x + 1, z) - baseAt(x - 1, z), baseAt(x, z + 1) - baseAt(x, z - 1)) / 2;
             if (L.name === 'rocks') {
               var pr2 = (hab && hab.r !== undefined ? hab.r : ROCKP[b]); if (r0 > pr2 * (1 + sl * 15)) continue;
@@ -1205,7 +1205,7 @@ var fl = (function () {
       if (keys.w || keys.arrowup) { mx += f[0]; mz += f[1]; } if (keys.s || keys.arrowdown) { mx -= f[0]; mz -= f[1]; }
       if (keys.d || keys.arrowright) { mx += r[0]; mz += r[1]; } if (keys.a || keys.arrowleft) { mx -= r[0]; mz -= r[1]; }
       if (ENC.box && !(ENC.mine && ENC.left > 0.05) || TK.box || INV.box) { mx = 0; mz = 0; } var len = Math.hypot(mx, mz), sprint = !!keys.shift && !ENC.box, ox = WALK.x, oz = WALK.z; WALK.moving = len > 0;
-      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
+      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; if (CITY && cityBlocked(nx, nz) && !cityBlocked(WALK.x, WALK.z)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
       if (WALK.moving) {
         var spd = 13 * FT * (sprint ? 3 : 1) * dt; if (ENC.box) spd = Math.min(spd, ENC.left * FT); var spd0 = spd, dx = mx / len * spd, dz = mz / len * spd;
         if (ok(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; } else if (ok(WALK.x + dx, WALK.z)) WALK.x += dx; else if (ok(WALK.x, WALK.z + dz)) WALK.z += dz;
@@ -1219,6 +1219,115 @@ var fl = (function () {
       if (WALK.y <= gnd + 0.0001 * FT * 10 && WALK.vy <= 0 || WALK.y < gnd) { WALK.y = gnd; WALK.vy = 0; WALK.grounded = true; } else WALK.grounded = false;
       var eye = 5.4 * FT, hx = WALK.x, hy = WALK.y + eye, hz = WALK.z;
       if (WALK.third) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
+    }
+    // ================= Lanca city layout (lanca-city.json, from the city generator export) =================
+    var CITY = null, LANCA = [1017.9, 572.9];
+    function inLanca(x, z) { return Math.abs(x - LANCA[0]) < 0.62 && Math.abs(z - LANCA[1]) < 0.62; }
+    function cityBlocked(wx, wz) {
+      if (!CITY) return false; var lx = (wx - CITY.cx) / FT, lz = (wz - CITY.cz) / FT; if (Math.abs(lx) > 9200 || Math.abs(lz) > 9200) return false;
+      var L = CITY.cell, c = CITY.grid[Math.floor(lx / L) * 4096 + Math.floor(lz / L)]; if (!c) return false;
+      for (var i = 0; i < c.length; i++) {
+        var o = c[i];
+        if (o.s) { var ax = o.s[0], az = o.s[1], bx = o.s[2], bz = o.s[3], vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((lx - ax) * vx + (lz - az) * vz) / (vx * vx + vz * vz || 1))); if (Math.hypot(lx - ax - vx * t, lz - az - vz * t) < 2.6) return true; continue; }
+        var bb = o.bb; if (lx < bb[0] - 1.3 || lx > bb[2] + 1.3 || lz < bb[1] - 1.3 || lz > bb[3] + 1.3) continue;
+        var p = o.p, n = p.length / 2, ins = false, j = n - 1, k;
+        for (k = 0; k < n; k++) { var xi = p[2 * k], zi = p[2 * k + 1], xj = p[2 * j], zj = p[2 * j + 1]; if ((zi > lz) !== (zj > lz) && lx < (xj - xi) * (lz - zi) / (zj - zi) + xi) ins = !ins; var vx2 = xj - xi, vz2 = zj - zi, t2 = Math.max(0, Math.min(1, ((lx - xi) * vx2 + (lz - zi) * vz2) / (vx2 * vx2 + vz2 * vz2 || 1))); if (Math.hypot(lx - xi - vx2 * t2, lz - zi - vz2 * t2) < 1.3) return true; j = k; }
+        if (ins) return true;
+      }
+      return false;
+    }
+    function earClip(p) { // p = [x,z,x,z...] -> triangle index triples
+      var n = p.length / 2, idx = [], i, a = 0; for (i = 0; i < n; i++) { var j = (i + 1) % n; a += p[2 * i] * p[2 * j + 1] - p[2 * j] * p[2 * i + 1]; idx.push(i); }
+      if (a < 0) idx.reverse(); var out = [], guard = 0;
+      function cr(a1, b1, c1) { return (p[2 * b1] - p[2 * a1]) * (p[2 * c1 + 1] - p[2 * a1 + 1]) - (p[2 * b1 + 1] - p[2 * a1 + 1]) * (p[2 * c1] - p[2 * a1]); }
+      while (idx.length > 3 && guard++ < 400) {
+        var cut = false;
+        for (i = 0; i < idx.length; i++) {
+          var i0 = idx[(i + idx.length - 1) % idx.length], i1 = idx[i], i2 = idx[(i + 1) % idx.length]; if (cr(i0, i1, i2) <= 1e-9) continue;
+          var inside = false; for (var q = 0; q < idx.length; q++) { var v = idx[q]; if (v === i0 || v === i1 || v === i2) continue; if (cr(i0, i1, v) >= 0 && cr(i1, i2, v) >= 0 && cr(i2, i0, v) >= 0) { inside = true; break; } }
+          if (inside) continue; out.push(i0, i1, i2); idx.splice(i, 1); cut = true; break;
+        }
+        if (!cut) break;
+      }
+      if (idx.length === 3) out.push(idx[0], idx[1], idx[2]); return out;
+    }
+    function* cityBuild(D) {
+      var FTM = 3.28084, P = [], N = [], Cc = [], cxw = D.c[0], czw = D.c[1], t0 = performance.now(), grid = {}, CELL = 80;
+      function g(xf, zf) { return groundAt(cxw + xf * FT, czw + zf * FT) / FT; }
+      function hs(i) { var x = Math.sin(i * 12.9898 + 4.1) * 43758.5453; return x - Math.floor(x); }
+      function tri(a, b, c, col, n) { P.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); for (var k = 0; k < 3; k++) { N.push(n[0], n[1], n[2]); Cc.push(col[0], col[1], col[2]); } }
+      function quad(a, b, c, d, col, n) { tri(a, b, c, col, n); tri(a, c, d, col, n); }
+      function nrm(a, b, c, up) { var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2], nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; if (up && ny < 0) { nx = -nx; ny = -ny; nz = -nz; } return [nx, ny, nz]; }
+      function gridAdd(o, x0, z0, x1, z1) { for (var ix = Math.floor(x0 / CELL); ix <= Math.floor(x1 / CELL); ix++) for (var iz = Math.floor(z0 / CELL); iz <= Math.floor(z1 / CELL); iz++) { var k = ix * 4096 + iz; (grid[k] = grid[k] || []).push(o); } }
+      var HT = { RESIDENCE: [15, 11], ARTISAN: [19, 8], SHOP: [19, 8], INDUSTRIAL: [26, 8], SERVICE: [22, 8], TAVERN: [26, 8], WAREHOUSE: [24, 6], INN: [28, 8], EDUCATIONAL: [32, 8], LAW_ENFORCEMENT: [28, 8], FARM: [16, 8], RELIGIOUS: [46, 14], FACTION: [34, 10] };
+      var WALLC = [[0.74, 0.65, 0.5], [0.68, 0.58, 0.42], [0.8, 0.72, 0.57], [0.64, 0.54, 0.4]], ROOFC = [[0.6, 0.48, 0.28], [0.4, 0.28, 0.2], [0.36, 0.37, 0.4], [0.55, 0.3, 0.22]];
+      // ---- roads (first in the buffer, drawn with a depth bias) ----
+      var RW = [16, 12, 8, 8, 4], RC = [[0.46, 0.44, 0.4], [0.47, 0.44, 0.39], [0.5, 0.45, 0.36], [0.5, 0.42, 0.3], [0.46, 0.4, 0.28]], up = [0, 1, 0], ri, i, j;
+      function ribbon(pts, wd, col, lift) {
+        var q = []; for (var s = 0; s + 1 < pts.length / 2; s++) { var ax = pts[2 * s], az = pts[2 * s + 1], bx = pts[2 * s + 2], bz = pts[2 * s + 3], L = Math.hypot(bx - ax, bz - az), m = Math.max(1, Math.ceil(L / 30)); for (var k = 0; k < m; k++) q.push([ax + (bx - ax) * k / m, az + (bz - az) * k / m]); if (s + 2 === pts.length / 2) q.push([bx, bz]); }
+        var prev = null; for (var u = 0; u < q.length; u++) {
+          var d0 = q[Math.min(u + 1, q.length - 1)], d1 = q[Math.max(u - 1, 0)], tx = d0[0] - d1[0], tz = d0[1] - d1[1], tl = Math.hypot(tx, tz) || 1, nx = -tz / tl * wd / 2, nz = tx / tl * wd / 2;
+          var a = [q[u][0] + nx, g(q[u][0] + nx, q[u][1] + nz) + lift, q[u][1] + nz], b = [q[u][0] - nx, g(q[u][0] - nx, q[u][1] - nz) + lift, q[u][1] - nz]; if (prev) quad(prev[0], prev[1], b, a, col, up); prev = [a, b];
+        }
+      }
+      function conv(f) { var o = []; for (var k = 0; k < f.length; k += 2) o.push(f[k] / 10 * FTM, -f[k + 1] / 10 * FTM); return o; }
+      for (ri = 0; ri < D.r.length; ri++) { ribbon(conv(D.r[ri][1]), RW[D.r[ri][0]], RC[D.r[ri][0]], 0.3); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      var nRoad = P.length / 3;
+      // ---- stone walls and fences ----
+      function fence(pts, hgt, thick, col, solid) {
+        for (var s = 0; s + 1 < pts.length / 2; s++) {
+          var ax = pts[2 * s], az = pts[2 * s + 1], bx = pts[2 * s + 2], bz = pts[2 * s + 3], L = Math.hypot(bx - ax, bz - az); if (L < 0.1) continue; var tx = (bx - ax) / L, tz = (bz - az) / L, nx = -tz, nz = tx, m = Math.max(1, Math.ceil(L / 30)), h = thick / 2;
+          for (var k = 0; k < m; k++) {
+            var x1 = ax + (bx - ax) * k / m, z1 = az + (bz - az) * k / m, x2 = ax + (bx - ax) * (k + 1) / m, z2 = az + (bz - az) * (k + 1) / m, g1 = g(x1, z1), g2 = g(x2, z2), b1 = g1 - 1.5, b2 = g2 - 1.5, t1 = g1 + hgt, t2 = g2 + hgt;
+            quad([x1 + nx * h, b1, z1 + nz * h], [x2 + nx * h, b2, z2 + nz * h], [x2 + nx * h, t2, z2 + nz * h], [x1 + nx * h, t1, z1 + nz * h], col, [nx, 0, nz]);
+            quad([x2 - nx * h, b2, z2 - nz * h], [x1 - nx * h, b1, z1 - nz * h], [x1 - nx * h, t1, z1 - nz * h], [x2 - nx * h, t2, z2 - nz * h], col, [-nx, 0, -nz]);
+            if (solid) quad([x1 + nx * h, t1, z1 + nz * h], [x2 + nx * h, t2, z2 + nz * h], [x2 - nx * h, t2, z2 - nz * h], [x1 - nx * h, t1, z1 - nz * h], [col[0] * 1.1, col[1] * 1.1, col[2] * 1.1], up);
+          }
+          if (solid) { var sg = [ax, az, bx, bz]; gridAdd({ s: sg }, Math.min(ax, bx) - 3, Math.min(az, bz) - 3, Math.max(ax, bx) + 3, Math.max(az, bz) + 3); }
+        }
+      }
+      for (i = 0; i < D.w.length; i++) { fence(conv(D.w[i]), 20, 3.2, [0.56, 0.55, 0.53], true); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      for (i = 0; i < D.f.length; i++) { fence(conv(D.f[i]), 3, 0.5, [0.52, 0.51, 0.48], false); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      // ---- buildings ----
+      for (i = 0; i < D.b.length; i++) {
+        var B = D.b[i], bt = D.bt[B[0]], mt = D.mt[B[1]], id = B[2], p = conv(B[4]), n = p.length / 2, ar = 0, gmin = 1e9, gmax = -1e9, cx = 0, cz = 0;
+        if (n < 3) continue;
+        for (j = 0; j < n; j++) { var j2 = (j + 1) % n; ar += p[2 * j] * p[2 * j2 + 1] - p[2 * j2] * p[2 * j + 1]; var gg = g(p[2 * j], p[2 * j + 1]); gmin = Math.min(gmin, gg); gmax = Math.max(gmax, gg); cx += p[2 * j]; cz += p[2 * j + 1]; }
+        cx /= n; cz /= n; var sgn = ar >= 0 ? 1 : -1, hh = HT[bt] || [16, 8], hgt = hh[0] + hs(id) * hh[1], floor = gmax, bot = gmin - 2, top = floor + hgt;
+        var wc = mt === 'STONE_BRICK' ? [0.58, 0.57, 0.54] : mt === 'PAVEMENT' ? [0.5, 0.5, 0.5] : WALLC[Math.floor(hs(id + 7) * 4)];
+        if (bt === 'RELIGIOUS') wc = [0.72, 0.7, 0.66];
+        var rc = mt === 'RED_TILE' ? [0.62, 0.25, 0.18] : mt === 'BLUE_TILE' ? [0.25, 0.35, 0.6] : mt === 'ORANGE_TILE' ? [0.8, 0.45, 0.2] : bt === 'RELIGIOUS' ? [0.35, 0.38, 0.5] : ROOFC[Math.floor(hs(id + 3) * 4)];
+        for (j = 0; j < n; j++) { var k2 = (j + 1) % n, ex = p[2 * k2] - p[2 * j], ez = p[2 * k2 + 1] - p[2 * j + 1], el = Math.hypot(ex, ez) || 1, wn = [ez / el * sgn, 0, -ex / el * sgn]; quad([p[2 * j], bot, p[2 * j + 1]], [p[2 * k2], bot, p[2 * k2 + 1]], [p[2 * k2], top, p[2 * k2 + 1]], [p[2 * j], top, p[2 * j + 1]], wc, wn); }
+        if (n === 4) {
+          var e0 = Math.hypot(p[2] - p[0], p[3] - p[1]), e1 = Math.hypot(p[4] - p[2], p[5] - p[3]), s0 = e0 >= e1 ? 0 : 1, Q = []; for (j = 0; j < 4; j++) { var qj = (j + s0) % 4; Q.push([p[2 * qj], p[2 * qj + 1]]); }
+          var rh = Math.max(3, Math.min(9, Math.min(e0, e1) * 0.38)), r1 = [(Q[1][0] + Q[2][0]) / 2, top + rh, (Q[1][1] + Q[2][1]) / 2], r2 = [(Q[3][0] + Q[0][0]) / 2, top + rh, (Q[3][1] + Q[0][1]) / 2];
+          var A0 = [Q[0][0], top, Q[0][1]], A1 = [Q[1][0], top, Q[1][1]], A2 = [Q[2][0], top, Q[2][1]], A3 = [Q[3][0], top, Q[3][1]];
+          quad(A0, A1, r1, r2, rc, nrm(A0, A1, r1, true)); quad(A2, A3, r2, r1, rc, nrm(A2, A3, r2, true));
+          var cxq = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, czq = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4, g1n = nrm(A1, A2, r1, false), g2n = nrm(A3, A0, r2, false);
+          if (g1n[0] * (A1[0] - cxq) + g1n[2] * (A1[2] - czq) < 0) g1n = [-g1n[0], -g1n[1], -g1n[2]]; if (g2n[0] * (A3[0] - cxq) + g2n[2] * (A3[2] - czq) < 0) g2n = [-g2n[0], -g2n[1], -g2n[2]];
+          tri(A1, A2, r1, wc, g1n); tri(A3, A0, r2, wc, g2n);
+        } else { var T = earClip(p); for (j = 0; j < T.length; j += 3) tri([p[2 * T[j]], top + 0.4, p[2 * T[j] + 1]], [p[2 * T[j + 1]], top + 0.4, p[2 * T[j + 1] + 1]], [p[2 * T[j + 2]], top + 0.4, p[2 * T[j + 2] + 1]], rc, up); }
+        var x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9; for (j = 0; j < n; j++) { x0 = Math.min(x0, p[2 * j]); x1 = Math.max(x1, p[2 * j]); z0 = Math.min(z0, p[2 * j + 1]); z1 = Math.max(z1, p[2 * j + 1]); }
+        gridAdd({ p: p, bb: [x0, z0, x1, z1] }, x0 - 2, z0 - 2, x1 + 2, z1 + 2);
+        if (performance.now() - t0 > 8) { yield; t0 = performance.now(); }
+      }
+      function buf(a) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW); return b; }
+      CITY = { cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 };
+    }
+    (function loadCity() {
+      if (typeof fetch !== 'function') return;
+      fetch('lanca-city.json').then(function (r) { return r.json(); }).then(function (D) {
+        var it = cityBuild(D); (function step() { var r; try { r = it.next(); } catch (e) { return; } if (!r.done) setTimeout(step, 0); })();
+      }).catch(function () { });
+    })();
+    function drawCity(vpRot, far) {
+      if (!CITY || !WP) return; if (Math.hypot(CITY.cx - cam.x, CITY.cz - cam.z) / FT > 22000) return;
+      gl.useProgram(WP); gl.disable(gl.CULL_FACE); setAtmoUniforms(WP, far);
+      gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, CITY.cx - cam.x, -cam.y, CITY.cz - cam.z); gl.uniform2f(WP.u.uRot, 1, 0); gl.uniform1f(WP.u.uScale, FT);
+      [[CITY.bp, 0], [CITY.bn, 1], [CITY.bc, 2]].forEach(function (q) { gl.bindBuffer(gl.ARRAY_BUFFER, q[0]); gl.enableVertexAttribArray(q[1]); gl.vertexAttribPointer(q[1], 3, gl.FLOAT, false, 0, 0); });
+      gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-4, -4); gl.drawArrays(gl.TRIANGLES, 0, CITY.nRoad); gl.disable(gl.POLYGON_OFFSET_FILL);
+      gl.drawArrays(gl.TRIANGLES, CITY.nRoad, CITY.nAll - CITY.nRoad);
+      for (var q2 = 0; q2 < 3; q2++) gl.disableVertexAttribArray(q2); gl.enable(gl.CULL_FACE);
     }
     function drawPlayer(vpRot, far) {
       if (!WP || !WALK.on) return;
@@ -1360,7 +1469,7 @@ var fl = (function () {
       gl.useProgram(PC); gl.uniformMatrix4fv(PC.u.uVP, false, vpRot); setFragCommon(PC, far, pxK);
       drawClipLevels(PC, NLEV - 1, true);
       if (VEG) VEG.draw(vpRot, far, t);
-      drawIslands(vpRot, far); drawPlayer(vpRot, far);
+      drawIslands(vpRot, far); drawCity(vpRot, far); drawPlayer(vpRot, far);
       // ---- HUD ----
       if ((frame++ & 1) === 0) {
         labels(vpRot, w, hh, alt); foeUI(vpRot, w, hh);
