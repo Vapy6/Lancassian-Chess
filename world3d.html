@@ -1341,14 +1341,15 @@ var fl = (function () {
     }
     // ================= Lanca city layout (lanca-city.json, from the city generator export) =================
     var CITY = null;
-    meta.places.forEach(function (p) { if (p.n === 'Lanca') { p.x = PL.cx; p.y = PL.cz; } });
+    var CITYSEL = (/[?&]city=(lanca|ivroba)/.exec(location.search) || [0, 'ivroba'])[1], CITYNAME = CITYSEL === 'lanca' ? 'Lanca' : 'Ivroba';
+    meta.places.forEach(function (p) { if (p.n === CITYNAME) { p.x = PL.cx; p.y = PL.cz; } });
     function inLanca(x, z) { return Math.abs(x - PL.cx) < PL.S + PL.B && Math.abs(z - PL.cz) < PL.S + PL.B; }
     function cityBlocked(wx, wz) {
       if (!CITY) return false; var lx = (wx - CITY.cx) / FT, lz = (wz - CITY.cz) / FT; if (Math.abs(lx) > 9200 || Math.abs(lz) > 9200) return false;
       var L = CITY.cell, c = CITY.grid[Math.floor(lx / L) * 4096 + Math.floor(lz / L)]; if (!c) return false;
       for (var i = 0; i < c.length; i++) {
         var o = c[i];
-        if (o.s) { var ax = o.s[0], az = o.s[1], bx = o.s[2], bz = o.s[3], vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((lx - ax) * vx + (lz - az) * vz) / (vx * vx + vz * vz || 1))); if (Math.hypot(lx - ax - vx * t, lz - az - vz * t) < 2.6) return true; continue; }
+        if (o.s) { var ax = o.s[0], az = o.s[1], bx = o.s[2], bz = o.s[3], vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((lx - ax) * vx + (lz - az) * vz) / (vx * vx + vz * vz || 1))); if (Math.hypot(lx - ax - vx * t, lz - az - vz * t) < (o.r || 2.6)) return true; continue; }
         var bb = o.bb; if (lx < bb[0] - 1.3 || lx > bb[2] + 1.3 || lz < bb[1] - 1.3 || lz > bb[3] + 1.3) continue;
         var p = o.p, n = p.length / 2, ins = false, j = n - 1, k;
         for (k = 0; k < n; k++) { var xi = p[2 * k], zi = p[2 * k + 1], xj = p[2 * j], zj = p[2 * j + 1]; if ((zi > lz) !== (zj > lz) && lx < (xj - xi) * (lz - zi) / (zj - zi) + xi) ins = !ins; var vx2 = xj - xi, vz2 = zj - zi, t2 = Math.max(0, Math.min(1, ((lx - xi) * vx2 + (lz - zi) * vz2) / (vx2 * vx2 + vz2 * vz2 || 1))); if (Math.hypot(lx - xi - vx2 * t2, lz - zi - vz2 * t2) < 1.3) return true; j = k; }
@@ -1380,7 +1381,8 @@ var fl = (function () {
       function nrm(a, b, c, up) { var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2], nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l; if (up && ny < 0) { nx = -nx; ny = -ny; nz = -nz; } return [nx, ny, nz]; }
       function gridAdd(o, x0, z0, x1, z1) { for (var ix = Math.floor(x0 / CELL); ix <= Math.floor(x1 / CELL); ix++) for (var iz = Math.floor(z0 / CELL); iz <= Math.floor(z1 / CELL); iz++) { var k = ix * 4096 + iz; (grid[k] = grid[k] || []).push(o); } }
       var HT = { RESIDENCE: [15, 11], ARTISAN: [19, 8], SHOP: [19, 8], INDUSTRIAL: [26, 8], SERVICE: [22, 8], TAVERN: [26, 8], WAREHOUSE: [24, 6], INN: [28, 8], EDUCATIONAL: [32, 8], LAW_ENFORCEMENT: [28, 8], FARM: [16, 8], RELIGIOUS: [46, 14], FACTION: [34, 10] };
-      var WALLC = [[0.74, 0.65, 0.5], [0.68, 0.58, 0.42], [0.8, 0.72, 0.57], [0.64, 0.54, 0.4]], ROOFC = [[0.6, 0.48, 0.28], [0.4, 0.28, 0.2], [0.36, 0.37, 0.4], [0.55, 0.3, 0.22]];
+      var WALLC = [[0.74, 0.65, 0.5], [0.68, 0.58, 0.42], [0.8, 0.72, 0.57], [0.64, 0.54, 0.4]], ROOFC = [[0.6, 0.48, 0.28], [0.4, 0.28, 0.2], [0.36, 0.37, 0.4], [0.55, 0.3, 0.22]], ST = D.style || {};
+      if (ST.ht) HT = ST.ht; if (ST.wc) WALLC = ST.wc; if (ST.rc) ROOFC = ST.rc;
       // ---- roads (first in the buffer, drawn with a depth bias) ----
       var RW = [16, 12, 8, 8, 4], RC = [[0.46, 0.44, 0.4], [0.47, 0.44, 0.39], [0.5, 0.45, 0.36], [0.5, 0.42, 0.3], [0.46, 0.4, 0.28]], up = [0, 1, 0], ri, i, j;
       function ribbon(pts, wd, col, lift) {
@@ -1403,11 +1405,13 @@ var fl = (function () {
             quad([x2 - nx * h, b2, z2 - nz * h], [x1 - nx * h, b1, z1 - nz * h], [x1 - nx * h, t1, z1 - nz * h], [x2 - nx * h, t2, z2 - nz * h], col, [-nx, 0, -nz]);
             if (solid) quad([x1 + nx * h, t1, z1 + nz * h], [x2 + nx * h, t2, z2 + nz * h], [x2 - nx * h, t2, z2 - nz * h], [x1 - nx * h, t1, z1 - nz * h], [col[0] * 1.1, col[1] * 1.1, col[2] * 1.1], up);
           }
-          if (solid) { var sg = [ax, az, bx, bz]; gridAdd({ s: sg }, Math.min(ax, bx) - 3, Math.min(az, bz) - 3, Math.max(ax, bx) + 3, Math.max(az, bz) + 3); }
+          if (solid) { var sg = [ax, az, bx, bz]; gridAdd({ s: sg, r: thick / 2 + 1.4 }, Math.min(ax, bx) - 3, Math.min(az, bz) - 3, Math.max(ax, bx) + 3, Math.max(az, bz) + 3); }
         }
       }
-      for (i = 0; i < D.w.length; i++) { fence(conv(D.w[i]), 20, 3.2, [0.56, 0.55, 0.53], true); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
-      for (i = 0; i < D.f.length; i++) { fence(conv(D.f[i]), 3, 0.5, [0.52, 0.51, 0.48], false); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      var WH = ST.wallH || [20, 20], WT = ST.wallT || [3.2, 3.2];
+      for (i = 0; i < D.w.length; i++) { fence(conv(D.w[i]), WH[0], WT[0], [0.56, 0.55, 0.53], true); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      for (i = 0; i < (D.wo || []).length; i++) { fence(conv(D.wo[i]), WH[1], WT[1], [0.5, 0.49, 0.48], true); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
+      for (i = 0; i < D.f.length; i++) { fence(conv(D.f[i]), ST.fence || 3, 0.5, [0.52, 0.51, 0.48], false); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
       // ---- buildings ----
       for (i = 0; i < D.b.length; i++) {
         var B = D.b[i], bt = D.bt[B[0]], mt = D.mt[B[1]], id = B[2], p = conv(B[4]), n = p.length / 2, ar = 0, gmin = 1e9, gmax = -1e9, cx = 0, cz = 0;
@@ -1415,12 +1419,14 @@ var fl = (function () {
         for (j = 0; j < n; j++) { var j2 = (j + 1) % n; ar += p[2 * j] * p[2 * j2 + 1] - p[2 * j2] * p[2 * j + 1]; var gg = g(p[2 * j], p[2 * j + 1]); gmin = Math.min(gmin, gg); gmax = Math.max(gmax, gg); cx += p[2 * j]; cz += p[2 * j + 1]; }
         cx /= n; cz /= n; var sgn = ar >= 0 ? 1 : -1, hh = HT[bt] || [16, 8], hgt = hh[0] + hs(id) * hh[1], floor = gmax, bot = gmin - 2, top = floor + hgt;
         var wc = mt === 'STONE_BRICK' ? [0.58, 0.57, 0.54] : mt === 'PAVEMENT' ? [0.5, 0.5, 0.5] : WALLC[Math.floor(hs(id + 7) * 4)];
-        if (bt === 'RELIGIOUS') wc = [0.72, 0.7, 0.66];
-        var rc = mt === 'RED_TILE' ? [0.62, 0.25, 0.18] : mt === 'BLUE_TILE' ? [0.25, 0.35, 0.6] : mt === 'ORANGE_TILE' ? [0.8, 0.45, 0.2] : bt === 'RELIGIOUS' ? [0.35, 0.38, 0.5] : ROOFC[Math.floor(hs(id + 3) * 4)];
+        if (ST.wc) wc = WALLC[Math.floor(hs(id + 7) * WALLC.length)];
+        if (bt === 'RELIGIOUS') wc = ST.wc ? [0.42, 0.4, 0.38] : [0.72, 0.7, 0.66];
+        var rc = mt === 'RED_TILE' ? [0.62, 0.25, 0.18] : mt === 'BLUE_TILE' ? [0.25, 0.35, 0.6] : mt === 'ORANGE_TILE' ? [0.8, 0.45, 0.2] : bt === 'RELIGIOUS' ? [0.35, 0.38, 0.5] : ROOFC[Math.floor(hs(id + 3) * ROOFC.length)];
+        if (ST.rc && bt !== 'RELIGIOUS') rc = ROOFC[Math.floor(hs(id + 3) * ROOFC.length)];
         for (j = 0; j < n; j++) { var k2 = (j + 1) % n, ex = p[2 * k2] - p[2 * j], ez = p[2 * k2 + 1] - p[2 * j + 1], el = Math.hypot(ex, ez) || 1, wn = [ez / el * sgn, 0, -ex / el * sgn]; quad([p[2 * j], bot, p[2 * j + 1]], [p[2 * k2], bot, p[2 * k2 + 1]], [p[2 * k2], top, p[2 * k2 + 1]], [p[2 * j], top, p[2 * j + 1]], wc, wn); }
         if (n === 4) {
           var e0 = Math.hypot(p[2] - p[0], p[3] - p[1]), e1 = Math.hypot(p[4] - p[2], p[5] - p[3]), s0 = e0 >= e1 ? 0 : 1, Q = []; for (j = 0; j < 4; j++) { var qj = (j + s0) % 4; Q.push([p[2 * qj], p[2 * qj + 1]]); }
-          var rh = Math.max(3, Math.min(9, Math.min(e0, e1) * 0.38)), r1 = [(Q[1][0] + Q[2][0]) / 2, top + rh, (Q[1][1] + Q[2][1]) / 2], r2 = [(Q[3][0] + Q[0][0]) / 2, top + rh, (Q[3][1] + Q[0][1]) / 2];
+          var rh = Math.max(3, Math.min(ST.rh || 9, Math.min(e0, e1) * (ST.rh ? 0.6 : 0.38))), r1 = [(Q[1][0] + Q[2][0]) / 2, top + rh, (Q[1][1] + Q[2][1]) / 2], r2 = [(Q[3][0] + Q[0][0]) / 2, top + rh, (Q[3][1] + Q[0][1]) / 2];
           var A0 = [Q[0][0], top, Q[0][1]], A1 = [Q[1][0], top, Q[1][1]], A2 = [Q[2][0], top, Q[2][1]], A3 = [Q[3][0], top, Q[3][1]];
           quad(A0, A1, r1, r2, rc, nrm(A0, A1, r1, true)); quad(A2, A3, r2, r1, rc, nrm(A2, A3, r2, true));
           var cxq = (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4, czq = (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4, g1n = nrm(A1, A2, r1, false), g2n = nrm(A3, A0, r2, false);
@@ -1436,7 +1442,7 @@ var fl = (function () {
     }
     (function loadCity() {
       if (typeof fetch !== 'function') return;
-      ED.ready.then(function () { return fetch('lanca-city.json'); }).then(function (r) { return r.json(); }).then(function (D) {
+      ED.ready.then(function () { return fetch(CITYSEL + '-city.json'); }).then(function (r) { return r.json(); }).then(function (D) {
         var it = cityBuild(D); (function step() { var r; try { r = it.next(); } catch (e) { return; } if (!r.done) setTimeout(step, 0); })();
       }).catch(function () { });
     })();
