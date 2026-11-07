@@ -1313,6 +1313,23 @@ var fl = (function () {
     }
     setInterval(function () { if (WALK.on && !INV.box && !document.hidden) clkAdvance(1 / 30); else clkDraw(); }, 1000);
     setInterval(function () { try { localStorage.setItem('dnd.clock', JSON.stringify({ day: CLK.day, tod: TOD })); } catch (e) { } }, 4000);
+    // saved position + title screen
+    function posSave() { if (WALK.on) { try { localStorage.setItem('dnd.pos', JSON.stringify({ x: WALK.x, z: WALK.z, yaw: cam.yaw })); } catch (e) { } } }
+    setInterval(posSave, 3000); window.addEventListener('beforeunload', function () { posSave(); try { localStorage.setItem('dnd.clock', JSON.stringify({ day: CLK.day, tod: TOD })); } catch (e) { } });
+    (function titleScreen() {
+      if (/[?&](dev=1|notitle)/.test(location.search)) return;
+      heroRefresh(); var pos = null; try { pos = JSON.parse(localStorage.getItem('dnd.pos') || 'null'); } catch (e) { }
+      var o = document.createElement('div'); o.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,rgba(30,22,14,.72),rgba(6,5,4,.93));font-family:Georgia,serif;color:#e8dfcb;text-align:center';
+      function btn(label, sub, f, main) { var b = document.createElement('button'); b.style.cssText = 'display:block;width:300px;margin:10px auto;padding:12px 16px;cursor:pointer;font:' + (main ? '600 18px' : '16px') + ' Georgia,serif;letter-spacing:.08em;color:' + (main ? '#1a120a' : '#e8dfcb') + ';background:' + (main ? 'linear-gradient(180deg,#e2c27a,#b48d43)' : 'rgba(26,20,14,.85)') + ';border:1px solid #8a6a3f;border-radius:4px'; b.innerHTML = label + (sub ? '<div style="font-size:12px;font-weight:400;letter-spacing:0;margin-top:3px;opacity:.75">' + sub + '</div>' : ''); b.onclick = f; return b; }
+      function close() { o.remove(); }
+      var box = document.createElement('div'); box.innerHTML = '<div style="font-size:54px;letter-spacing:.35em;color:#dcb96c;text-shadow:0 2px 18px #000">MYOSIA</div><div style="height:30px"></div>'; o.appendChild(box);
+      var can = !!(HERO && pos && isFinite(pos.x));
+      if (can) box.appendChild(btn('Continue', DNDUI_esc(HERO.name) + ', level ' + (HERO.level || 1) + ' ' + DNDUI_esc(HERO.cls || '') + ' · ' + calStr(CLK.day), function () { close(); cam.x = pos.x; cam.z = pos.z; cam.yaw = pos.yaw || 0; cam.y = Math.max(cam.y, groundAt(pos.x, pos.z) + 40); toggleWalk(); }, true));
+      box.appendChild(btn(can ? 'Explore the world' : 'Enter the world', 'Fly freely over the map', close, !can));
+      box.appendChild(btn(HERO ? 'Characters' : 'Create a character', HERO ? 'Switch or build a hero' : 'You need a hero to play', function () { location.href = 'character.html'; }));
+      document.body.appendChild(o);
+    })();
+    function DNDUI_esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     HBA.shortrest.f0 = HBA.shortrest.f; HBA.shortrest.f = function () { HBA.shortrest.f0(); clkAdvance(1); };
     HBA.longrest.f0 = HBA.longrest.f; HBA.longrest.f = function () { HBA.longrest.f0(); clkAdvance(8); };
     function npcTick() {
