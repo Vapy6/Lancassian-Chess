@@ -1300,6 +1300,21 @@ var fl = (function () {
       Array.prototype.forEach.call(HB.bar.querySelectorAll('[data-i]'), function (el) { var i = +el.getAttribute('data-i'); el.onclick = function () { hbUse(i); }; el.oncontextmenu = function (e) { e.preventDefault(); hbPicker(i); }; });
     }
     setInterval(hudTick, 400);
+    // game clock: 1 real second = 2 game minutes (a full day is 12 real minutes); saved between visits
+    var CLK = { day: 1, t: 0 };
+    try { var cj = JSON.parse(localStorage.getItem('dnd.clock') || 'null'); if (cj && isFinite(cj.day) && isFinite(cj.tod)) { CLK.day = Math.max(1, cj.day | 0); setTOD(((cj.tod % 24) + 24) % 24); tdEl.value = TOD; } } catch (e) { }
+    var MONTHS = [['Myoso', 'Winter'], ['Annos', 'Winter'], ['Temirrus', 'Winter/Spring'], ['Larrius', 'Spring'], ['Deo', 'Spring'], ['Ameria', 'Summer'], ['Rune/Borgax', 'Summer'], ['Thero', 'Summer/Autumn'], ['Zanos', 'Autumn'], ['', 'Autumn']], TENTH = ['Aunrea', 'Faxlyn', 'Cyclun', 'Xarius'];
+    function calStr(d) { var k = d - 1, yr = 403 + Math.floor(k / 300), doy = k % 300, mi = Math.floor(doy / 30), dm = doy % 30 + 1, nm = mi === 9 ? TENTH[(((yr - 400) % 4) + 4) % 4] : MONTHS[mi][0]; return dm + ' ' + nm + ', ' + yr + ' S.K (' + MONTHS[mi][1] + ')'; }
+    function clkAdvance(h) { var v = TOD + h; while (v >= 24) { v -= 24; CLK.day++; } setTOD(v); tdEl.value = v; clkDraw(); }
+    function clkDraw() {
+      if (!CLK.el) { CLK.el = document.createElement('div'); CLK.el.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:40;padding:4px 14px;background:rgba(20,15,10,.82);border:1px solid #8a6a3f;border-radius:4px;color:#e8dfcb;font:600 13px Georgia,serif;letter-spacing:.06em;pointer-events:none;display:none'; document.body.appendChild(CLK.el); }
+      var h = Math.floor(TOD), m = Math.floor((TOD - h) * 60), e = ATM ? ATM.light[1] : 0, ic = (TOD >= 5 && TOD < 7) ? 'Dawn' : (TOD >= 7 && TOD < 17) ? 'Day' : (TOD >= 17 && TOD < 20) ? 'Dusk' : 'Night';
+      CLK.el.textContent = calStr(CLK.day) + ' · ' + (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ' · ' + ic; CLK.el.style.display = WALK.on ? 'block' : 'none';
+    }
+    setInterval(function () { if (WALK.on && !INV.box && !document.hidden) clkAdvance(1 / 30); else clkDraw(); }, 1000);
+    setInterval(function () { try { localStorage.setItem('dnd.clock', JSON.stringify({ day: CLK.day, tod: TOD })); } catch (e) { } }, 4000);
+    HBA.shortrest.f0 = HBA.shortrest.f; HBA.shortrest.f = function () { HBA.shortrest.f0(); clkAdvance(1); };
+    HBA.longrest.f0 = HBA.longrest.f; HBA.longrest.f = function () { HBA.longrest.f0(); clkAdvance(8); };
     function npcTick() {
       var show = WALK.on && !ENC.box && !TK.box, pl = show ? nearTown() : null; if (pl) markVisited(pl);
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
