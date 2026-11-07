@@ -1272,7 +1272,7 @@ var fl = (function () {
       var loc = null; try { loc = DEV ? localStorage.getItem('dnd.terrainEdits') : null; } catch (x) { }
       if (loc && typeof DecompressionStream === 'function') { var b = atob(loc), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return fromBuf(u.buffer).catch(function () { }); }
       if (typeof fetch !== 'function' || typeof DecompressionStream !== 'function') return Promise.resolve();
-      return fetch('terrain-edits.bin').then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(fromBuf).catch(function () { });
+      return fetch('terrain-edits.bin', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(fromBuf).catch(function () { });
     }
     ED.ready = edLoad();
     function edSaveLater() { SC.save = performance.now(); setTimeout(function () { if (performance.now() - SC.save < 2900 || typeof CompressionStream !== 'function') return; gzipU8(edPack(), true).then(function (ab) { var s = edB64(new Uint8Array(ab)); try { localStorage.setItem('dnd.terrainEdits', s); } catch (x) { scStatus('Browser storage is full: use Export to keep your work.'); } }); }, 3000); }
@@ -1321,7 +1321,7 @@ var fl = (function () {
         row('Tool <select id="sct"><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option></select> Layer <select id="scl"><option value="0">Coarse</option><option value="1">Fine</option></select>') +
         row('Radius <b id="scrv"></b><br><input id="scr" type="range" min="0" max="100" value="50" style="width:100%">') + row('Strength <b id="scsv"></b><br><input id="scs" type="range" min="1" max="50" value="10" style="width:100%">') +
         row('Fine window <select id="scw"><option value="0.25">1.5 mi wide</option><option value="0.5">3 mi wide</option><option value="1">6 mi wide</option></select>') +
-        row('<button id="scm">Move window here</button> <button id="scu">Undo</button>') + row('<button id="sce">Export file</button> <button id="scd">Discard local</button>') +
+        row('<button id="scm">Move window here</button> <button id="scu">Undo</button>') + row('<button id="sce">Export file</button> <button id="scd">Discard local</button>') + row('<button id="scc">Rebuild cities on this terrain</button>') +
         '<div id="scst" style="color:#8f8575;font-size:12px;min-height:30px"></div><div style="color:#8f8575;font-size:11px">Left-drag paints. Right-drag looks around. Ctrl+Z undoes. Flatten flattens toward the height where you first press.</div>';
       document.body.appendChild(p); SC.stat = p.querySelector('#scst');
       var ring = document.createElement('div'); ring.style.cssText = 'position:fixed;z-index:60;border:2px solid #dcb96c;border-radius:50%;pointer-events:none;display:none;box-shadow:0 0 0 1px #000a'; document.body.appendChild(ring); SC.ring = ring;
@@ -1331,6 +1331,7 @@ var fl = (function () {
       q('scm').onclick = function () { if (!SC.hit) { scStatus('Point at the terrain first.'); return; } edEnsure(); var L = ED.L[SC.layer], fh = +q('scw').value; if (!confirm('Move the ' + (SC.layer ? 'fine' : 'coarse') + ' window here? Its current edits will be cleared.')) return; L.cx = SC.hit.x; L.cz = SC.hit.z; if (SC.layer) L.half = fh; L.d.fill(0); edUpload(SC.layer, 0, 0, ED.N - 1, ED.N - 1); SC.undo = []; edSaveLater(); };
       q('scu').onclick = scUndo;
       q('sce').onclick = function () { edEnsure(); gzipU8(edPack(), true).then(function (ab) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ab], { type: 'application/octet-stream' })); a.download = 'terrain-edits.bin'; a.click(); scStatus('Exported terrain-edits.bin: upload it to the repo root.'); }); };
+      q('scc').onclick = function () { loadCities(true); scStatus('Rebuilding the cities on the current terrain...'); };
       q('scd').onclick = function () { if (!confirm('Discard your local edits and reload the page?')) return; try { localStorage.removeItem('dnd.terrainEdits'); } catch (x) { } location.reload(); };
       window.addEventListener('pointerdown', function (e) { if (!SC.open || WALK.on || e.target !== cv || e.button !== 0) return; e.stopImmediatePropagation(); e.preventDefault(); edEnsure(); SC.ptr = { x: e.clientX, y: e.clientY }; SC.hit = rayHit(e.clientX, e.clientY); if (!SC.hit) return; SC.painting = true; SC.stroke = { li: SC.layer, saved: {}, T: SC.hit.y * 15840 }; cv.setPointerCapture(e.pointerId); }, true);
       window.addEventListener('pointermove', function (e) { if (SC.open) SC.ptr = { x: e.clientX, y: e.clientY }; }, true);
@@ -1442,15 +1443,17 @@ var fl = (function () {
       function buf(a) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW); return b; }
       CITYS.push({ cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 });
     }
-    (function loadCity() {
+    function loadCities(fresh) {   // fresh = rebuild now from the current terrain (used by the sculpt panel after you edit)
       if (typeof fetch !== 'function') return;
-      var chain = ED.ready;
+      CITYS.forEach(function (c) { gl.deleteBuffer(c.bp); gl.deleteBuffer(c.bn); gl.deleteBuffer(c.bc); }); CITYS.length = 0;
+      var chain = fresh ? Promise.resolve() : ED.ready;
       CITYDEF.forEach(function (P) {
-        chain = chain.then(function () { return fetch(P.file + '-city.json'); }).then(function (r) { return r.json(); }).then(function (D) {
+        chain = chain.then(function () { return fetch(P.file + '-city.json', { cache: 'no-cache' }); }).then(function (r) { return r.json(); }).then(function (D) {
           return new Promise(function (done) { var it = cityBuild(D, P); (function step() { var r; try { r = it.next(); } catch (e) { done(); return; } if (!r.done) setTimeout(step, 0); else done(); })(); });
         }).catch(function () { });
       });
-    })();
+    }
+    loadCities(false);
     function drawCity(vpRot, far) { for (var ci = 0; ci < CITYS.length; ci++) drawCityOne(CITYS[ci], vpRot, far); }
     function drawCityOne(CITY, vpRot, far) {
       if (!CITY || !WP) return; if (Math.hypot(CITY.cx - cam.x, CITY.cz - cam.z) / FT > 22000) return;
