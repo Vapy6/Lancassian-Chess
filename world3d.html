@@ -33,6 +33,7 @@ canvas:active{cursor:grabbing}
 <div class="k" style="margin-top:6px"><a href="map.html">← 2D map</a> · <a href="index.html">Chess</a></div></div>
 <div id="info"><div id="place" style="font-weight:600">—</div><div class="k" id="alt"></div><div class="k" id="pos"></div><div class="k" id="fps"></div></div>
 <div id="mini"><canvas id="mc"></canvas><div id="mdot"></div></div>
+<script src="dnd-data.js"></script><script src="dnd-inventory.js"></script>
 <script>
 (function () {
   'use strict';
@@ -1168,6 +1169,22 @@ var fl = (function () {
         WALK.x = cam.x = x; WALK.z = cam.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; walkMsg('You arrive in ' + p.n + '.');
       });
     }
+    var QP = ['Potion of Healing', 'Potion of Greater Healing'], HUD = null;
+    function qpCount(n) { if (!HERO || !HERO.inventory) return 0; for (var i = 0; i < HERO.inventory.length; i++) if (HERO.inventory[i].name === n) return HERO.inventory[i].qty; return 0; }
+    function hudTick() {
+      var show = WALK.on && !ENC.box && !TK.box && !INV.box; heroRefresh();
+      if (!show || !HERO) { if (HUD) HUD.style.display = 'none'; return; }
+      if (!HUD) { HUD = document.createElement('div'); HUD.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:40;width:230px;background:linear-gradient(180deg,rgba(29,24,18,.92),rgba(16,13,10,.92));border:1px solid #8a6a3f;border-radius:4px;padding:8px 10px;color:#e8dfcb;font:13px Georgia,serif;box-shadow:0 4px 16px #000a;pointer-events:none'; document.body.appendChild(HUD); }
+      var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), pc = Math.min(100, hp / mx * 100), col = pc > 50 ? '#5fa36a' : pc > 25 ? '#c9a23c' : '#c9675a';
+      var sl = QP.map(function (n, i) { var c = qpCount(n); return '<span style="display:inline-block;margin-right:6px;padding:2px 7px;border:1px solid ' + (c ? '#8a6a3f' : '#3a2c1b') + ';border-radius:3px;color:' + (c ? '#e8dfcb' : '#5d5446') + '">' + (i + 1) + ' ' + (i ? 'Greater' : 'Healing') + ' x' + c + '</span>'; }).join('');
+      HUD.style.display = 'block';
+      HUD.innerHTML = '<div style="color:#dcb96c;font-weight:600;letter-spacing:.04em">' + HERO.name + ' <span style="color:#8f8575;font-weight:400">Lv ' + (HERO.level || 1) + ' ' + HERO.cls + '</span></div><div style="height:9px;background:#000;border:1px solid #3a2c1b;border-radius:2px;margin:5px 0 3px;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + col + '"></div></div><div style="display:flex;justify-content:space-between;color:#8f8575"><span>HP ' + hp + '/' + mx + '</span><span>AC ' + HERO.ac + '</span><span>' + gpOf() + ' gp</span></div><div style="margin-top:6px;font-size:12px">' + sl + '</div>';
+    }
+    setInterval(hudTick, 400);
+    function quickDrink(i) {
+      if (!WALK.on || ENC.box || TK.box || INV.box || !window.DNDINV) return; heroRefresh(); if (!HERO) return;
+      var r = DNDINV.usePotion(HERO, QP[i]); if (r.ok) DNDINV.saveActive(HERO); walkMsg(r.msg); hudTick();
+    }
     function npcTick() {
       var show = WALK.on && !ENC.box && !TK.box, pl = show ? nearTown() : null; if (pl) markVisited(pl);
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
@@ -1235,7 +1252,7 @@ var fl = (function () {
     cv.addEventListener('pointerup', function () { drag = false; });
     cv.addEventListener('pointermove', function (e) { if (!drag) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
     cv.addEventListener('wheel', function (e) { e.preventDefault(); if (WALK.on) { WALK.dist = Math.max(2, Math.min(80, WALK.dist * (e.deltaY < 0 ? 1 / 1.15 : 1.15))); return; } speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
-    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
+    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === '1') quickDrink(0); else if (kk === '2') quickDrink(1); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     var exEl = document.getElementById('ex');
     exEl.addEventListener('input', function () { EX = +exEl.value; EXV.textContent = EX; });
