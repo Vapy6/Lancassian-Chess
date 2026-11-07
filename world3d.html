@@ -195,9 +195,11 @@ canvas:active{cursor:grabbing}
     }
     function riverNear(x, z) { var r = rvAt(x, z); return r[1] > 0.02 && Math.abs(r[0]) / r[1] < 1.6; }
     // ---- Lanca plateau (the 'undercity' stone cube): a flat square the city stands on, shared by CPU and GPU height code ----
-    var PL = { cx: 1014.0, cz: 579.0, S: 0.62, B: 0.035, hp: 0 };
-    (function () { var m = 0, x, z; for (x = PL.cx - PL.S - PL.B; x <= PL.cx + PL.S + PL.B + 1e-6; x += 0.1) for (z = PL.cz - PL.S - PL.B; z <= PL.cz + PL.S + PL.B + 1e-6; z += 0.1) m = Math.max(m, baseAtC(x, z)[0]); PL.hp = m + 0.003; })();
-    function platC(x, z, h) { var d = Math.max(Math.abs(x - PL.cx), Math.abs(z - PL.cz)); if (d >= PL.S + PL.B) return h; var m = 1 - sstep(PL.S, PL.S + PL.B, d), hp = PL.hp * (1 + (EX - 1) * sstep(0.0004, 0.005, PL.hp)); return h + (hp - h) * m; }
+    var PLS = [{ name: 'Lanca', file: 'lanca', cx: 1017.9, cz: 572.9, S: 0.62, B: 0.035, mode: 'mean', hp: 0 }];
+    var CITYDEF = [{ name: 'Lanca', file: 'lanca', cx: PLS[0].cx, cz: PLS[0].cz, half: 0.62 }, { name: 'Ivroba', file: 'ivroba', cx: 1147.3, cz: 517.2, half: 0.56 }];   // Lanca stands on the stone slab; Ivroba on the hand-sculpted terrain (terrain-edits.bin)
+    PLS.forEach(function (P) { var sum = 0, mx = 0, n = 0, x, z, b; for (x = P.cx - P.S; x <= P.cx + P.S + 1e-6; x += 0.1) for (z = P.cz - P.S; z <= P.cz + P.S + 1e-6; z += 0.1) { b = baseAtC(x, z)[0]; sum += b; n++; mx = Math.max(mx, b); } P.hp = (P.mode === 'max' ? mx : sum / n) + 0.003; });
+    var PL = PLS[0];
+    function platC(x, z, h) { for (var q = 0; q < PLS.length; q++) { var P = PLS[q], d = Math.max(Math.abs(x - P.cx), Math.abs(z - P.cz)); if (d >= P.S + P.B) continue; var m = 1 - sstep(P.S, P.S + P.B, d), hp = P.hp * (1 + (EX - 1) * sstep(0.0004, 0.005, P.hp)); h += (hp - h) * m; } return h; }
     // ---- terrain sculpt layers (feet of height delta), two square windows: 0 = coarse (large), 1 = fine (small) ----
     var ED = { N: 2048, on: false, ready: Promise.resolve(), L: [{ cx: PL.cx, cz: PL.cz, half: 12, range: 120000, d: null }, { cx: PL.cx, cz: PL.cz, half: 0.4, range: 6000, d: null }] };
     function edC(x, z) {
@@ -330,7 +332,7 @@ canvas:active{cursor:grabbing}
       'float by=mix(mix(dec(a),dec(b),f.x),mix(dec(c),dec(d),f.x),f.y);float L=mix(mix(a.a,b.a,f.x),mix(c.a,d.a,f.x),f.y);byOut=by;if(L<=0.5)return 0.0;' +
       'float lf=smoothstep(0.0003,0.0025,by);float rough=clamp(0.2+(sqrt(by*15840.0)-2.0)/50.0,0.2,1.0);float det=0.0;' +
       'for(int k=0;k<12;k++){float w=cs>0.5?uWc[k]:uW[k];if(w<=0.0)break;vec2 p=uOct[k]+vec2(uRot[k].x*loc.x-uRot[k].y*loc.y,uRot[k].y*loc.x+uRot[k].x*loc.y);det+=w*uA[k]*(vnz(p)*2.0-1.0);}' +
-      'float h0=by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by));float hh=rcut(wp,max(h0+det*rough*lf*(1.0+uEx/50.0)+lform(wp,h0),0.0003));float dd=max(abs(wp.x-' + PL.cx.toFixed(4) + '),abs(wp.y-' + PL.cz.toFixed(4) + '));float pm=1.0-smoothstep(' + PL.S.toFixed(4) + ',' + (PL.S + PL.B).toFixed(4) + ',dd);float hpE=' + PL.hp.toFixed(6) + '*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,' + PL.hp.toFixed(6) + '));return mix(hh,hpE,pm)+(edl(wp,uEDc,0.0)+edl(wp,uEDf,2048.0))/15840.0;}\n' +
+      'float h0=by*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,by));float hh=rcut(wp,max(h0+det*rough*lf*(1.0+uEx/50.0)+lform(wp,h0),0.0003));' + PLS.map(function (P) { return '{float dd=max(abs(wp.x-' + P.cx.toFixed(4) + '),abs(wp.y-' + P.cz.toFixed(4) + '));float pm=1.0-smoothstep(' + P.S.toFixed(4) + ',' + (P.S + P.B).toFixed(4) + ',dd);float hpE=' + P.hp.toFixed(6) + '*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,' + P.hp.toFixed(6) + '));hh=mix(hh,hpE,pm);}'; }).join('') + 'return hh+(edl(wp,uEDc,0.0)+edl(wp,uEDf,2048.0))/15840.0;}\n' +
       'void main(){vec2 loc=(aIJ-32.0)*uS;float t0;float h=hgt(loc,0.0,t0);float by0=t0;vec3 rel=vec3(loc.x+uRel.x,0.0,loc.y+uRel.y);' +
       'float dch=max(abs(rel.x),abs(rel.z));float a=uMorph*smoothstep(uMr.x,uMr.y,dch);float e=uS;vec3 n;' +
       'float hxm=hgt(loc-vec2(e,0.0),0.0,t0);float hxp=hgt(loc+vec2(e,0.0),0.0,t0);float hzm=hgt(loc-vec2(0.0,e),0.0,t0);float hzp=hgt(loc+vec2(0.0,e),0.0,t0);' +
@@ -388,7 +390,7 @@ canvas:active{cursor:grabbing}
       ' float gz=1.0-smoothstep(16.0,44.0,length(vW-uGal));if(gz>0.0){vec3 rdp=normalize(rd+vec3(n.x,0.0,n.z)*0.10);vec3 gc=galaxy(uFO1+vLocFt,rdp,dist)+refl*F*0.22+uSunCol*spec*2.0;col=mix(col,gc,gz);}\n' +
       '}else{\n' +
       ' vec2 warp=(vec2(dtex(uFO0,16384.0,vec2(0.0)).r,dtex(uFO0,16384.0,vec2(0.37,0.11)).g)-0.5)*1.5;vec4 bz=texture2D(uB,(floor(vW+warp+0.5)+0.5)/uWH)*255.0;float sty=bz.g;float wgt=bz.b/255.0;\n' +
-      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,0.92);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;float pm2=1.0-smoothstep(' + PL.S.toFixed(4) + ',' + (PL.S + PL.B).toFixed(4) + ',max(abs(vW.x-' + PL.cx.toFixed(4) + '),abs(vW.y-' + PL.cz.toFixed(4) + ')));alb=mix(alb,vec3(0.2,0.19,0.17),pm2*0.85);\n' +
+      ' vec3 cm=texture2D(uC,(vW+0.5)/uWH).rgb;vec3 hc=ramp(18.0+sqrt(max(vBy,0.0)*15840.0));vec3 albS=mix(mix(hc,cm,0.5),cm,uBio);float lq=dot(albS,vec3(0.3,0.59,0.11));vec3 gs=mix(vec3(lq),albS,0.92);gs*=(1.0-0.38*smoothstep(0.5,0.9,lq))*(1.0-0.22*smoothstep(0.3,0.6,lq));vec3 alb=pow(clamp(gs,0.0,1.0),vec3(2.2))*0.9;float pm2=0.0;' + PLS.map(function (P) { return 'pm2=max(pm2,1.0-smoothstep(' + P.S.toFixed(4) + ',' + (P.S + P.B).toFixed(4) + ',max(abs(vW.x-' + P.cx.toFixed(4) + '),abs(vW.y-' + P.cz.toFixed(4) + '))));'; }).join('') + 'alb=mix(alb,vec3(0.2,0.19,0.17),pm2*0.85);\n' +
       ' vec3 n=normalize(vN);float h0;float fadeA=1.0-smoothstep(1500.0,9000.0,dist*15840.0);float fadeB=1.0-smoothstep(120.0,1400.0,dist*15840.0);\n' +
       ' vec2 gA=dgrad(uFO1,2048.0,8.0,vec2(0.0),h0);float hA=h0;vec2 gB=dgrad(uFO2,256.0,1.1,vec2(0.0),h0);float hB=h0;\n' +
       ' vec2 gd=gA*fadeA+gB*fadeB;n=normalize(n+vec3(-gd.x,0.0,-gd.y));\n' +
@@ -1226,7 +1228,7 @@ var fl = (function () {
       if (keys.w || keys.arrowup) { mx += f[0]; mz += f[1]; } if (keys.s || keys.arrowdown) { mx -= f[0]; mz -= f[1]; }
       if (keys.d || keys.arrowright) { mx += r[0]; mz += r[1]; } if (keys.a || keys.arrowleft) { mx -= r[0]; mz -= r[1]; }
       if (ENC.box && !(ENC.mine && ENC.left > 0.05) || TK.box || INV.box) { mx = 0; mz = 0; } var len = Math.hypot(mx, mz), sprint = !!keys.shift && !ENC.box, ox = WALK.x, oz = WALK.z; WALK.moving = len > 0;
-      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; if (CITY && cityBlocked(nx, nz) && !cityBlocked(WALK.x, WALK.z)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
+      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; if (CITYS.length && cityBlocked(nx, nz) && !cityBlocked(WALK.x, WALK.z)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
       if (WALK.moving) {
         var spd = 13 * FT * (sprint ? 3 : 1) * dt; if (ENC.box) spd = Math.min(spd, ENC.left * FT); var spd0 = spd, dx = mx / len * spd, dz = mz / len * spd;
         if (ok(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; } else if (ok(WALK.x + dx, WALK.z)) WALK.x += dx; else if (ok(WALK.x, WALK.z + dz)) WALK.z += dz;
@@ -1340,11 +1342,11 @@ var fl = (function () {
       if (!DEV) return; if (WALK.on) { walkMsg('Leave walk mode (F) to sculpt terrain.'); return; } if (!SC.panel) scInit(); SC.open = !SC.open; SC.panel.style.display = SC.open ? 'block' : 'none'; if (!SC.open) { SC.ring.style.display = 'none'; SC.painting = false; } else { SC.t = 0; requestAnimationFrame(scFrame); }
     }
     // ================= Lanca city layout (lanca-city.json, from the city generator export) =================
-    var CITY = null;
-    var CITYSEL = (/[?&]city=(lanca|ivroba)/.exec(location.search) || [0, 'ivroba'])[1], CITYNAME = CITYSEL === 'lanca' ? 'Lanca' : 'Ivroba';
-    meta.places.forEach(function (p) { if (p.n === CITYNAME) { p.x = PL.cx; p.y = PL.cz; } });
-    function inLanca(x, z) { return Math.abs(x - PL.cx) < PL.S + PL.B && Math.abs(z - PL.cz) < PL.S + PL.B; }
-    function cityBlocked(wx, wz) {
+    var CITYS = [];
+    CITYDEF.forEach(function (P) { meta.places.forEach(function (p) { if (p.n === P.name) { p.x = P.cx; p.y = P.cz; } }); });
+    function inLanca(x, z) { for (var q = 0; q < CITYDEF.length; q++) if (Math.abs(x - CITYDEF[q].cx) < CITYDEF[q].half + 0.04 && Math.abs(z - CITYDEF[q].cz) < CITYDEF[q].half + 0.04) return true; return false; }
+    function cityBlocked(wx, wz) { for (var ci = 0; ci < CITYS.length; ci++) if (cityBlockedOne(CITYS[ci], wx, wz)) return true; return false; }
+    function cityBlockedOne(CITY, wx, wz) {
       if (!CITY) return false; var lx = (wx - CITY.cx) / FT, lz = (wz - CITY.cz) / FT; if (Math.abs(lx) > 9200 || Math.abs(lz) > 9200) return false;
       var L = CITY.cell, c = CITY.grid[Math.floor(lx / L) * 4096 + Math.floor(lz / L)]; if (!c) return false;
       for (var i = 0; i < c.length; i++) {
@@ -1372,7 +1374,7 @@ var fl = (function () {
       }
       if (idx.length === 3) out.push(idx[0], idx[1], idx[2]); return out;
     }
-    function* cityBuild(D) {
+    function* cityBuild(D, PL) {
       var FTM = 3.28084, P = [], N = [], Cc = [], cxw = PL.cx, czw = PL.cz, t0 = performance.now(), grid = {}, CELL = 80;
       function g(xf, zf) { return groundAt(cxw + xf * FT, czw + zf * FT) / FT; }
       function hs(i) { var x = Math.sin(i * 12.9898 + 4.1) * 43758.5453; return x - Math.floor(x); }
@@ -1438,15 +1440,19 @@ var fl = (function () {
         if (performance.now() - t0 > 8) { yield; t0 = performance.now(); }
       }
       function buf(a) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW); return b; }
-      CITY = { cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 };
+      CITYS.push({ cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 });
     }
     (function loadCity() {
       if (typeof fetch !== 'function') return;
-      ED.ready.then(function () { return fetch(CITYSEL + '-city.json'); }).then(function (r) { return r.json(); }).then(function (D) {
-        var it = cityBuild(D); (function step() { var r; try { r = it.next(); } catch (e) { return; } if (!r.done) setTimeout(step, 0); })();
-      }).catch(function () { });
+      var chain = ED.ready;
+      CITYDEF.forEach(function (P) {
+        chain = chain.then(function () { return fetch(P.file + '-city.json'); }).then(function (r) { return r.json(); }).then(function (D) {
+          return new Promise(function (done) { var it = cityBuild(D, P); (function step() { var r; try { r = it.next(); } catch (e) { done(); return; } if (!r.done) setTimeout(step, 0); else done(); })(); });
+        }).catch(function () { });
+      });
     })();
-    function drawCity(vpRot, far) {
+    function drawCity(vpRot, far) { for (var ci = 0; ci < CITYS.length; ci++) drawCityOne(CITYS[ci], vpRot, far); }
+    function drawCityOne(CITY, vpRot, far) {
       if (!CITY || !WP) return; if (Math.hypot(CITY.cx - cam.x, CITY.cz - cam.z) / FT > 22000) return;
       gl.useProgram(WP); gl.disable(gl.CULL_FACE); setAtmoUniforms(WP, far);
       gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, CITY.cx - cam.x, -cam.y, CITY.cz - cam.z); gl.uniform2f(WP.u.uRot, 1, 0); gl.uniform1f(WP.u.uScale, FT);
