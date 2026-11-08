@@ -1300,6 +1300,7 @@ var fl = (function () {
     }
     function hbClosePick() { if (HB.pick) { HB.pick.remove(); HB.pick = null; } }
     function hudTick() {
+      var hudEl = document.getElementById('hud'); if (hudEl) hudEl.style.display = WALK.on ? 'none' : '';
       var show = WALK.on && !TK.box && !INV.box; heroRefresh();
       if (!show || !HERO || !window.DNDINV || !window.DNDUI) { if (HB.bar) HB.bar.style.display = 'none'; hbClosePick(); return; }
       if (HB.key !== hbKey()) { DNDINV.ensure(HERO); HB.key = hbKey(); HB.slots = hbLoad(); HB.sig = ''; }
@@ -1361,9 +1362,10 @@ var fl = (function () {
     window.__ENC = ENC; window.__WALK = WALK; var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
-      if (WALK.on) { WALK.on = false; walkMsg('Fly mode.'); return; }
+      if (WALK.on) { WALK.on = false; var hudF = document.getElementById('hud'); if (hudF) hudF.style.display = ''; walkMsg('Fly mode.'); return; }
       var x = Math.max(1, Math.min(W - 2, cam.x)), z = Math.max(1, Math.min(H - 2, cam.z));
       if (!landSafe(x, z)) { walkMsg('Walk mode needs land: fly over land (or click the small map) and press F again.'); return; }
+      var hudE = document.getElementById('hud'); if (hudE) hudE.style.display = 'none';
       WALK.on = true; WALK.x = x; WALK.z = z; WALK.y = groundAt(x, z); WALK.vy = 0; WALK.grounded = true; WALK.body = cam.yaw + Math.PI; cam.pitch = Math.max(-0.5, Math.min(0.1, cam.pitch));
       walkMsg((HERO ? HERO.name + ', ' + HERO.cls + '. ' : '') + 'Walk mode: WASD move, Shift sprint, Space jump, V first/third person, wheel zoom, E starts a battle, I opens your sheet and inventory, F to fly again.');
     }
