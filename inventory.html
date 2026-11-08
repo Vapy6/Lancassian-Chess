@@ -134,7 +134,7 @@ select{background:#0f0c09;color:var(--ink);border:1px solid var(--edge);border-r
     if (t.id === 'close') return close(); if (d.t) { tab = d.t; msg = ''; return render(); } if (d.c) { cat = d.c; return render(); }
     if (d.bag) { var now = Date.now(); if (lastBag.n === d.bag && now - lastBag.t < 450) { lastBag = { n: null, t: 0 }; sel = { name: d.bag }; return quick(d.bag); } lastBag = { n: d.bag, t: now }; sel = { name: d.bag }; msg = ''; return render(); } if (d.slot) { sel = { name: d.n, slot: d.slot }; msg = ''; return render(); }
     if (d.u) { sel = null; return done(I.unequip(S, d.u)); } if (d.e) return done(I.equip(S, d.e, d.s)); if (d.d) return done(I.drop(S, d.d, 1)); if (d.p) return done(I.usePotion(S, d.p));
-    if (t.id === 'sr') return done(I.shortRest(S, +document.getElementById('hd').value)); if (t.id === 'lr') return done(I.longRest(S));
+    if (t.id === 'sr') { try { window.parent.postMessage({ dndRest: 'short' }, '*'); } catch (e) { } return done(I.shortRest(S, +document.getElementById('hd').value)); } if (t.id === 'lr') { try { window.parent.postMessage({ dndRest: 'long' }, '*'); } catch (e) { } return done(I.longRest(S)); }
     if (d.sp) {
       var sc = S.spellcasting, cur = sc.preparedSpells = sc.preparedSpells || [], dom = sc.domainSpells || [], max = Math.max(1, S.mods[sc.ability] + S.level), i = cur.indexOf(d.sp);
       if (i >= 0) cur.splice(i, 1); else if (cur.filter(function (x) { return dom.indexOf(x) < 0; }).length >= max) return done({ ok: false, msg: 'You can prepare ' + max + ' spells. Click a prepared one to swap it out.' }); else cur.push(d.sp);

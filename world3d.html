@@ -1146,6 +1146,7 @@ var fl = (function () {
     window.addEventListener('message', function (e) { if (e.data && e.data.dndShopClose) closeShop(); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndInvClose && INV.box && !INV.shopTown) toggleInv(); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndHero) heroRefresh(); });
+    window.addEventListener('message', function (e) { if (e.data && e.data.dndRest) clkAdvance(e.data.dndRest === 'long' ? 8 : 1); });
     window.addEventListener('message', function (e) { if (e.data && e.data.dndHotKey && ENC.box) hbUse(e.data.dndHotKey === '0' ? 9 : +e.data.dndHotKey - 1); });
     function hseed(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
     var NM1 = ['Ari', 'Bram', 'Cora', 'Dunstan', 'Edda', 'Fenn', 'Garrick', 'Hilde', 'Ivo', 'Jessa', 'Kell', 'Lorna', 'Marek', 'Nessa', 'Orin', 'Petra', 'Quill', 'Rhosyn', 'Sten', 'Tilda', 'Ulric', 'Vesna', 'Wren', 'Yara'];
