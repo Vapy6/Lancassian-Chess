@@ -29,6 +29,7 @@ canvas:active{cursor:grabbing}
 <label>Mountain height ×<span id="exv">25</span><input id="ex" type="range" min="1" max="120" value="25"></label>
 <label>Quality <select id="qs"><option>High</option><option>Medium</option><option>Low</option></select></label>
 <label><input id="lbt" type="checkbox" checked> City names</label>
+<label><input id="fx" type="checkbox" checked> Cinematic effects (bloom, light rays, smoothing)</label>
 <label><input id="bio" type="checkbox" checked> Biome colours (instead of height colours)</label>
 <div class="k" style="margin-top:6px"><a href="map.html">← 2D map</a> · <a href="index.html">Chess</a></div></div>
 <div id="info"><div id="place" style="font-weight:600">—</div><div class="k" id="alt"></div><div class="k" id="pos"></div><div class="k" id="fps"></div></div>
@@ -1733,6 +1734,7 @@ var fl = (function () {
         var texW = 2 * SHD.S / SHD.size, D = SHD.S * 4 + 0.01; SHD.bias = 1.6 * texW / (2 * D);
       }
       // ---- main pass ----
+      var usePost = POST.on && QS.q !== 'Low' && postEnsure(cv.width, cv.height); if (usePost) gl.bindFramebuffer(gl.FRAMEBUFFER, POST.sc.f);
       gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       drawSky(asp, far);
       bindWorldTex(); bindTex(6, SHD.tex);
@@ -1750,6 +1752,7 @@ var fl = (function () {
       drawClipLevels(PC, NLEV - 1, true);
       if (VEG) VEG.draw(vpRot, far, t);
       drawIslands(vpRot, far); drawCity(vpRot, far); drawPlayer(vpRot, far);
+      if (usePost) postRun(vpRot, cv.width, cv.height, t);
       // ---- HUD ----
       if ((frame++ & 1) === 0) {
         labels(vpRot, w, hh, alt); foeUI(vpRot, w, hh); bldUI(vpRot, w, hh);
@@ -1761,6 +1764,77 @@ var fl = (function () {
       fpsAcc += rawDt; fpsN++; if (t - fpsT > 500) { fpsEl.textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; fpsT = t; }
       requestAnimationFrame(loop);
     }
+
+    // ================= cinematic post-processing: render to a texture, then bloom + sun rays + FXAA + grading =================
+    var POST = { on: true, ok: false, w: 0, h: 0, fail: false };
+    try { POST.on = localStorage.getItem('myosia3d.fx') !== '0'; } catch (e) { }
+    var PV = 'attribute vec2 aP;varying vec2 vUv;void main(){vUv=aP*0.5+0.5;gl_Position=vec4(aP,0.0,1.0);}';
+    var PBR = null, PBL = null, PFN = null;
+    function postProgs() {
+      if (PFN) return;
+      PBR = mkProg(PV, G_FHEAD + 'uniform sampler2D uS;uniform vec2 uPx;varying vec2 vUv;\n' +
+        'void main(){vec3 c=texture2D(uS,vUv+vec2(-0.5,-0.5)*uPx).rgb+texture2D(uS,vUv+vec2(0.5,-0.5)*uPx).rgb+texture2D(uS,vUv+vec2(-0.5,0.5)*uPx).rgb+texture2D(uS,vUv+vec2(0.5,0.5)*uPx).rgb;c*=0.25;\n' +
+        ' float l=dot(c,vec3(0.299,0.587,0.114));float k=smoothstep(0.86,1.05,l);gl_FragColor=vec4(c*k,1.0);}', ['aP'], ['uS', 'uPx']);
+      PBL = mkProg(PV, G_FHEAD + 'uniform sampler2D uS;uniform vec2 uD;varying vec2 vUv;\n' +
+        'void main(){vec3 c=texture2D(uS,vUv).rgb*0.2270270;c+=texture2D(uS,vUv+uD*1.3846154).rgb*0.3162162;c+=texture2D(uS,vUv-uD*1.3846154).rgb*0.3162162;c+=texture2D(uS,vUv+uD*3.2307692).rgb*0.0702703;c+=texture2D(uS,vUv-uD*3.2307692).rgb*0.0702703;gl_FragColor=vec4(c,1.0);}', ['aP'], ['uS', 'uD']);
+      PFN = mkProg(PV, G_FHEAD + 'uniform sampler2D uS;uniform sampler2D uB1;uniform sampler2D uB2;uniform vec2 uPx;uniform vec2 uSunS;uniform vec3 uSunC;uniform float uDay,uTw,uTime,uRay,uSunV;varying vec2 vUv;\n' +
+        'float lum(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}\n' +
+        'vec3 fxaa(vec2 uv){vec2 px=uPx;vec3 nw=texture2D(uS,uv+vec2(-1.0,-1.0)*px).rgb,ne=texture2D(uS,uv+vec2(1.0,-1.0)*px).rgb,sw=texture2D(uS,uv+vec2(-1.0,1.0)*px).rgb,se=texture2D(uS,uv+vec2(1.0,1.0)*px).rgb,m=texture2D(uS,uv).rgb;\n' +
+        ' float lnw=lum(nw),lne=lum(ne),lsw=lum(sw),lse=lum(se),lm=lum(m);float lmin=min(lm,min(min(lnw,lne),min(lsw,lse))),lmax=max(lm,max(max(lnw,lne),max(lsw,lse)));\n' +
+        ' vec2 d=vec2(-((lnw+lne)-(lsw+lse)),((lnw+lsw)-(lne+lse)));float dr=max((lnw+lne+lsw+lse)*0.03125,0.0078125);float rc=1.0/(min(abs(d.x),abs(d.y))+dr);d=clamp(d*rc,vec2(-8.0),vec2(8.0))*px;\n' +
+        ' vec3 a=0.5*(texture2D(uS,uv+d*(1.0/3.0-0.5)).rgb+texture2D(uS,uv+d*(2.0/3.0-0.5)).rgb);vec3 b=a*0.5+0.25*(texture2D(uS,uv+d*-0.5).rgb+texture2D(uS,uv+d*0.5).rgb);float lb=lum(b);return (lb<lmin||lb>lmax)?a:b;}\n' +
+        'float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}\n' +
+        'void main(){vec2 uv=vUv;float asp=uPx.y/uPx.x;vec3 c=fxaa(uv);\n' +
+        ' vec2 off=(uv-0.5)*0.0016;c.r=mix(c.r,texture2D(uS,uv+off).r,0.8);c.b=mix(c.b,texture2D(uS,uv-off).b,0.8);\n' +
+        ' vec3 bl=texture2D(uB1,uv).rgb*0.55+texture2D(uB2,uv).rgb*0.95;c+=bl*(0.40+0.35*(1.0-uDay));\n' +
+        ' if(uSunV>0.0){vec2 dl=(uSunS-uv)*(0.96/20.0);vec2 p=uv;float dec=1.0;vec3 ray=vec3(0.0);for(int i=0;i<20;i++){p+=dl;vec3 s=texture2D(uS,p).rgb;float m=smoothstep(0.90,1.02,lum(s));ray+=s*m*dec;dec*=0.935;}ray/=20.0;\n' +
+        '  float fo=smoothstep(1.5,0.0,length((uv-uSunS)*vec2(asp,1.0)));c+=ray*uSunC*uRay*uSunV*fo;}\n' +
+        ' float l=lum(c);c=mix(vec3(l),c,1.0+0.12*uDay-0.20*(1.0-uDay));\n' +
+        ' vec3 sh=mix(vec3(0.88,0.95,1.10),vec3(0.95,0.98,1.05),uDay),hi=mix(vec3(1.00,1.00,1.02),vec3(1.05,1.00,0.93),uDay);hi=mix(hi,vec3(1.12,0.97,0.84),uTw*0.8);\n' +
+        ' c*=mix(sh,hi,smoothstep(0.08,0.75,l));c=mix(c,c*c*(3.0-2.0*c),0.24);\n' +
+        ' vec2 q=(uv-0.5)*vec2(asp,1.0);c*=1.0-0.46*dot(q,q)*1.15;\n' +
+        ' c+=(hash(uv/uPx+uTime)-0.5)/180.0;gl_FragColor=vec4(clamp(c,0.0,1.0),1.0);}', ['aP'], ['uS', 'uB1', 'uB2', 'uPx', 'uSunS', 'uSunC', 'uDay', 'uTw', 'uTime', 'uRay', 'uSunV']);
+    }
+    function mkRT(w, h, depth) {
+      var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      var f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); var rb = null;
+      if (depth) { rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, w, h); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rb); }
+      var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE; gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return { t: t, f: f, rb: rb, w: w, h: h, ok: ok };
+    }
+    function freeRT(r) { if (!r) return; gl.deleteTexture(r.t); gl.deleteFramebuffer(r.f); if (r.rb) gl.deleteRenderbuffer(r.rb); }
+    function postEnsure(w, h) {
+      if (POST.fail) return false; if (POST.ok && POST.w === w && POST.h === h) return true;
+      try { postProgs(); } catch (e) { POST.fail = true; POST.err = String(e.message || e); try { console.warn('post-processing off: ' + POST.err); } catch (x) { } return false; }
+      ['sc', 'a1', 'b1', 'a2', 'b2', 'br'].forEach(function (k) { freeRT(POST[k]); });
+      POST.sc = mkRT(w, h, true); var w2 = Math.max(2, w >> 1), h2 = Math.max(2, h >> 1), w4 = Math.max(2, w >> 2), h4 = Math.max(2, h >> 2), w8 = Math.max(2, w >> 3), h8 = Math.max(2, h >> 3);
+      POST.br = mkRT(w2, h2, false); POST.a1 = mkRT(w4, h4, false); POST.b1 = mkRT(w4, h4, false); POST.a2 = mkRT(w8, h8, false); POST.b2 = mkRT(w8, h8, false);
+      if (!(POST.sc.ok && POST.br.ok && POST.a1.ok && POST.b1.ok && POST.a2.ok && POST.b2.ok)) { POST.fail = true; POST.ok = false; gl.bindFramebuffer(gl.FRAMEBUFFER, null); return false; }
+      POST.w = w; POST.h = h; POST.ok = true; return true;
+    }
+    function postPass(prog, rt, src) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, rt ? rt.f : null); gl.viewport(0, 0, rt ? rt.w : cv.width, rt ? rt.h : cv.height); gl.useProgram(prog);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src); gl.uniform1i(prog.u.uS, 0);
+    }
+    function postRun(vp, w, h, t) {
+      gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.bindBuffer(gl.ARRAY_BUFFER, bQuad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      var P = POST;
+      postPass(PBR, P.br, P.sc.t); gl.uniform2f(PBR.u.uPx, 1 / P.w, 1 / P.h); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      postPass(PBL, P.a1, P.br.t); gl.uniform2f(PBL.u.uD, 1 / P.a1.w, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      postPass(PBL, P.b1, P.a1.t); gl.uniform2f(PBL.u.uD, 0, 1 / P.b1.h); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      postPass(PBL, P.a2, P.b1.t); gl.uniform2f(PBL.u.uD, 1 / P.a2.w, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      postPass(PBL, P.b2, P.a2.t); gl.uniform2f(PBL.u.uD, 0, 1 / P.b2.h); gl.drawArrays(gl.TRIANGLES, 0, 3);
+      postPass(PFN, null, P.sc.t); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, P.b1.t); gl.uniform1i(PFN.u.uB1, 1); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, P.b2.t); gl.uniform1i(PFN.u.uB2, 2);
+      var sd = ATM.sun, cxs = vp[0] * sd[0] + vp[4] * sd[1] + vp[8] * sd[2], cys = vp[1] * sd[0] + vp[5] * sd[1] + vp[9] * sd[2], cws = vp[3] * sd[0] + vp[7] * sd[1] + vp[11] * sd[2];
+      var vis = cws > 0.0001 ? 1 : 0, sx = vis ? cxs / cws * 0.5 + 0.5 : 0.5, sy = vis ? cys / cws * 0.5 + 0.5 : 0.5, e = sd[1], tw = Math.exp(-Math.pow(e / 0.17, 2));
+      gl.uniform2f(PFN.u.uPx, 1 / P.w, 1 / P.h); gl.uniform2f(PFN.u.uSunS, sx, sy); gl.uniform1f(PFN.u.uSunV, vis * (ATM.dayF > 0.02 ? Math.min(1, (e + 0.05) * 6) : 0));
+      var sc2 = ATM.lightCol, mx = Math.max(sc2[0], sc2[1], sc2[2], 0.001); gl.uniform3f(PFN.u.uSunC, sc2[0] / mx, sc2[1] / mx, sc2[2] / mx);
+      gl.uniform1f(PFN.u.uDay, ATM.dayF); gl.uniform1f(PFN.u.uTw, tw); gl.uniform1f(PFN.u.uTime, (t % 7) * 1.37); gl.uniform1f(PFN.u.uRay, 0.55 + 0.35 * tw);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); gl.disableVertexAttribArray(0); gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.activeTexture(gl.TEXTURE0);
+    }
+    window.__POST = POST;
+    var fxEl = document.getElementById('fx'); if (fxEl) { fxEl.checked = POST.on; fxEl.addEventListener('change', function () { POST.on = fxEl.checked; try { localStorage.setItem('myosia3d.fx', POST.on ? '1' : '0'); } catch (e) { } }); }
     msg.style.display = 'none'; requestAnimationFrame(loop);
     window.__cam = cam;
   }
