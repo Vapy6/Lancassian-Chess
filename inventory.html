@@ -156,4 +156,9 @@ select{background:#0f0c09;color:var(--ink);border:1px solid var(--edge);border-r
   window.addEventListener('message', function (e) { if (e.data && e.data.dndRefresh) { load(); render(); } });
   load(); render();
 })();
+  // drag items and spells onto the hotbar (parent page)
+  (function () { var ap = document.getElementById('app'); if (!ap) return;
+    function mark() { ap.querySelectorAll('[data-n],[data-spell]').forEach(function (el) { if (!el.draggable) el.draggable = true; }); }
+    new MutationObserver(mark).observe(ap, { childList: true, subtree: true }); mark();
+    ap.addEventListener('dragstart', function (e) { var t = e.target.closest && e.target.closest('[data-n],[data-spell]'); if (!t) return; var d = t.dataset.spell ? { t: 'spell', n: t.dataset.spell } : { t: 'item', n: t.dataset.n }; d.mh = 1; e.dataTransfer.setData('text/plain', JSON.stringify(d)); e.dataTransfer.effectAllowed = 'copy'; var tp = document.getElementById('tip'); if (tp) tp.style.display = 'none'; }); })();
 </script></body></html>
