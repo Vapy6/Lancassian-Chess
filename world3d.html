@@ -1381,7 +1381,15 @@ var fl = (function () {
       heroRefresh(); var pos = null; try { pos = JSON.parse(localStorage.getItem('dnd.pos') || 'null'); } catch (e) { }
       var o = document.createElement('div'); o.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,rgba(30,22,14,.72),rgba(6,5,4,.93));font-family:Georgia,serif;color:#e8dfcb;text-align:center';
       function btn(label, sub, f, main) { var b = document.createElement('button'); b.style.cssText = 'display:block;width:300px;margin:10px auto;padding:12px 16px;cursor:pointer;font:' + (main ? '600 18px' : '16px') + ' Georgia,serif;letter-spacing:.08em;color:' + (main ? '#1a120a' : '#e8dfcb') + ';background:' + (main ? 'linear-gradient(180deg,#e2c27a,#b48d43)' : 'rgba(26,20,14,.85)') + ';border:1px solid #8a6a3f;border-radius:4px'; b.innerHTML = label + (sub ? '<div style="font-size:12px;font-weight:400;letter-spacing:0;margin-top:3px;opacity:.75">' + sub + '</div>' : ''); b.onclick = f; return b; }
-      function close() { o.remove(); }
+      var mus = null, musOn = true, vol = 0.55; try { musOn = localStorage.getItem('myosia3d.mute') !== '1'; } catch (e) { }
+      try { mus = new Audio('Myosia_Title_Screen.mp3'); mus.loop = true; mus.volume = vol; } catch (e) { }
+      function musPlay() { if (mus && musOn && mus.paused) { var pr = mus.play(); if (pr && pr.catch) pr.catch(function () { }); } }
+      function musFade() { if (!mus) return; var m = mus, k = setInterval(function () { m.volume = Math.max(0, m.volume - 0.04); if (m.volume <= 0.001) { clearInterval(k); m.pause(); } }, 90); mus = null; }
+      function close() { musFade(); o.remove(); }
+      musPlay(); o.addEventListener('pointerdown', musPlay); window.addEventListener('keydown', musPlay, { once: true });
+      var mb = document.createElement('button'); mb.style.cssText = 'position:absolute;right:16px;top:14px;background:rgba(26,20,14,.85);color:#e8dfcb;border:1px solid #8a6a3f;border-radius:4px;padding:6px 12px;cursor:pointer;font:15px Georgia,serif';
+      function mbl() { mb.textContent = musOn ? '\u266A Music on' : '\u266A Music off'; } mbl();
+      mb.onclick = function (e) { e.stopPropagation(); musOn = !musOn; try { localStorage.setItem('myosia3d.mute', musOn ? '0' : '1'); } catch (x) { } if (musOn) musPlay(); else if (mus) mus.pause(); mbl(); }; o.appendChild(mb);
       var box = document.createElement('div'); box.innerHTML = '<div style="font-size:54px;letter-spacing:.35em;color:#dcb96c;text-shadow:0 2px 18px #000">MYOSIA</div><div style="height:30px"></div>'; o.appendChild(box);
       var can = !!(HERO && pos && isFinite(pos.x));
       if (can) box.appendChild(btn('Continue', DNDUI_esc(HERO.name) + ', level ' + (HERO.level || 1) + ' ' + DNDUI_esc(HERO.cls || '') + ' · ' + calStr(CLK.day), function () { close(); cam.x = pos.x; cam.z = pos.z; cam.yaw = pos.yaw || 0; cam.y = Math.max(cam.y, groundAt(pos.x, pos.z) + 40); toggleWalk(); }, true));
