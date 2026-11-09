@@ -1654,27 +1654,44 @@ var fl = (function () {
     function npcCity() {
       var best = null, bd = 9300; CITYS.forEach(function (C) { var d = Math.max(Math.abs(WALK.x - C.cx), Math.abs(WALK.z - C.cz)) / FT; if (C.D && d < bd) { bd = d; best = C; } }); return best;
     }
-    function npcSpawn(C) {
-      var D = C.D, F2 = 3.28084 / 10, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, cands = [], q, m, f;
-      for (q = 0; q < D.r.length; q++) { f = D.r[q][1]; if (f.length < 4) continue; for (m = 0; m < f.length; m += 2) { var x = f[m] * F2, z = -f[m + 1] * F2, d = Math.hypot(x - lx, z - lz); if (d > 60 && d < 320) cands.push([q, m / 2]); } }
-      if (!cands.length) return; var pick = cands[(Math.random() * cands.length) | 0], f2 = D.r[pick[0]][1], n = f2.length / 2;
-      NPCS.push({ C: C, q: pick[0], i: pick[1], dir: Math.random() < 0.5 ? 1 : -1, x: f2[pick[1] * 2] * F2, z: -f2[pick[1] * 2 + 1] * F2, wait: Math.random() * 3, sp: 2.6 + Math.random() * 1.4, body: 0, mv: false, id: (Math.random() * 1e9) | 0,
-        tun: NTUN[(Math.random() * NTUN.length) | 0], pan: NPAN[(Math.random() * NPAN.length) | 0], skin: NSKIN[(Math.random() * NSKIN.length) | 0], hair: NHAIR[(Math.random() * NHAIR.length) | 0], ph: Math.random() * 6 });
+    function npcGraph(C) {   // street network: road vertices merged into junction nodes
+      if (C.G) return C.G; var D = C.D, F2 = 3.28084 / 10, X = [], Z = [], A = [], cell = {}, CS = 4, q, m, f, prev;
+      function node(x, z) { var cx = Math.floor(x / CS), cz = Math.floor(z / CS), a, b, k, l, id; for (a = -1; a <= 1; a++) for (b = -1; b <= 1; b++) { l = cell[(cx + a) + ',' + (cz + b)]; if (l) for (k = 0; k < l.length; k++) if (Math.hypot(X[l[k]] - x, Z[l[k]] - z) < 3) return l[k]; }
+        id = X.length; X.push(x); Z.push(z); A.push([]); (cell[cx + ',' + cz] = cell[cx + ',' + cz] || []).push(id); return id; }
+      for (q = 0; q < D.r.length; q++) { f = D.r[q][1]; prev = -1; for (m = 0; m < f.length; m += 2) { var id = node(f[m] * F2, -f[m + 1] * F2); if (prev >= 0 && prev !== id) { if (A[prev].indexOf(id) < 0) A[prev].push(id); if (A[id].indexOf(prev) < 0) A[id].push(prev); } prev = id; } }
+      return (C.G = { X: X, Z: Z, A: A });
     }
-    function npcWorld(n) { return [n.C.cx + n.x * FT, n.C.cz + n.z * FT]; }
+    function npcPick(n, from) {   // choose the next junction, avoiding U-turns when possible
+      var G = n.C.G, adj = G.A[n.b], opts = adj.filter(function (k) { return k !== from; });
+      if (!opts.length) { n.wait = 2 + Math.random() * 4; return from; } return opts[(Math.random() * opts.length) | 0];
+    }
+    function npcSpawn(C) {
+      var G = npcGraph(C), lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, cands = [], k;
+      for (k = 0; k < G.X.length; k++) { if (!G.A[k].length) continue; var d = Math.hypot(G.X[k] - lx, G.Z[k] - lz); if (d > 70 && d < 320) cands.push(k); }
+      if (!cands.length) return; var a = cands[(Math.random() * cands.length) | 0], n = { C: C, a: a, b: a, x: G.X[a], z: G.Z[a], px: G.X[a], pz: G.Z[a], ox: 0, oz: 0, wait: Math.random() * 2, sp: 2.4 + Math.random() * 1.2, body: Math.random() * 6, mv: false, blk: 0, id: (Math.random() * 1e9) | 0,
+        tun: NTUN[(Math.random() * NTUN.length) | 0], pan: NPAN[(Math.random() * NPAN.length) | 0], skin: NSKIN[(Math.random() * NSKIN.length) | 0], hair: NHAIR[(Math.random() * NHAIR.length) | 0], ph: Math.random() * 6 };
+      n.b = G.A[a][(Math.random() * G.A[a].length) | 0]; n.hd = [0, 0]; NPCS.push(n);
+    }
+    function npcWorld(n) { return [n.C.cx + n.px * FT, n.C.cz + n.pz * FT]; }
     function drawNpcs(vpRot, far) {
-      var now = performance.now(), dtU = (now - NPCT.last) / 1000, dt = Math.min(0.1, dtU); NPCT.last = now; var C = npcCity(), F2 = 3.28084 / 10;
+      var now = performance.now(), dtU = (now - NPCT.last) / 1000, dt = Math.min(0.1, dtU); NPCT.last = now; var C = npcCity();
       if (!C || ENC.box) { NPCS.length = 0; return; }
       var night = TOD < 5 || TOD > 21.5, target = night ? 3 : 14, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT;
       NPCS = NPCS.filter(function (n) { return n.C === C && Math.hypot(n.x - lx, n.z - lz) < 420; });
       if (NPCS.length > target) NPCS.length = target;
       NPCT.spawn += Math.min(dtU, 3); if (NPCS.length < target && NPCT.spawn > 0.7) { NPCT.spawn = 0; npcSpawn(C); }
+      var G = npcGraph(C);
       NPCS.forEach(function (n) {
-        var f = C.D.r[n.q][1], cnt = f.length / 2; n.mv = false;
-        if (n.wait > 0) { n.wait -= dt; }
-        else { var ni = n.i + n.dir; if (ni < 0 || ni >= cnt) { n.dir = -n.dir; n.wait = 1 + Math.random() * 4; ni = n.i; }
-          var tx = f[ni * 2] * F2, tz = -f[ni * 2 + 1] * F2, dx = tx - n.x, dz = tz - n.z, dl = Math.hypot(dx, dz), st = n.sp * dt;
-          if (dl <= st) { n.x = tx; n.z = tz; n.i = ni; if (Math.random() < 0.08) n.wait = 2 + Math.random() * 5; } else { n.x += dx / dl * st; n.z += dz / dl * st; n.mv = true; var tb = Math.atan2(dx, dz), db = Math.atan2(Math.sin(tb - n.body), Math.cos(tb - n.body)); n.body += db * Math.min(1, dt * 8); } }
+        n.mv = false; if (n.wait > 0) { n.wait -= dt; } else if (n.a !== n.b) {
+          var tx = G.X[n.b], tz = G.Z[n.b], dx = tx - n.x, dz = tz - n.z, dl = Math.hypot(dx, dz) || 1e-6, st = n.sp * dt, hx = dx / dl, hz = dz / dl; n.hd = [hx, hz];
+          // wait for anyone (or the player) standing right in front
+          var blocked = false; if (Math.hypot(lx - n.x - hx * 2.5, lz - n.z - hz * 2.5) < 2.2) blocked = true; else NPCS.forEach(function (o) { if (o !== n && !blocked && Math.hypot(o.x - n.x - hx * 2.5, o.z - n.z - hz * 2.5) < 1.8) blocked = true; });
+          if (blocked && n.blk < 3) { n.blk += dt; } else { n.blk = Math.max(0, n.blk - dt * 0.5);
+            if (dl <= st) { var from = n.a; n.x = tx; n.z = tz; n.a = n.b; n.b = npcPick(n, from); if (n.b === n.a) n.b = from; if (Math.random() < 0.14) n.wait = 2 + Math.random() * 6; }
+            else { n.x += hx * st; n.z += hz * st; n.mv = true; var tb = Math.atan2(hx, hz), db = Math.atan2(Math.sin(tb - n.body), Math.cos(tb - n.body)); n.body += db * Math.min(1, dt * 7); } }
+        } else { n.b = npcPick(n, n.a); if (n.b === n.a) n.wait = 3; }
+        // keep to the right-hand side of the street so people pass each other
+        var hx2 = n.hd ? n.hd[0] : 0, hz2 = n.hd ? n.hd[1] : 0, k2 = Math.min(1, dt * 3); n.ox += (hz2 * 2.0 - n.ox) * k2; n.oz += (-hx2 * 2.0 - n.oz) * k2; n.px = n.x + n.ox; n.pz = n.z + n.oz;
       });
       var sv = [COL.tunic, COL.pants, COL.skin, COL.hair];
       NPCS.forEach(function (n) { var w = npcWorld(n); if (Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT > 320) return; COL.tunic = n.tun; COL.pants = n.pan; COL.skin = n.skin; COL.hair = n.hair; drawFig(w[0], groundAt(w[0], w[1]), w[1], n.body, n.mv ? now / 110 + n.ph : 0, n.mv, false, vpRot, far, 1); });
