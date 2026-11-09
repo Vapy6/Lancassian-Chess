@@ -1590,7 +1590,7 @@ var fl = (function () {
       for (i = 0; i < (D.wo || []).length; i++) { fence(conv(D.wo[i]), WH[1], WT[1], [0.5, 0.49, 0.48], true); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
       for (i = 0; i < D.f.length; i++) { fence(conv(D.f[i]), ST.fence || 3, 0.5, [0.52, 0.51, 0.48], false); if (performance.now() - t0 > 8) { yield; t0 = performance.now(); } }
       // ---- buildings ----
-      var LB = [];
+      var LB = [], HM = [], WK = [];
       for (i = 0; i < D.b.length; i++) {
         var B = D.b[i], bt = D.bt[B[0]], mt = D.mt[B[1]], id = B[2], p = conv(B[4]), n = p.length / 2, ar = 0, gmin = 1e9, gmax = -1e9, cx = 0, cz = 0;
         if (n < 3) continue;
@@ -1613,11 +1613,12 @@ var fl = (function () {
         } else { var T = earClip(p); for (j = 0; j < T.length; j += 3) tri([p[2 * T[j]], top + 0.4, p[2 * T[j] + 1]], [p[2 * T[j + 1]], top + 0.4, p[2 * T[j + 1] + 1]], [p[2 * T[j + 2]], top + 0.4, p[2 * T[j + 2] + 1]], rc, up); }
         var x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9; for (j = 0; j < n; j++) { x0 = Math.min(x0, p[2 * j]); x1 = Math.max(x1, p[2 * j]); z0 = Math.min(z0, p[2 * j + 1]); z1 = Math.max(z1, p[2 * j + 1]); }
         gridAdd({ p: p, bb: [x0, z0, x1, z1] }, x0 - 2, z0 - 2, x1 + 2, z1 + 2);
+        if (bt === 'RESIDENCE') HM.push(cx, cz); else WK.push({ x: cx, z: cz, type: bt, name: D.names && D.names[B[3]] ? (bt === 'RELIGIOUS' ? deityName(D.names[B[3]]) : D.names[B[3]]) : '' });
         if (bt !== 'RESIDENCE' && D.names && D.names[B[3]]) LB.push({ x: cx, z: cz, y: top + (n === 4 ? 12 : 4), name: bt === 'RELIGIOUS' ? deityName(D.names[B[3]]) : D.names[B[3]], type: bt });
         if (performance.now() - t0 > 8) { yield; t0 = performance.now(); }
       }
       function buf(a) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW); return b; }
-      CITYS.push({ D: D, lb: LB, cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 });
+      CITYS.push({ D: D, lb: LB, hm: HM, wk: WK, nm: (PL && PL.name) || '', cx: cxw, cz: czw, cell: CELL, grid: grid, bp: buf(P), bn: buf(N), bc: buf(Cc), nRoad: nRoad, nAll: P.length / 3 });
     }
     function loadCities(fresh) {   // fresh = rebuild now from the current terrain (used by the sculpt panel after you edit)
       if (typeof fetch !== 'function') return;
@@ -1649,59 +1650,172 @@ var fl = (function () {
       drawNpcs(vpRot, far);
     }
 
-    // ================= townsfolk: people walking the streets near you =================
-    var NPCS = [], NPCT = { last: 0, spawn: 0 }, NTUN = [[0.55, 0.16, 0.12], [0.18, 0.32, 0.50], [0.30, 0.45, 0.22], [0.62, 0.50, 0.20], [0.45, 0.30, 0.50], [0.55, 0.55, 0.50], [0.25, 0.25, 0.30], [0.60, 0.30, 0.15]], NPAN = [[0.30, 0.25, 0.20], [0.20, 0.20, 0.25], [0.35, 0.30, 0.18], [0.25, 0.18, 0.12]], NSKIN = [[0.85, 0.66, 0.52], [0.72, 0.52, 0.38], [0.55, 0.38, 0.27], [0.92, 0.76, 0.64], [0.40, 0.27, 0.20]], NHAIR = [[0.25, 0.15, 0.08], [0.10, 0.08, 0.06], [0.55, 0.40, 0.18], [0.65, 0.65, 0.62], [0.45, 0.22, 0.10]];
-    function npcCity() {
-      var best = null, bd = 9300; CITYS.forEach(function (C) { var d = Math.max(Math.abs(WALK.x - C.cx), Math.abs(WALK.z - C.cz)) / FT; if (C.D && d < bd) { bd = d; best = C; } }); return best;
-    }
+    // ================= the living town: residents with homes, jobs, daily routines, memory and things to say =================
+    var NPCS = [], NPCT = { last: 0, spawn: 0, tick: 0, amb: 0 }, NMEM = {}, NACT = {}, NSAY = [];
+    try { NMEM = JSON.parse(localStorage.getItem('dnd.npcmem') || '{}') || {}; } catch (e) { }
+    function nmSave() { try { localStorage.setItem('dnd.npcmem', JSON.stringify(NMEM)); } catch (e) { } }
+    var NTUN = [[0.55, 0.16, 0.12], [0.18, 0.32, 0.50], [0.30, 0.45, 0.22], [0.62, 0.50, 0.20], [0.45, 0.30, 0.50], [0.55, 0.55, 0.50], [0.25, 0.25, 0.30], [0.60, 0.30, 0.15]], NPAN = [[0.30, 0.25, 0.20], [0.20, 0.20, 0.25], [0.35, 0.30, 0.18], [0.25, 0.18, 0.12]], NSKIN = [[0.85, 0.66, 0.52], [0.72, 0.52, 0.38], [0.55, 0.38, 0.27], [0.92, 0.76, 0.64], [0.40, 0.27, 0.20]], NHAIR = [[0.25, 0.15, 0.08], [0.10, 0.08, 0.06], [0.55, 0.40, 0.18], [0.45, 0.22, 0.10], [0.62, 0.62, 0.58]];
+    var JOBS = { SHOP: ['Shopkeeper', 'Clerk', 'Merchant'], ARTISAN: ['Artisan', 'Weaver', 'Smith', 'Carpenter', 'Potter'], INDUSTRIAL: ['Labourer', 'Foreman', 'Millhand'], SERVICE: ['Clerk', 'Courier', 'Scribe'], TAVERN: ['Barkeep', 'Serving hand', 'Cook'], INN: ['Innkeeper', 'Stablehand', 'Chambermaid'], RELIGIOUS: ['Priest', 'Acolyte', 'Sexton'], EDUCATIONAL: ['Tutor', 'Scribe', 'Lecturer'], LAW_ENFORCEMENT: ['Guard', 'Watch sergeant', 'Gaoler'], FACTION: ['Envoy', 'Retainer', 'Clerk'], WAREHOUSE: ['Porter', 'Teamster', 'Tally-clerk'], FARM: ['Farmhand', 'Shepherd'], MARKET: ['Stallholder', 'Fishmonger', 'Greengrocer'] };
+    var JCOL = { LAW_ENFORCEMENT: [[0.30, 0.34, 0.46], [0.18, 0.18, 0.22]], RELIGIOUS: [[0.88, 0.84, 0.72], [0.60, 0.55, 0.45]], ARTISAN: [[0.46, 0.31, 0.18], [0.28, 0.22, 0.16]], INDUSTRIAL: [[0.42, 0.38, 0.30], [0.25, 0.22, 0.18]], WAREHOUSE: [[0.42, 0.38, 0.30], [0.25, 0.22, 0.18]], FARM: [[0.45, 0.45, 0.28], [0.30, 0.26, 0.18]], TAVERN: [[0.62, 0.26, 0.20], [0.25, 0.20, 0.16]], INN: [[0.62, 0.26, 0.20], [0.25, 0.20, 0.16]], FACTION: [[0.42, 0.22, 0.52], [0.20, 0.16, 0.24]], EDUCATIONAL: [[0.20, 0.42, 0.44], [0.22, 0.22, 0.26]] };
+    function sr(seed, salt) { return (hseed(seed + '|' + salt) % 100000) / 100000; }
+    function npcCity() { var best = null, bd = 9300; CITYS.forEach(function (C) { var d = Math.max(Math.abs(WALK.x - C.cx), Math.abs(WALK.z - C.cz)) / FT; if (C.D && C.hm && d < bd) { bd = d; best = C; } }); return best; }
     function npcGraph(C) {   // street network: road vertices merged into junction nodes
       if (C.G) return C.G; var D = C.D, F2 = 3.28084 / 10, X = [], Z = [], A = [], cell = {}, CS = 4, q, m, f, prev;
       function node(x, z) { var cx = Math.floor(x / CS), cz = Math.floor(z / CS), a, b, k, l, id; for (a = -1; a <= 1; a++) for (b = -1; b <= 1; b++) { l = cell[(cx + a) + ',' + (cz + b)]; if (l) for (k = 0; k < l.length; k++) if (Math.hypot(X[l[k]] - x, Z[l[k]] - z) < 3) return l[k]; }
         id = X.length; X.push(x); Z.push(z); A.push([]); (cell[cx + ',' + cz] = cell[cx + ',' + cz] || []).push(id); return id; }
       for (q = 0; q < D.r.length; q++) { f = D.r[q][1]; prev = -1; for (m = 0; m < f.length; m += 2) { var id = node(f[m] * F2, -f[m + 1] * F2); if (prev >= 0 && prev !== id) { if (A[prev].indexOf(id) < 0) A[prev].push(id); if (A[id].indexOf(prev) < 0) A[id].push(prev); } prev = id; } }
-      return (C.G = { X: X, Z: Z, A: A });
+      return (C.G = { X: X, Z: Z, A: A, cell: cell });
     }
-    function npcPick(n, from) {   // choose the next junction, avoiding U-turns when possible
-      var G = n.C.G, adj = G.A[n.b], opts = adj.filter(function (k) { return k !== from; });
-      if (!opts.length) { n.wait = 2 + Math.random() * 4; return from; } return opts[(Math.random() * opts.length) | 0];
+    function npcIndex(C) {
+      if (C.NI) return C.NI; var NI = { h: {}, w: {} }, i, k, CS = 100;
+      for (i = 0; i < C.hm.length / 2; i++) { k = Math.floor(C.hm[i * 2] / CS) + ',' + Math.floor(C.hm[i * 2 + 1] / CS); (NI.h[k] = NI.h[k] || []).push(i); }
+      for (i = 0; i < C.wk.length; i++) { k = Math.floor(C.wk[i].x / CS) + ',' + Math.floor(C.wk[i].z / CS); (NI.w[k] = NI.w[k] || []).push(i); }
+      return (C.NI = NI);
     }
-    function npcSpawn(C) {
-      var G = npcGraph(C), lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, cands = [], k;
-      for (k = 0; k < G.X.length; k++) { if (!G.A[k].length) continue; var d = Math.hypot(G.X[k] - lx, G.Z[k] - lz); if (d > 70 && d < 320) cands.push(k); }
-      if (!cands.length) return; var a = cands[(Math.random() * cands.length) | 0], n = { C: C, a: a, b: a, x: G.X[a], z: G.Z[a], px: G.X[a], pz: G.Z[a], ox: 0, oz: 0, wait: Math.random() * 2, sp: 2.4 + Math.random() * 1.2, body: Math.random() * 6, mv: false, blk: 0, id: (Math.random() * 1e9) | 0,
-        tun: NTUN[(Math.random() * NTUN.length) | 0], pan: NPAN[(Math.random() * NPAN.length) | 0], skin: NSKIN[(Math.random() * NSKIN.length) | 0], hair: NHAIR[(Math.random() * NHAIR.length) | 0], ph: Math.random() * 6 };
-      n.b = G.A[a][(Math.random() * G.A[a].length) | 0]; n.hd = [0, 0]; NPCS.push(n);
+    function npcCand(C, lst, x, z, r) { var NI = npcIndex(C)[lst], out = [], CS = 100, a, b, l, x0 = Math.floor((x - r) / CS), x1 = Math.floor((x + r) / CS), z0 = Math.floor((z - r) / CS), z1 = Math.floor((z + r) / CS); for (a = x0; a <= x1; a++) for (b = z0; b <= z1; b++) { l = NI[a + ',' + b]; if (l) for (var k = 0; k < l.length; k++) out.push(l[k]); } return out; }
+    function doorNode(C, x, z) {
+      var G = npcGraph(C), CS = 4, cx0 = Math.floor(x / CS), cz0 = Math.floor(z / CS), best = -1, bd = 1e9, r, a, b, l, k, d;
+      for (r = 2; r <= 16 && best < 0; r += 7) for (a = -r; a <= r; a++) for (b = -r; b <= r; b++) { l = G.cell[(cx0 + a) + ',' + (cz0 + b)]; if (l) for (k = 0; k < l.length; k++) { d = Math.hypot(G.X[l[k]] - x, G.Z[l[k]] - z); if (d < bd && G.A[l[k]].length) { bd = d; best = l[k]; } } }
+      return best;
+    }
+    function npcPath(G, s, t) {   // A* over street nodes
+      if (s < 0 || t < 0) return null; if (s === t) return [s]; var open = [s], g = {}, par = {}, f = {}, closed = {}, it = 0; g[s] = 0; f[s] = Math.hypot(G.X[s] - G.X[t], G.Z[s] - G.Z[t]);
+      while (open.length && it++ < 7000) {
+        var bi = 0, k; for (k = 1; k < open.length; k++) if (f[open[k]] < f[open[bi]]) bi = k; var c = open.splice(bi, 1)[0]; if (c === t) { var p = [c]; while (par[c] !== undefined) { c = par[c]; p.push(c); } return p.reverse(); } closed[c] = 1;
+        G.A[c].forEach(function (nb) { if (closed[nb]) return; var ng = g[c] + Math.hypot(G.X[c] - G.X[nb], G.Z[c] - G.Z[nb]); if (g[nb] === undefined || ng < g[nb]) { g[nb] = ng; par[nb] = c; f[nb] = ng + Math.hypot(G.X[nb] - G.X[t], G.Z[nb] - G.Z[t]); if (open.indexOf(nb) < 0) open.push(nb); } });
+      }
+      return null;
+    }
+    function nWalk(n, G, anchor) {   // a short random stroll, drifting back toward the anchor if it has strayed
+      var p = [n.cur], prev = -1, cur = n.cur, steps = 5 + Math.floor(Math.random() * 5), i;
+      for (i = 0; i < steps; i++) { var adj = G.A[cur]; if (!adj.length) break; var opts = adj.filter(function (k) { return k !== prev; }); if (!opts.length) opts = adj; var nx;
+        if (anchor >= 0 && Math.hypot(G.X[cur] - G.X[anchor], G.Z[cur] - G.Z[anchor]) > 150 && Math.random() < 0.75) { nx = opts.reduce(function (a, b) { return Math.hypot(G.X[b] - G.X[anchor], G.Z[b] - G.Z[anchor]) < Math.hypot(G.X[a] - G.X[anchor], G.Z[a] - G.Z[anchor]) ? b : a; }); } else nx = opts[(Math.random() * opts.length) | 0];
+        p.push(nx); prev = cur; cur = nx; }
+      return p;
+    }
+    function npcMake(C, kind, idx) {
+      var ck = C.cx.toFixed(0), key = kind + idx + ck, seed = 'npc' + key, n = { key: key, seed: seed, C: C, kind: kind, idx: idx, job: -1, hn: -2, wn: -2, x: 0, z: 0, px: 0, pz: 0, ox: 0, oz: 0, hd: [0, 1], body: Math.random() * 6, mv: false, wait: 0, blk: 0, inside: false, ph: Math.random() * 6, say: 0, lk: 0, fid: 2 + Math.random() * 6, cur: -1, path: null, pi: 0, goal: { key: '' } }, hp, ar, ws, wb, hs;
+      if (kind === 'res') { hp = [C.hm[idx * 2], C.hm[idx * 2 + 1]]; ar = sr(seed, 'age'); n.age = ar < 0.14 ? 'kid' : ar < 0.30 ? 'elder' : 'adult';
+        if ((n.age === 'adult' || (n.age === 'elder' && sr(seed, 'ret') < 0.4)) && sr(seed, 'job') < 0.8) { ws = npcCand(C, 'w', hp[0], hp[1], 650).filter(function (i) { var b = C.wk[i]; return JOBS[b.type] && Math.hypot(b.x - hp[0], b.z - hp[1]) < 650; }); if (ws.length) n.job = ws[Math.floor(sr(seed, 'w') * ws.length)]; } }
+      else { wb = C.wk[idx]; n.age = 'adult'; n.job = idx; hs = npcCand(C, 'h', wb.x, wb.z, 500).filter(function (i) { var d = Math.hypot(C.hm[i * 2] - wb.x, C.hm[i * 2 + 1] - wb.z); return d > 40 && d < 500; }); var hi = hs.length ? hs[Math.floor(sr(seed, 'home') * hs.length)] : -1; hp = hi >= 0 ? [C.hm[hi * 2], C.hm[hi * 2 + 1]] : [wb.x, wb.z]; }
+      n.hp = hp; n.hn = doorNode(C, hp[0], hp[1]); var jb = n.job >= 0 ? C.wk[n.job] : null, jt = jb ? jb.type : null;
+      n.jb = jb; n.wn = jb ? doorNode(C, jb.x, jb.z) : -1; var nm = npcFor({ seed: seed, n: seed, pop: 0 }); n.name = nm.name; n.trait = nm.trait; n.h = nm.h;
+      n.role = jt ? JOBS[jt][Math.floor(sr(seed, 'r') * JOBS[jt].length)] : n.age === 'kid' ? 'child' : n.age === 'elder' ? 'elder' : 'resident';
+      n.where = jb && jb.name ? jb.name : C.nm || 'the city'; n.sc = n.age === 'kid' ? 0.72 : n.age === 'elder' ? 0.95 : 0.98 + sr(seed, 'sc') * 0.08; n.sp = (n.age === 'kid' ? 3.0 : n.age === 'elder' ? 1.9 : 2.5 + sr(seed, 'sp') * 1.0);
+      var jc = jt && JCOL[jt]; n.tun = jc ? jc[0] : NTUN[Math.floor(sr(seed, 't') * NTUN.length)]; n.pan = jc ? jc[1] : NPAN[Math.floor(sr(seed, 'p') * NPAN.length)]; n.skin = NSKIN[Math.floor(sr(seed, 's') * NSKIN.length)]; n.hair = n.age === 'elder' ? NHAIR[4] : NHAIR[Math.floor(sr(seed, 'h') * 4)];
+      if (n.age === 'kid') n.tun = [0.35 + sr(seed, 'k1') * 0.5, 0.35 + sr(seed, 'k2') * 0.4, 0.3 + sr(seed, 'k3') * 0.5];
+      return n;
+    }
+    function nsched(n, hr) {
+      var jt = n.jb ? n.jb.type : null, home = { m: 'enter', node: n.hn, key: 'home' };
+      if (n.age === 'kid') return hr >= 7.5 && hr < 19.5 ? { m: 'wander', node: n.hn, key: 'kid' } : home;
+      if (jt === 'LAW_ENFORCEMENT' && n.wn >= 0) { var dayS = sr(n.seed, 'sh') < 0.5; if (dayS ? (hr >= 6 && hr < 18) : (hr >= 18 || hr < 6)) return { m: hr % 1 < 0.5 ? 'stand' : 'patrol', node: n.wn, key: (hr % 1 < 0.5 ? 'gs' : 'gp') + Math.floor(hr) }; return home; }
+      if ((jt === 'TAVERN' || jt === 'INN') && n.wn >= 0) return (hr >= 11 || hr < 1) ? { m: 'stand', node: n.wn, key: 'work' } : home;
+      if (jt && n.wn >= 0) { var op = 7 + sr(n.seed, 'o') * 1.5, cl = 17.5 + sr(n.seed, 'c') * 1.5;
+        if (hr >= op && hr < cl) { if (hr >= 12 && hr < 12.8) return { m: 'wander', node: n.wn, key: 'lunch' }; return { m: 'stand', node: n.wn, key: 'work' }; } }
+      if (hr >= 17 && hr < 21.5) { var l = sr(n.seed, 'lei'); if (l < 0.3) { if (n.tn === undefined) { var best = -1, bd = 1e9; npcCand(n.C, 'w', n.hp[0], n.hp[1], 600).forEach(function (i) { var b = n.C.wk[i]; if (b.type !== 'TAVERN') return; var d = Math.hypot(b.x - n.hp[0], b.z - n.hp[1]); if (d < bd) { bd = d; best = i; } }); n.tn = best >= 0 ? doorNode(n.C, n.C.wk[best].x, n.C.wk[best].z) : -1; } if (n.tn >= 0) return { m: 'enter', node: n.tn, key: 'tavern' }; }
+        if (l < 0.62) return { m: 'wander', node: n.hn, key: 'stroll' }; return home; }
+      if (hr >= 7 && hr < 17 && !jt) return { m: 'wander', node: n.hn, key: 'errands' };
+      return home;
+    }
+    function nGoal(n, g) {
+      var G = npcGraph(n.C); n.goal = g; n.path = null; n.pi = 1; n.wait = 0;
+      if ((g.m === 'enter' || g.m === 'stand') && g.node >= 0) { n.path = npcPath(G, n.cur, g.node); if (!n.path) { n.goal = { m: 'wander', node: g.node, key: g.key }; } }
+    }
+    var NCHAT = ['Hmm, busy today.', 'Mind the cobbles, they are slick.', 'Rain by evening, mark my words.', 'Did you hear the bells earlier?', 'Prices are up again.', 'Fine day for it.'];
+    var NJOBSAY = { SHOP: ['Fresh stock today!', 'Fair prices, fair weights!'], MARKET: ['Come and see, come and see!', 'The best of the morning catch!'], TAVERN: ['Warm food and cold ale!', 'A seat by the fire, friend?'], INN: ['Clean beds, hot water!'], ARTISAN: ['Quality work, made by hand!'], LAW_ENFORCEMENT: ['Keep the peace.', 'Move along, move along.'], RELIGIOUS: ['Peace be with you.'], INDUSTRIAL: ['Heave! Together now!'] };
+    function nSay(n, text, secs) { if (!n || n.inside) return; NSAY = NSAY.filter(function (s) { return s.n !== n; }); NSAY.push({ n: n, t: text, until: performance.now() + (secs || 4) * 1000 }); if (NSAY.length > 4) NSAY.shift(); n.said = performance.now(); }
+    function nGreet(n) {
+      var m = NMEM[n.key], nm = HERO ? HERO.name : 'traveller', hr = TOD, jt = n.jb ? n.jb.type : '';
+      if (m && m.att < 0) return ['Hmph. You.', 'Keep your distance.'][n.h % 2];
+      if (m && m.met) return ['Ah, ' + nm + '! Good to see you again.', 'Back again, ' + nm + '?', 'Well met again.'][n.h % 3];
+      if (n.age === 'kid') return ['Hi mister!', 'Are you an adventurer?', 'Wow, a sword!'][n.h % 3];
+      if (jt === 'LAW_ENFORCEMENT') return hr >= 20 || hr < 6 ? 'Late to be out. Keep to the lit streets.' : 'Keep the peace, friend.';
+      if (jt === 'RELIGIOUS') return 'May ' + DEITIES[n.h % DEITIES.length] + ' watch over you.';
+      return hr < 5.5 || hr >= 21 ? 'Late to be out...' : hr < 12 ? ['Morning!', 'Good morning, traveller.'][n.h % 2] : hr < 17.5 ? ['Afternoon.', 'Fine day, is it not?'][n.h % 2] : ['Evening to you.', 'Good evening.'][n.h % 2];
+    }
+    function nIdle(n, dt, lx, lz) {
+      n.fid -= dt; var dp = Math.hypot(lx - n.x, lz - n.z);
+      if (dp < 7 && !n.inside) { n.lk = Math.atan2(lx - n.x, lz - n.z); if (!n.greeted || performance.now() - n.greeted > 90000) { n.greeted = performance.now(); if (!n.said || performance.now() - n.said > 8000) nSay(n, nGreet(n), 4.5); } }
+      else if (n.fid <= 0) { n.fid = 3 + Math.random() * 7; var o = null, bd = 6; NPCS.forEach(function (q) { if (q !== n && !q.inside && !q.mv) { var d = Math.hypot(q.x - n.x, q.z - n.z); if (d < bd) { bd = d; o = q; } } }); n.lk = o ? Math.atan2(o.x - n.x, o.z - n.z) : n.body + (Math.random() - 0.5) * 2.4; }
+      var db = Math.atan2(Math.sin(n.lk - n.body), Math.cos(n.lk - n.body)); n.body += db * Math.min(1, dt * 4);
+    }
+    function nMove(n, dt, G, lx, lz) {
+      var g = n.goal; n.mv = false; if (n.inside) return;
+      if (n.wait > 0) { n.wait -= dt; nIdle(n, dt, lx, lz); return; }
+      if (g.m === 'wander' || g.m === 'patrol') { if (!n.path || n.pi >= n.path.length) { if (n.cur < 0) return; n.path = nWalk(n, G, g.node); n.pi = 1; n.wait = 0.5 + Math.random() * (g.m === 'patrol' ? 1.5 : 6); if (n.path.length < 2) n.wait = 3; return; } }
+      else if (!n.path || n.pi >= n.path.length) {
+        if (g.m === 'enter') { n.inside = true; return; }
+        if (n.stand === undefined || n.sg !== g.node) { n.sg = g.node; var b = n.jb, dx0 = b ? b.x - G.X[g.node] : 0, dz0 = b ? b.z - G.Z[g.node] : 1, dl0 = Math.hypot(dx0, dz0) || 1; n.stand = [G.X[g.node] + dx0 / dl0 * 2.2, G.Z[g.node] + dz0 / dl0 * 2.2]; n.lk = Math.atan2(-dx0, -dz0); }
+        var sx = n.stand[0] - n.x, sz = n.stand[1] - n.z, sd = Math.hypot(sx, sz); if (sd > 0.3) { var stp = Math.min(sd, n.sp * dt); n.x += sx / sd * stp; n.z += sz / sd * stp; n.mv = true; n.body += Math.atan2(Math.sin(Math.atan2(sx, sz) - n.body), Math.cos(Math.atan2(sx, sz) - n.body)) * Math.min(1, dt * 7); } else nIdle(n, dt, lx, lz);
+        n.px = n.x; n.pz = n.z; n.ox = 0; n.oz = 0; return;
+      }
+      var tn = n.path[n.pi], tx = G.X[tn], tz = G.Z[tn], dx = tx - n.x, dz = tz - n.z, dl = Math.hypot(dx, dz) || 1e-6, st = n.sp * dt, hx = dx / dl, hz = dz / dl; n.stand = undefined; n.hd = [hx, hz];
+      var blocked = false; if (Math.hypot(lx - n.x - hx * 2.5, lz - n.z - hz * 2.5) < 2.2) blocked = true; else NPCS.forEach(function (o) { if (o !== n && !o.inside && !blocked && Math.hypot(o.x - n.x - hx * 2.5, o.z - n.z - hz * 2.5) < 1.8) blocked = true; });
+      if (blocked && n.blk < 3) { n.blk += dt; nIdle(n, dt, lx, lz); return; } n.blk = Math.max(0, n.blk - dt * 0.5);
+      if (dl <= st) { n.x = tx; n.z = tz; n.cur = tn; n.pi++; } else { n.x += hx * st; n.z += hz * st; n.mv = true; var tb = Math.atan2(hx, hz); n.body += Math.atan2(Math.sin(tb - n.body), Math.cos(tb - n.body)) * Math.min(1, dt * 7); }
+    }
+    function nSpawn(C, lx, lz) {
+      var ck = C.cx.toFixed(0), G = npcGraph(C), cands = [], i, d;
+      npcCand(C, 'w', lx, lz, 330).forEach(function (i) { var b = C.wk[i]; if (!b.name || !JOBS[b.type] || NACT['keep' + i + ck]) return; d = Math.hypot(b.x - lx, b.z - lz); if (d > 50 && d < 330) cands.push(['keep', i]); });
+      npcCand(C, 'h', lx, lz, 330).forEach(function (i) { if (NACT['res' + i + ck]) return; d = Math.hypot(C.hm[i * 2] - lx, C.hm[i * 2 + 1] - lz); if (d > 70 && d < 330) cands.push(['res', i]); });
+      var kc = cands.filter(function (c) { return c[0] === 'keep'; }), rc = cands.filter(function (c) { return c[0] === 'res'; });
+      for (var t = 0; t < 8 && (kc.length || rc.length); t++) {
+        var lst = (kc.length && (!rc.length || Math.random() < 0.35)) ? kc : rc, pk = lst.splice((Math.random() * lst.length) | 0, 1)[0], n = npcMake(C, pk[0], pk[1]); if (n.hn < 0) continue; var s = nsched(n, TOD); if (s.m === 'enter') continue;
+        var node = pk[0] === 'keep' && s.m === 'stand' ? s.node : n.hn; if (node < 0) continue; n.cur = node; n.x = G.X[node]; n.z = G.Z[node]; n.px = n.x; n.pz = n.z; nGoal(n, s); NPCS.push(n); NACT[n.key] = 1; return;
+      }
     }
     function npcWorld(n) { return [n.C.cx + n.px * FT, n.C.cz + n.pz * FT]; }
     function drawNpcs(vpRot, far) {
       var now = performance.now(), dtU = (now - NPCT.last) / 1000, dt = Math.min(0.1, dtU); NPCT.last = now; var C = npcCity();
-      if (!C || ENC.box) { NPCS.length = 0; return; }
-      var night = TOD < 5 || TOD > 21.5, target = night ? 3 : 14, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT;
-      NPCS = NPCS.filter(function (n) { return n.C === C && Math.hypot(n.x - lx, n.z - lz) < 420; });
-      if (NPCS.length > target) NPCS.length = target;
-      NPCT.spawn += Math.min(dtU, 3); if (NPCS.length < target && NPCT.spawn > 0.7) { NPCT.spawn = 0; npcSpawn(C); }
-      var G = npcGraph(C);
+      if (!C || ENC.box) { NPCS.length = 0; NACT = {}; NSAY = []; return; }
+      var hr = TOD, target = (hr < 5.5 || hr >= 22) ? 5 : hr < 7 ? 9 : hr < 17 ? 18 : hr < 21.5 ? 21 : 9, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, G = npcGraph(C);
+      NPCS = NPCS.filter(function (n) { return n.C === C && Math.hypot(n.x - lx, n.z - lz) < 430; }); NACT = {}; NPCS.forEach(function (n) { NACT[n.key] = 1; });
+      NPCT.spawn += Math.min(dtU, 3); if (NPCS.filter(function (n) { return !n.inside; }).length < target && NPCT.spawn > 0.5) { NPCT.spawn = 0; nSpawn(C, lx, lz); }
+      NPCT.tick += dt; if (NPCT.tick > 1) { NPCT.tick = 0; NPCS.forEach(function (n) { var s = nsched(n, hr); if (s.key !== n.goal.key) { if (n.inside) { n.inside = false; if (n.cur >= 0) { n.x = G.X[n.cur]; n.z = G.Z[n.cur]; n.px = n.x; n.pz = n.z; } } nGoal(n, s); } }); }
+      NPCT.amb += dt; if (NPCT.amb > 5) { NPCT.amb = 0; var vis = NPCS.filter(function (n) { return !n.inside && Math.hypot(n.x - lx, n.z - lz) < 40 && (!n.said || now - n.said > 30000); }); if (vis.length) { var an = vis[(Math.random() * vis.length) | 0], jt = an.jb ? an.jb.type : '', pool = (NJOBSAY[jt] && an.goal.m === 'stand') ? NJOBSAY[jt] : an.age === 'kid' ? ['Catch me if you can!', 'Hee hee!'] : NCHAT; nSay(an, pool[(Math.random() * pool.length) | 0], 4); } }
       NPCS.forEach(function (n) {
-        n.mv = false; if (n.wait > 0) { n.wait -= dt; } else if (n.a !== n.b) {
-          var tx = G.X[n.b], tz = G.Z[n.b], dx = tx - n.x, dz = tz - n.z, dl = Math.hypot(dx, dz) || 1e-6, st = n.sp * dt, hx = dx / dl, hz = dz / dl; n.hd = [hx, hz];
-          // wait for anyone (or the player) standing right in front
-          var blocked = false; if (Math.hypot(lx - n.x - hx * 2.5, lz - n.z - hz * 2.5) < 2.2) blocked = true; else NPCS.forEach(function (o) { if (o !== n && !blocked && Math.hypot(o.x - n.x - hx * 2.5, o.z - n.z - hz * 2.5) < 1.8) blocked = true; });
-          if (blocked && n.blk < 3) { n.blk += dt; } else { n.blk = Math.max(0, n.blk - dt * 0.5);
-            if (dl <= st) { var from = n.a; n.x = tx; n.z = tz; n.a = n.b; n.b = npcPick(n, from); if (n.b === n.a) n.b = from; if (Math.random() < 0.14) n.wait = 2 + Math.random() * 6; }
-            else { n.x += hx * st; n.z += hz * st; n.mv = true; var tb = Math.atan2(hx, hz), db = Math.atan2(Math.sin(tb - n.body), Math.cos(tb - n.body)); n.body += db * Math.min(1, dt * 7); } }
-        } else { n.b = npcPick(n, n.a); if (n.b === n.a) n.wait = 3; }
-        // keep to the right-hand side of the street so people pass each other
-        var hx2 = n.hd ? n.hd[0] : 0, hz2 = n.hd ? n.hd[1] : 0, k2 = Math.min(1, dt * 3); n.ox += (hz2 * 2.0 - n.ox) * k2; n.oz += (-hx2 * 2.0 - n.oz) * k2; n.px = n.x + n.ox; n.pz = n.z + n.oz;
+        nMove(n, dt, G, lx, lz);
+        if (!n.inside && (n.mv || n.goal.m === 'wander' || n.goal.m === 'patrol')) { var hx2 = n.hd[0], hz2 = n.hd[1], k2 = Math.min(1, dt * 3); if (n.mv) { n.ox += (hz2 * 2.0 - n.ox) * k2; n.oz += (-hx2 * 2.0 - n.oz) * k2; } n.px = n.x + n.ox; n.pz = n.z + n.oz; } else if (!n.inside && n.goal.m !== 'stand') { n.px = n.x + n.ox; n.pz = n.z + n.oz; }
       });
       var sv = [COL.tunic, COL.pants, COL.skin, COL.hair];
-      NPCS.forEach(function (n) { var w = npcWorld(n); if (Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT > 320) return; COL.tunic = n.tun; COL.pants = n.pan; COL.skin = n.skin; COL.hair = n.hair; drawFig(w[0], groundAt(w[0], w[1]), w[1], n.body, n.mv ? now / 110 + n.ph : 0, n.mv, false, vpRot, far, 1); });
+      NPCS.forEach(function (n) { if (n.inside) return; var w = npcWorld(n); if (Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT > 320) return; COL.tunic = n.tun; COL.pants = n.pan; COL.skin = n.skin; COL.hair = n.hair; drawFig(w[0], groundAt(w[0], w[1]), w[1], n.body, n.mv ? now / 110 + n.ph : 0, n.mv, false, vpRot, far, n.sc); });
       COL.tunic = sv[0]; COL.pants = sv[1]; COL.skin = sv[2]; COL.hair = sv[3];
     }
-    function npcNearest() { var b = null, bd = 16; NPCS.forEach(function (n) { var w = npcWorld(n), d = Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT; if (d < bd) { bd = d; b = n; } }); return b; }
+    window.__NP = function () { return NPCS; };
+    function npcNearest() { var b = null, bd = 12; NPCS.forEach(function (n) { if (n.inside) return; var w = npcWorld(n), d = Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT; if (d < bd) { bd = d; b = n; } }); return b; }
+    // name tag and speech bubbles
+    var NUI = { els: [], bub: [] };
+    function npcUI(vp, w, hh) {
+      var on = WALK.on && !ENC.box && !TK.box && !INV.box, i, now = performance.now();
+      function proj(n, up, el) { var p = npcWorld(n), rx = p[0] - cam.x, ry = (groundAt(p[0], p[1]) + up * FT * n.sc) - cam.y, rz = p[1] - cam.z, cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz; if (cw <= 0.0001) { el.style.display = 'none'; return false; } el.style.display = 'block'; el.style.left = (cx / cw * 0.5 + 0.5) * w + 'px'; el.style.top = (1 - (cy / cw * 0.5 + 0.5)) * hh + 'px'; return true; }
+      var tag = NUI.tag; if (!tag) { tag = NUI.tag = document.createElement('div'); tag.style.cssText = 'position:fixed;z-index:39;transform:translate(-50%,-100%);pointer-events:none;text-align:center;font:600 12px Georgia,serif;color:#f1e6c8;text-shadow:0 1px 3px #000;padding:2px 8px;border-radius:3px;background:rgba(20,15,10,.62);border:1px solid rgba(138,106,63,.7);white-space:nowrap;display:none'; document.body.appendChild(tag); }
+      var nn = on ? npcNearest() : null; if (nn && nn.age !== undefined && proj(nn, 7.2 * nn.sc / nn.sc, tag)) { var m = NMEM[nn.key], tx = (m && m.met ? nn.name : nn.role.charAt(0).toUpperCase() + nn.role.slice(1)) + ' <span style="font-weight:400;opacity:.7;font-size:11px">' + (m && m.met ? '· ' + nn.role : '') + '</span> <span style="color:#dcb96c;font-size:11px">[T] Talk</span>'; if (tag.dataset.k !== tx) { tag.innerHTML = tx; tag.dataset.k = tx; } } else tag.style.display = 'none';
+      NSAY = NSAY.filter(function (s) { return now < s.until && !s.n.inside && NPCS.indexOf(s.n) >= 0; });
+      for (i = 0; i < 4; i++) { var el = NUI.bub[i], s = on ? NSAY[i] : null; if (!el) { el = NUI.bub[i] = document.createElement('div'); el.style.cssText = 'position:fixed;z-index:37;transform:translate(-50%,-100%);pointer-events:none;max-width:230px;text-align:center;font:italic 13px Georgia,serif;color:#2a1d0e;padding:5px 10px;border-radius:10px;background:rgba(240,228,196,.93);border:1px solid #8a6a3f;box-shadow:0 2px 8px rgba(0,0,0,.5);display:none'; document.body.appendChild(el); }
+        if (!s || !proj(s.n, 8.4, el)) { el.style.display = 'none'; continue; } if (el.textContent !== s.t) el.textContent = s.t; }
+    }
+    function nDir(n, types) {
+      var C = n.C, px = (WALK.x - C.cx) / FT, pz = (WALK.z - C.cz) / FT, best = null, bd = 1400;
+      npcCand(C, 'w', px, pz, 1400).forEach(function (i) { var b = C.wk[i]; if (types.indexOf(b.type) < 0 || !b.name) return; var d = Math.hypot(b.x - px, b.z - pz); if (d > 25 && d < bd) { bd = d; best = b; } });
+      if (!best) return 'Nothing like that close by, I am afraid.'; var ang = Math.atan2(best.x - px, -(best.z - pz)), dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'], dn = dirs[(Math.round(ang / (Math.PI / 4)) + 8) % 8];
+      return '"Try ' + best.name + ' - about ' + (Math.round(bd / 10) * 10) + ' feet to the ' + dn + '. You can see the name floating over the door once you are close."';
+    }
     function npcTalk(n, pre) {
-      var pl = { n: n.C === CITYS[0] ? 'Lanca' : 'the city', seed: 'street' + n.id, pop: 0, role: 'townsperson' }; n.mv = false; n.wait = 6;
-      var h = hseed('street' + n.id), opts = [['Ask what people are talking about', function () { npcTalk(n, '"' + RUMOR[(h + (QS.seq || 0)) % RUMOR.length] + '"'); }], ['Ask for directions', function () { npcTalk(n, '"The market is straight on, and the gate is behind you. Mind the guards."'); }], ['Leave', closeTalk]];
-      talkUI(pl, pre || '"Well met, traveller."', opts);
+      var pl = { n: n.where, seed: n.seed, role: n.role, pop: 0 }, m = NMEM[n.key] = NMEM[n.key] || { met: 0, att: 0 }, hero = HERO ? HERO.name : 'traveller', opts = [], first = !m.met; n.mv = false; n.wait = 8; n.lk = Math.atan2((WALK.x - n.C.cx) / FT - n.x, (WALK.z - n.C.cz) / FT - n.z);
+      var jt = n.jb ? n.jb.type : '', art = /^[AEIOU]/i.test(n.role) ? 'an' : 'a';
+      opts.push(['Who are you?', function () { m.met = Math.max(1, m.met); nmSave(); npcTalk(n, '"' + (n.age === 'kid' ? 'I am ' + n.name + '! I live near here.' : 'I am ' + n.name + ', ' + art + ' ' + n.role + (n.jb && n.jb.name ? ' at ' + n.jb.name : ' here in ' + (n.C.nm || 'the city')) + '. ' + ({ 'weary but kind': 'It is honest work, though it wears on you.', 'sharp-tongued and suspicious': 'And who is asking, exactly?', 'cheerful and chatty': 'I love it, truly - and I know everyone on this street!', 'proud and formal': 'I take great pride in my trade.', 'nervous, glancing at the road': 'Quiet times, they say. I am not so sure.', 'gruff but fair': 'Nothing fancy. Fair work for fair coin.' }[n.trait] || '')) + '"'); }]);
+      if (n.age !== 'kid') opts.push(['How is the day treating you?', function () { npcTalk(n, '"' + (jt === 'LAW_ENFORCEMENT' ? 'Quiet, so far. Quiet is how I like it. Brawls at the taverns after dark, mostly.' : jt === 'TAVERN' || jt === 'INN' ? 'Busy by evening, dull by morning. Travellers bring the best stories.' : jt === 'SHOP' || jt === 'MARKET' ? 'Customers come and go. The coin keeps the lamp lit.' : jt === 'RELIGIOUS' ? 'The faithful come, the weary come. I try to be of use to both.' : jt ? 'Same as any other: work, then a meal, then bed.' : 'No complaints. A town this size always has something going on.') + '"'); }]);
+      opts.push(['Where can I find...', function () { talkUI(pl, 'They think a moment. "What are you after?"', [['A place to sleep', function () { npcTalk(n, nDir(n, ['INN'])); }], ['A drink and a meal', function () { npcTalk(n, nDir(n, ['TAVERN', 'INN'])); }], ['Somewhere to trade', function () { npcTalk(n, nDir(n, ['SHOP', 'MARKET', 'ARTISAN'])); }], ['A temple', function () { npcTalk(n, nDir(n, ['RELIGIOUS'])); }], ['The watch', function () { npcTalk(n, nDir(n, ['LAW_ENFORCEMENT'])); }], ['Never mind', function () { npcTalk(n); }]]); }]);
+      opts.push(['Heard any rumours?', function () { npcTalk(n, '"' + RUMOR[(n.h + (QS.seq || 0) + m.met) % RUMOR.length] + '"'); }]);
+      if (jt && n.jb && n.jb.name && n.stand && Math.hypot(n.x - n.jb.x, n.z - n.jb.z) < 40 && window.DNDINV) opts.push(['Do business at ' + n.jb.name, function () { heroRefresh(); bldTalk({ name: n.jb.name, type: jt }); }]);
+      opts.push(['Persuade them to share gossip (Persuasion DC 13)', function () { var c = check('Persuasion', 13); if (!c.ok) { m.att--; nmSave(); npcTalk(n, c.line + 'They purse their lips. "I do not think so."'); return; } m.att++; nmSave();
+        var C = n.C, ps = npcCand(C, 'w', n.x, n.z, 500).filter(function (i) { var b = C.wk[i]; return b.name && JOBS[b.type] && C.wk[i] !== n.jb; }), who = '';
+        if (ps.length) { var i = ps[(n.h + m.met) % ps.length], b = C.wk[i], kn = npcFor({ seed: 'npc' + 'keep' + i + C.cx.toFixed(0), n: 'x', pop: 0 }).name; who = '"Between us - ' + kn + ' over at ' + b.name + ' has been up to something. Counting coin late, whispering with strangers. Draw your own conclusions."'; } else who = '"Honestly? Nothing worth telling."'; npcTalk(n, c.line + who); }]);
+      opts.push(['Intimidate (Intimidation DC 15)', function () { var c = check('Intimidation', 15); m.att += c.ok ? 0 : -1; nmSave(); npcTalk(n, c.line + (c.ok ? 'They flinch. "All right! The market is busiest at noon, and the watch changes at six. That is all I know."' : 'They glare. "Get away from me."')); }]);
+      opts.push(['Leave', closeTalk]);
+      var greet = pre || (first ? '"' + nGreet(n) + '"' : m.att < 0 ? '"What do you want now?"' : '"Back again, ' + hero + '?"'); if (first && !pre) { m.met = 1; nmSave(); }
+      talkUI(pl, greet, opts);
     }
     function drawFig(px, py, pz, body, phase, moving, sprint, vpRot, far, sc) {
       var m = buildFigure(phase, moving, sprint);
@@ -1783,7 +1897,7 @@ var fl = (function () {
         if (full) { var key = ((X2 / 80) | 0) + ',' + ((Y2 / 16) | 0); if (used[key]) return; used[key] = 1; }
         g.fillStyle = '#ffd34d'; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.arc(X2, Y2, full ? 3.5 : 3, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.lineWidth = 3; g.strokeText(p.n, X2 + 6, Y2 + 4); g.fillText(p.n, X2 + 6, Y2 + 4); });
       (ENC.foes || []).forEach(function (f) { if (!f || f.dead) return; var X3 = Sx / 2 + (f.x - cx) / FT * k, Y3 = Sy / 2 + (f.z - cz) / FT * k; if (X3 < 2 || X3 > Sx - 2 || Y3 < 2 || Y3 > Sy - 2) return; g.fillStyle = '#e04646'; g.strokeStyle = '#000'; g.lineWidth = 1; g.beginPath(); g.arc(X3, Y3, 3.5, 0, 7); g.fill(); g.stroke(); });
-      if (!full && R <= 4000) NPCS.forEach(function (n) { var w = npcWorld(n), X4 = Sx / 2 + (w[0] - cx) / FT * k, Y4 = Sy / 2 + (w[1] - cz) / FT * k; if (X4 < 2 || X4 > Sx - 2 || Y4 < 2 || Y4 > Sy - 2) return; g.fillStyle = '#d8f0ff'; g.strokeStyle = '#000'; g.lineWidth = 1; g.beginPath(); g.arc(X4, Y4, 2.5, 0, 7); g.fill(); g.stroke(); });
+      if (!full && R <= 4000) NPCS.forEach(function (n) { if (n.inside) return; var w = npcWorld(n), X4 = Sx / 2 + (w[0] - cx) / FT * k, Y4 = Sy / 2 + (w[1] - cz) / FT * k; if (X4 < 2 || X4 > Sx - 2 || Y4 < 2 || Y4 > Sy - 2) return; g.fillStyle = '#d8f0ff'; g.strokeStyle = '#000'; g.lineWidth = 1; g.beginPath(); g.arc(X4, Y4, 2.5, 0, 7); g.fill(); g.stroke(); });
       var PX = Sx / 2 + (pl.x - cx) / FT * k, PY = Sy / 2 + (pl.z - cz) / FT * k; if (PX > -10 && PX < Sx + 10 && PY > -10 && PY < Sy + 10) { g.save(); g.translate(PX, PY); g.rotate(-pl.yaw); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -9); g.lineTo(6, 7); g.lineTo(0, 3); g.lineTo(-6, 7); g.closePath(); g.fill(); g.stroke(); g.restore(); }
     }
     function mapSpan(R) { return R >= 5280 ? (R * 2 / 5280).toFixed(R >= 26400 ? 0 : 1) + ' mi across' : Math.round(R * 2) + ' ft across'; }
@@ -1931,7 +2045,7 @@ var fl = (function () {
       if (usePost) postRun(vpRot, cv.width, cv.height, t);
       // ---- HUD ----
       if ((frame++ & 1) === 0) {
-        labels(vpRot, w, hh, alt); foeUI(vpRot, w, hh); bldUI(vpRot, w, hh);
+        labels(vpRot, w, hh, alt); foeUI(vpRot, w, hh); bldUI(vpRot, w, hh); npcUI(vpRot, w, hh);
         mdot.style.left = cam.x / W * 100 + '%'; mdot.style.top = cam.z / H * 100 + '%';
         var nb = nearest(); placeEl.textContent = nb ? nb.n + (nb.s ? ' · ' + nb.s : '') : '—';
         var miAlt = alt * MI; altEl.textContent = 'Altitude ' + (miAlt >= 1 ? miAlt.toFixed(1) + ' mi' : Math.round(miAlt * 5280) + ' ft') + ' above ground';
