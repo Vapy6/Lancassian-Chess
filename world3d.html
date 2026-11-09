@@ -303,10 +303,10 @@ canvas:active{cursor:grabbing}
       'float unpackD(vec4 c){return dot(c,vec4(1.0,1.0/255.0,1.0/65025.0,1.0/16581375.0));}\n' +
       'float shadowAt(vec3 rel,float bias){if(uShP.x<=0.0)return 1.0;vec4 lp=uLVP*vec4(rel,1.0);vec3 sc=lp.xyz*0.5+0.5;' +
       'float edge=smoothstep(0.0,0.12,min(min(sc.x,1.0-sc.x),min(sc.y,1.0-sc.y)));if(edge<=0.0||sc.z>=1.0)return 1.0;' +
-      'float ts=uShP.y,z=sc.z-bias*uShP.z;float s=0.0;' +
-      's+=step(z,unpackD(texture2D(uSh,sc.xy+vec2(-0.7,-0.4)*ts)));s+=step(z,unpackD(texture2D(uSh,sc.xy+vec2(0.4,-0.7)*ts)));' +
-      's+=step(z,unpackD(texture2D(uSh,sc.xy+vec2(0.7,0.4)*ts)));s+=step(z,unpackD(texture2D(uSh,sc.xy+vec2(-0.4,0.7)*ts)));' +
-      'return mix(1.0,s*0.25,edge*uShP.x);}\n';
+      'float ts=uShP.y*2.4,z=sc.z-bias*uShP.z;float s=0.0;float rot=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*6.2832;' +
+      'for(int i=0;i<12;i++){float fi=float(i)+0.5;float r=sqrt(fi/12.0);float a=fi*2.3999632+rot;s+=step(z,unpackD(texture2D(uSh,sc.xy+vec2(cos(a),sin(a))*r*ts)));}' +
+      's=s/12.0;s=s*s*(3.0-2.0*s);' +
+      'return mix(1.0,s,edge*uShP.x);}\n';
     var G_PACK = 'vec4 packD(float d){d=clamp(d,0.0,0.99999);vec4 e=fract(d*vec4(1.0,255.0,65025.0,16581375.0));e-=e.yzww*vec4(1.0/255.0,1.0/255.0,1.0/255.0,0.0);return e;}\n';
     var G_FHEAD = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
     var DEPTH_FS = G_FHEAD + G_PACK + 'void main(){gl_FragColor=packD(gl_FragCoord.z);}';
@@ -391,7 +391,8 @@ canvas:active{cursor:grabbing}
       ' float sdp=texture2D(uSD,(vW+0.5)/uWH).r*63.0;float shoreD=max(0.5-Lw,0.0);float dp=smoothstep(0.1,9.0,sdp+shoreD);\n' +
       ' vec3 body=mix(vec3(0.040,0.150,0.175),vec3(0.003,0.026,0.068),sqrt(dp));body*=uAmbTop*0.55+uSunCol*0.10*max(uSun.y,0.0)+0.01;\n' +
       ' float spec=pow(max(dot(rr,uSun),0.0),500.0);col=mix(body,refl,F)+uSunCol*spec*5.0;\n' +
-      ' float wv=dtex(uFO2,256.0,vec2(uTime*0.4,0.0)).g;float foam=(1.0-smoothstep(0.0,0.004,shoreD))*(0.55+0.45*wv)+smoothstep(0.52,0.6,wv)*(1.0-smoothstep(0.004,0.06,shoreD))*0.4;\n' +
+      ' vec3 lt_=uAmbTop*0.55+uSunCol*0.10*max(uSun.y,0.0)+0.01;body=mix(vec3(0.16,0.36,0.31)*lt_*1.6,body,smoothstep(0.05,2.6,sdp+shoreD));col=mix(body,refl,F*(1.0-0.6*(1.0-smoothstep(0.0,0.03,shoreD))))+uSunCol*spec*5.0;\n' +
+      ' float wv=dtex(uFO2,256.0,vec2(uTime*0.4,0.0)).g;float swp=fract(shoreD*70.0+uTime*0.22+wv*0.6);float swash=smoothstep(0.0,0.06,swp)*(1.0-smoothstep(0.06,0.42,swp))*(1.0-smoothstep(0.012,0.085,shoreD))*(0.5+0.5*wv);float foam=swash*0.8+(1.0-smoothstep(0.0,0.004,shoreD))*(0.55+0.45*wv)+smoothstep(0.52,0.6,wv)*(1.0-smoothstep(0.004,0.06,shoreD))*0.4;\n' +
       ' vec3 fc=vec3(0.80,0.86,0.88)*(uAmbTop*0.7+uSunCol*0.35*max(uSun.y,0.0)+0.02);col=mix(col,fc,clamp(foam,0.0,1.0)*0.85);\n' +
       ' float gz=1.0-smoothstep(16.0,44.0,length(vW-uGal));if(gz>0.0){vec3 rdp=normalize(rd+vec3(n.x,0.0,n.z)*0.10);vec3 gc=galaxy(uFO1+vLocFt,rdp,dist)+refl*F*0.22+uSunCol*spec*2.0;col=mix(col,gc,gz);}\n' +
       '}else{\n' +
