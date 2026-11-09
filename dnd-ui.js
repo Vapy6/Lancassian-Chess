@@ -16,7 +16,7 @@
   function iconKey(n) {
     if (DATA.ARMOR[n]) return n === 'Shield' ? 'shield' : 'armor'; var w = DATA.WEAPONS[n];
     if (w) return /axe|glaive|halberd/i.test(n) ? 'axe' : /hammer|mace|club|maul|flail|morningstar|war pick/i.test(n) ? 'hammer' : /bow|sling|dart|blowgun/i.test(n) ? 'bow' : /spear|javelin|lance|pike|trident|staff/i.test(n) ? 'spear' : 'sword';
-    if (I.MAGIC[n]) return I.MAGIC[n].type; if (/arrow|bolt|dart/i.test(n)) return 'arrows'; if (/pack/i.test(n)) return 'bag'; if (/shield/i.test(n)) return 'shield'; return 'tool';
+    if (I.MAGIC[n]) return I.MAGIC[n].type; if (/arrow|bolt|dart/i.test(n)) return 'arrows'; if (I.category(n) === 'consumables') return /ale|wine|cider|antitoxin|acid|fire|salve|poultice/i.test(n) ? 'potion' : 'bag'; if (/sack|basket|pouch|backpack|saddlebag|waterskin/i.test(n)) return 'bag'; if (/pack/i.test(n)) return 'bag'; if (/shield/i.test(n)) return 'shield'; return 'tool';
   }
   function icon(n) { return '<svg viewBox="0 0 32 32">' + IC[iconKey(n)] + '</svg>'; }
   function slotIcon(k) { return '<svg viewBox="0 0 32 32">' + IC[{ mainHand: 'sword', offHand: 'shield', armor: 'armor', amulet: 'amulet', ring1: 'ring', ring2: 'ring' }[k]] + '</svg>'; }

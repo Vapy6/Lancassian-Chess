@@ -178,6 +178,7 @@
     if (MAGIC[name]) return MAGIC[name].text;
     if (w) return w.dice + ' ' + w.type + (w.props.length ? ' - ' + w.props.join(', ') : '');
     if (a) return a.type === 'shield' ? '+2 AC' : 'AC ' + a.base + (a.type === 'heavy' ? '' : a.dexCap === null ? ' + Dex' : ' + Dex (max 2)') + (a.stealthDis ? ', stealth disadvantage' : '') + (a.str ? ', Str ' + a.str : '');
+    if (GOODS[name]) return GOODS[name][2];
     return '';
   }
   /** Browser: write the sheet to dnd.active and to the matching saved character. */
@@ -187,7 +188,40 @@
 
   // ---------- shops: prices, money in copper, merchant stock ----------
   var PACK_PRICE = { "Burglar's Pack": 16, "Diplomat's Pack": 39, "Dungeoneer's Pack": 12, "Entertainer's Pack": 40, "Explorer's Pack": 10, "Priest's Pack": 19, "Scholar's Pack": 40 };
+
+  // ---------- everyday goods: name -> [gp, group, blurb]. group 'f' food/drink (consumable), others are gear ----------
+  var GOODS = {
+    'Mug of ale': [0.04, 'f', 'A frothing mug. Restores a little spirit.'], 'Jug of wine': [0.2, 'f', 'Common table wine.'], 'Bottle of fine wine': [10, 'f', 'A vintage worth savouring.'], 'Hot meal': [0.3, 'f', 'Stew, bread and a mug. Filling.'],
+    'Loaf of bread': [0.02, 'f', 'Fresh baked.'], 'Hunk of cheese': [0.1, 'f', 'Sharp and keeps well.'], 'Smoked sausage': [0.1, 'f', 'Salty, keeps for weeks.'], 'Salted pork': [0.2, 'f', 'Preserved for the road.'],
+    'Joint of beef': [0.4, 'f', 'A heavy cut, fresh from the block.'], 'Roast chicken': [0.3, 'f', 'Whole, still warm.'], 'Venison haunch': [0.8, 'f', 'Wild game, well hung.'], 'Rack of lamb': [0.6, 'f', 'Tender and fresh.'],
+    'Pork chops': [0.25, 'f', 'Fresh cut.'], 'Fresh fish': [0.1, 'f', 'Caught this morning.'], 'Smoked fish': [0.15, 'f', 'Keeps for many days.'], 'Sack of apples': [0.2, 'f', 'Crisp orchard apples.'],
+    'Basket of vegetables': [0.15, 'f', 'Roots, greens and onions.'], 'Sack of grain': [0.1, 'f', 'For bread or porridge.'], 'Sack of flour': [0.1, 'f', 'Milled fine.'], 'Honey pot': [0.5, 'f', 'Sweet and golden.'],
+    'Meat pie': [0.1, 'f', 'Hot and flaky.'], 'Sweet pastry': [0.05, 'f', 'Glazed and sugary.'], 'Honey cake': [0.2, 'f', 'A treat for festivals.'], 'Rations (1 day)': [0.5, 'f', 'Dried food for one day of travel.'],
+    'Salt (1 lb)': [0.05, 'f', 'Preserves meat. Valuable.'], 'Spices (pouch)': [2, 'f', 'Pepper, clove and saffron.'], 'Waterskin': [0.2, 'g', 'Holds 4 pints.'], 'Bottle of cider': [0.1, 'f', 'Dry and cloudy.'],
+    "Healer's kit": [5, 'f', 'Ten uses to stabilise the dying.'], 'Antitoxin': [50, 'f', 'Advantage vs poison for 1 hour.'], 'Bandages': [0.1, 'f', 'Clean linen strips.'], 'Herbal salve': [1, 'f', 'Soothes cuts and burns.'],
+    'Herbalism kit': [5, 'g', 'Pouches and clippers for plants.'], 'Dried herbs': [0.2, 'f', 'Thyme, sage, willow bark.'], 'Healing poultice': [2, 'f', 'Draws out fever and infection.'], 'Vial of acid': [25, 'g', '2d6 acid damage when thrown.'],
+    "Alchemist's fire": [50, 'g', '1d4 fire damage each turn when thrown.'], 'Vial of perfume': [5, 'g', 'Floral and expensive.'],
+    'Common clothes': [0.5, 'g', 'Plain and durable.'], "Traveler's clothes": [2, 'g', 'Hardwearing and weatherproof.'], 'Fine clothes': [15, 'g', 'Cut for a noble.'], 'Costume': [5, 'g', 'Bright, for the stage.'],
+    'Cloak': [1, 'g', 'Wool, hooded.'], 'Boots': [1, 'g', 'Stout leather.'], 'Gloves': [0.5, 'g', 'Supple leather.'], 'Hat': [0.3, 'g', 'Felt or straw.'], 'Fur-lined cloak': [8, 'g', 'Warm against the cold.'],
+    'Bolt of linen': [1, 'g', 'Ten yards.'], 'Bolt of wool': [1, 'g', 'Ten yards.'], 'Bolt of silk': [20, 'g', 'Ten yards of fine silk.'], 'Spool of thread': [0.05, 'g', 'Strong thread.'], 'Sewing needles': [0.05, 'g', 'A tin of needles.'],
+    'Leather (hide)': [1, 'g', 'Cured and ready to work.'], 'Saddle': [10, 'g', 'Riding saddle.'], 'Bit and bridle': [2, 'g', 'Tack for a horse.'], 'Saddlebags': [4, 'g', 'Two leather pouches.'], 'Belt pouch': [0.5, 'g', 'Holds coin and trinkets.'], 'Leather belt': [0.3, 'g', 'Sturdy.'],
+    'Rope, hempen (50 ft)': [1, 'g', 'Holds 2 hit points of load.'], 'Rope, silk (50 ft)': [10, 'g', 'Light and strong.'], 'Torch': [0.01, 'g', 'Burns for 1 hour.'], 'Hooded lantern': [5, 'g', 'Bright light, can be dimmed.'], 'Oil (flask)': [0.1, 'g', 'Fuel for lanterns.'],
+    'Candles (10)': [0.1, 'g', 'Tallow candles.'], 'Beeswax candle': [0.2, 'g', 'Burns clean.'], 'Lamp': [0.5, 'g', 'Clay oil lamp.'], 'Tinderbox': [0.5, 'g', 'Flint, steel and tinder.'], 'Bedroll': [1, 'g', 'Sleeps one.'],
+    'Blanket': [0.5, 'g', 'Thick wool.'], 'Backpack': [2, 'g', 'Holds a pack of gear.'], 'Crowbar': [2, 'g', 'Advantage on Strength checks to pry.'], 'Hammer': [1, 'g', 'A carpenter\'s hammer.'], 'Pitons (10)': [0.5, 'g', 'Iron spikes for climbing.'],
+    'Mess kit': [0.2, 'g', 'Tin cup and cutlery.'], 'Shovel': [2, 'g', 'Iron-shod.'], 'Iron pot': [2, 'g', 'For cooking.'], 'Fishing tackle': [1, 'g', 'Rod, line and hooks.'], 'Padlock': [10, 'g', 'Needs a key or picks.'], 'Chain (10 ft)': [5, 'g', 'Heavy iron links.'],
+    'Hunting trap': [5, 'g', 'Spring jaws.'], 'Grappling hook': [2, 'g', 'Iron hook for ropes.'], 'Ladder (10 ft)': [0.1, 'g', 'Plain wooden.'], 'Barrel': [2, 'g', 'Oak barrel.'], 'Bucket': [0.05, 'g', 'Wood and iron.'], 'Mirror, steel': [5, 'g', 'Small polished plate.'],
+    'Whetstone': [0.01, 'g', 'Keeps an edge keen.'], 'Ball bearings (bag)': [1, 'g', '1,000 steel balls.'], 'Caltrops (bag)': [1, 'g', 'Twenty iron spikes.'], 'Hunting knife': [1, 'g', 'Skinning blade.'], "Smith's tools": [20, 'g', 'Hammers, tongs and punches.'],
+    "Carpenter's tools": [8, 'g', 'Saws, chisels and planes.'], "Tinker's tools": [50, 'g', 'Small tools for repairs.'], "Cook's utensils": [1, 'g', 'Pots, knives and ladles.'], "Cobbler's tools": [5, 'g', 'Awl and lasts.'], "Leatherworker's tools": [5, 'g', 'Knives and stitching tools.'],
+    "Potter's tools": [10, 'g', 'Wheel tools.'], "Weaver's tools": [1, 'g', 'Shuttles and shears.'], "Jeweler's tools": [25, 'g', 'Loupe and tweezers.'], "Alchemist's supplies": [50, 'g', 'Flasks and reagents.'], "Calligrapher's supplies": [10, 'g', 'Pens and fine ink.'], "Brewer's supplies": [20, 'g', 'Brewing kit.'],
+    'Ink (1 oz bottle)': [10, 'g', 'Black writing ink.'], 'Ink pen': [0.02, 'g', 'A quill.'], 'Parchment (sheet)': [0.1, 'g', 'Writing surface.'], 'Paper (sheet)': [0.2, 'g', 'Costly, smooth.'], 'Book': [25, 'g', 'Bound volume of lore.'], 'Blank book': [10, 'g', '100 empty pages.'], 'Scroll case': [1, 'g', 'Holds parchment.'],
+    'Map': [10, 'g', 'Regional map.'], 'Sealing wax': [0.5, 'g', 'For letters.'],
+    'Silver ring': [8, 'g', 'Plain band.'], 'Gold ring': [30, 'g', 'Polished gold band.'], 'Silver necklace': [20, 'g', 'Fine chain.'], 'Gold necklace': [60, 'g', 'Heavy gold chain.'], 'Gemstone (small)': [50, 'g', 'Cut and polished.'], 'Gemstone (large)': [250, 'g', 'A flawless stone.'], 'Brooch': [15, 'g', 'Silver, with enamel.'], 'Gold bracelet': [45, 'g', 'Engraved.'], 'Signet ring': [20, 'g', 'Engraved with a crest.'],
+    'Flute': [2, 'g', 'Wooden flute.'], 'Drum': [6, 'g', 'Hide drum.'], 'Horn': [3, 'g', 'Carved from a ram.'], 'Lyre': [30, 'g', 'Strung lyre.'], 'Pan flute': [12, 'g', 'Reed pipes.'], 'Viol': [30, 'g', 'Bowed strings.'], 'Bagpipes': [30, 'g', 'Droning pipes.'], 'Shawm': [2, 'g', 'Reed horn.'], 'Dulcimer': [25, 'g', 'Hammered strings.'],
+    'Soap': [0.02, 'g', 'Lye soap.'], 'Comb': [0.02, 'g', 'Bone comb.'], 'Perfume (vial)': [5, 'g', 'Floral scent.'], 'Razor': [0.5, 'g', 'Folding razor.'],
+    'Dice set': [0.1, 'g', 'Bone dice.'], 'Playing cards': [0.5, 'g', 'Painted deck.'], 'Pottery jug': [0.2, 'g', 'Glazed.'], 'Wicker basket': [0.4, 'g', 'Woven.'], 'Glass bottle': [2, 'g', 'Blown glass.'], 'Candlestick': [0.5, 'g', 'Brass.'], 'Tankard': [0.4, 'g', 'Pewter.'], 'Wooden bowl': [0.05, 'g', 'Carved.'], 'Wooden plank': [0.1, 'g', 'Planed board.'], 'Firewood bundle': [0.05, 'g', 'Seasoned logs.']
+  };
   var EXTRA_PRICE = { '20 bolts': 1, '20 arrows': 1, 'Quiver of 20 arrows': 1, '10 darts': 0.5, "Thieves' tools": 25, 'Holy symbol': 5, 'Component pouch': 25, 'Arcane focus': 10, 'Spellbook': 50, 'Druidic focus': 1, 'Lute': 35, 'Wooden shield': 10 };
+  Object.keys(GOODS).forEach(function (k) { EXTRA_PRICE[k] = GOODS[k][0]; });
   function costGp(str) { var m = /([\d.,]+)\s*(cp|sp|ep|gp|pp)/.exec(str || ''); return m ? parseFloat(m[1].replace(/,/g, '')) * { cp: 0.01, sp: 0.1, ep: 0.5, gp: 1, pp: 10 }[m[2]] : null; }
   /** Base value in gp, or null when merchants do not deal in it. */
   function price(name) {
@@ -196,7 +230,7 @@
   }
   function priceCp(name) { var g = price(name); return g === null ? null : Math.max(1, Math.round(g * 100)); }
   /** weapons | armor | consumables | magic | gear */
-  function category(name) { var k = kind(name); if (k === 'weapon') return 'weapons'; if (k === 'armor' || k === 'shield') return 'armor'; if (MAGIC[name]) return MAGIC[name].type === 'potion' ? 'consumables' : 'magic'; return 'gear'; }
+  function category(name) { var k = kind(name); if (k === 'weapon') return 'weapons'; if (k === 'armor' || k === 'shield') return 'armor'; if (MAGIC[name]) return MAGIC[name].type === 'potion' ? 'consumables' : 'magic'; if (GOODS[name] && GOODS[name][1] === 'f') return 'consumables'; return 'gear'; }
   function wealthCp(s) { var c = s.currency || {}; return (c.cp || 0) + 10 * (c.sp || 0) + 50 * (c.ep || 0) + 100 * (c.gp || 0) + 1000 * (c.pp || 0); }
   function setWealthCp(s, t) { t = Math.max(0, Math.round(t)); s.currency = { cp: t % 10, sp: Math.floor(t / 10) % 10, ep: 0, gp: Math.floor(t / 100), pp: 0 }; }
   function rngFor(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return function () { h += 0x6D2B79F5; var t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -206,16 +240,55 @@
     bows: ['Shortbow', 'Longbow', 'Light crossbow', 'Hand crossbow', 'Heavy crossbow', 'Javelin', 'Spear', 'Dagger'],
     light: ['Padded', 'Leather', 'Studded leather'], medium: ['Hide', 'Chain shirt', 'Scale mail', 'Breastplate', 'Half plate'], heavy: ['Ring mail', 'Chain mail', 'Splint', 'Plate'],
     shield: ['Shield'], ammo: ['20 arrows', '20 bolts'], packs: Object.keys(PACK_PRICE), tools: ['Holy symbol', 'Component pouch', 'Arcane focus', "Thieves' tools", 'Druidic focus'],
-    healing: ['Potion of Healing'], greater: ['Potion of Greater Healing'], magic: ['Ring of Protection', 'Amulet of Health']
+    healing: ['Potion of Healing'], greater: ['Potion of Greater Healing'], magic: ['Ring of Protection', 'Amulet of Health'],
+    meat: ['Joint of beef', 'Roast chicken', 'Venison haunch', 'Rack of lamb', 'Pork chops', 'Salted pork', 'Smoked sausage'], bakery: ['Loaf of bread', 'Meat pie', 'Sweet pastry', 'Honey cake'],
+    produce: ['Sack of apples', 'Basket of vegetables', 'Sack of grain', 'Sack of flour', 'Honey pot', 'Hunk of cheese', 'Salt (1 lb)', 'Loaf of bread', 'Bottle of cider'], fish: ['Fresh fish', 'Smoked fish', 'Salt (1 lb)'],
+    drink: ['Mug of ale', 'Jug of wine', 'Bottle of cider', 'Bottle of fine wine'], meals: ['Hot meal', 'Meat pie', 'Roast chicken', 'Loaf of bread', 'Hunk of cheese'], rations: ['Rations (1 day)', 'Smoked sausage', 'Smoked fish', 'Salted pork'],
+    herbs: ['Dried herbs', 'Herbal salve', 'Healing poultice', 'Herbalism kit', 'Spices (pouch)', 'Bandages'], medic: ["Healer's kit", 'Antitoxin', 'Bandages', 'Herbal salve', 'Healing poultice'],
+    clothes: ['Common clothes', "Traveler's clothes", 'Fine clothes', 'Cloak', 'Gloves', 'Hat', 'Fur-lined cloak', 'Costume'], cloth: ['Bolt of linen', 'Bolt of wool', 'Bolt of silk', 'Spool of thread', 'Sewing needles', "Weaver's tools"], boots: ['Boots', 'Leather belt', 'Gloves', "Cobbler's tools"],
+    leather: ['Leather (hide)', 'Saddle', 'Bit and bridle', 'Saddlebags', 'Belt pouch', 'Leather belt', 'Backpack', 'Waterskin', "Leatherworker's tools"],
+    camp: ['Rope, hempen (50 ft)', 'Torch', 'Hooded lantern', 'Oil (flask)', 'Tinderbox', 'Bedroll', 'Blanket', 'Backpack', 'Waterskin', 'Mess kit', 'Pitons (10)', 'Fishing tackle', 'Hunting trap', 'Grappling hook'],
+    tools: ['Holy symbol', 'Component pouch', 'Arcane focus', "Thieves' tools", 'Druidic focus', 'Crowbar', 'Hammer', 'Shovel'],
+    smithy: ["Smith's tools", 'Crowbar', 'Hammer', 'Whetstone', 'Chain (10 ft)', 'Padlock', 'Iron pot', 'Shovel', 'Pitons (10)', 'Caltrops (bag)', 'Hunting knife', 'Bucket', "Tinker's tools"],
+    books: ['Book', 'Blank book', 'Parchment (sheet)', 'Paper (sheet)', 'Ink (1 oz bottle)', 'Ink pen', 'Scroll case', 'Map', 'Sealing wax', "Calligrapher's supplies"],
+    gems: ['Silver ring', 'Gold ring', 'Silver necklace', 'Gold necklace', 'Gemstone (small)', 'Gemstone (large)', 'Brooch', 'Gold bracelet', 'Signet ring', "Jeweler's tools"],
+    arcane: ['Spellbook', 'Component pouch', 'Arcane focus', 'Vial of acid', "Alchemist's fire", "Alchemist's supplies", 'Ink (1 oz bottle)', 'Parchment (sheet)', 'Vial of perfume'],
+    lights: ['Candles (10)', 'Beeswax candle', 'Lamp', 'Torch', 'Hooded lantern', 'Oil (flask)', 'Tinderbox', 'Candlestick'],
+    wood: ['Wooden plank', 'Barrel', 'Bucket', 'Ladder (10 ft)', 'Firewood bundle', "Carpenter's tools", 'Hammer', 'Wooden bowl', 'Tankard', 'Wooden shield'],
+    home: ['Pottery jug', 'Wicker basket', 'Glass bottle', 'Candlestick', 'Tankard', 'Wooden bowl', 'Iron pot', 'Mirror, steel', "Potter's tools", "Cook's utensils", 'Blanket', 'Bucket'],
+    toilet: ['Soap', 'Comb', 'Perfume (vial)', 'Razor', 'Mirror, steel', 'Vial of perfume'], music: ['Lute', 'Flute', 'Drum', 'Horn', 'Lyre', 'Pan flute', 'Viol', 'Bagpipes', 'Shawm', 'Dulcimer'],
+    games: ['Dice set', 'Playing cards'], keeps: ['Hot meal', 'Mug of ale', 'Jug of wine']
   };
   // role -> merchant gold and what they stock: [pool, how many kinds, chance]
   var SHOPS = {
-    'blacksmith': { gold: 700, p: [['simple', 2], ['martial', 4], ['light', 1], ['medium', 2], ['heavy', 2], ['shield', 1], ['ammo', 1]] },
+    'armorer': { gold: 900, p: [['simple', 1], ['martial', 5], ['light', 2], ['medium', 3], ['heavy', 3], ['shield', 1], ['ammo', 1], ['smithy', 1]] },
+    'weaponsmith': { gold: 700, p: [['simple', 4], ['martial', 7], ['bows', 2], ['ammo', 2], ['shield', 1], ['smithy', 1]] },
+    'butcher': { gold: 120, p: [['meat', 6], ['rations', 1], ['fish', 1, 0.3]] },
+    'baker': { gold: 90, p: [['bakery', 4], ['produce', 2], ['drink', 1, 0.4]] },
+    'grocer': { gold: 140, p: [['produce', 7], ['rations', 2], ['drink', 1]] },
+    'fishmonger': { gold: 110, p: [['fish', 3], ['rations', 1, 0.5], ['camp', 1]] },
+    'herbalist': { gold: 220, p: [['herbs', 5], ['medic', 2], ['healing', 1, 0.5]] },
+    'apothecary': { gold: 450, p: [['medic', 4], ['herbs', 2], ['healing', 1], ['greater', 1, 0.4], ['arcane', 1, 0.5]] },
+    'tailor': { gold: 300, p: [['clothes', 5], ['cloth', 3], ['boots', 1]] },
+    'cobbler': { gold: 160, p: [['boots', 4], ['leather', 2], ['clothes', 1]] },
+    'leatherworker': { gold: 260, p: [['leather', 6], ['light', 2], ['boots', 1], ['camp', 1]] },
+    'bookseller': { gold: 380, p: [['books', 7], ['arcane', 1, 0.5]] },
+    'jeweler': { gold: 1600, p: [['gems', 7], ['magic', 1, 0.3]] },
+    'arcane dealer': { gold: 1400, p: [['arcane', 6], ['healing', 1], ['greater', 1], ['magic', 2, 0.7], ['tools', 1]] },
+    'chandler': { gold: 130, p: [['lights', 6], ['camp', 2]] },
+    'carpenter': { gold: 220, p: [['wood', 7], ['smithy', 1]] },
+    'household': { gold: 180, p: [['home', 7]] },
+    'toiletries': { gold: 150, p: [['toilet', 5], ['clothes', 1]] },
+    'music': { gold: 380, p: [['music', 6], ['games', 1]] },
+    'market': { gold: 500, p: [['produce', 4], ['meat', 2], ['fish', 1], ['bakery', 2], ['clothes', 1], ['home', 2], ['camp', 2], ['rations', 1]] },
+    'tavern': { gold: 200, p: [['drink', 4], ['meals', 4], ['rations', 1, 0.5], ['games', 1, 0.5]] },
+    'general store': { gold: 500, p: [['camp', 6], ['rations', 2], ['packs', 2], ['clothes', 2], ['leather', 1], ['tools', 1], ['healing', 1, 0.5], ['simple', 1], ['ammo', 1]] },
+    'blacksmith': { gold: 700, p: [['simple', 3], ['martial', 4], ['medium', 1], ['heavy', 1], ['shield', 1], ['smithy', 5]] },
     'merchant': { gold: 900, p: [['simple', 2], ['martial', 2], ['light', 1], ['medium', 1], ['shield', 1], ['healing', 1], ['greater', 1, 0.4], ['packs', 3], ['ammo', 1], ['tools', 2], ['magic', 1, 0.3]] },
     'city official': { gold: 1800, p: [['martial', 3], ['medium', 2], ['heavy', 1], ['shield', 1], ['healing', 1], ['greater', 1], ['packs', 2], ['tools', 2], ['magic', 1, 0.6]] },
     'priest': { gold: 350, p: [['healing', 1], ['greater', 1, 0.5], ['tools', 2], ['simple', 1], ['shield', 1], ['light', 1], ['packs', 1]] },
-    'innkeeper': { gold: 300, p: [['healing', 1], ['packs', 3], ['simple', 2], ['ammo', 1], ['light', 1]] },
-    'hunter': { gold: 300, p: [['bows', 5], ['ammo', 2], ['light', 2], ['packs', 1]] },
+    'innkeeper': { gold: 300, p: [['meals', 3], ['drink', 4], ['rations', 2], ['healing', 1, 0.5], ['camp', 1]] },
+    'hunter': { gold: 300, p: [['bows', 5], ['ammo', 2], ['light', 1], ['camp', 2], ['meat', 1, 0.5]] },
     'guard captain': { gold: 450, p: [['simple', 1], ['martial', 3], ['medium', 1], ['heavy', 1], ['shield', 1], ['ammo', 1], ['healing', 1]] },
     'village elder': { gold: 250, p: [['simple', 3], ['light', 1], ['healing', 1, 0.7], ['packs', 2], ['tools', 1]] },
     'ferrywoman': { gold: 220, p: [['simple', 2], ['packs', 2], ['ammo', 1], ['healing', 1, 0.5]] }
@@ -225,7 +298,7 @@
     var def = SHOPS[role] || SHOPS.merchant, rng = rngFor(town + '|' + role), stock = {};
     def.p.forEach(function (e) {
       if (e[2] !== undefined && rng() > e[2]) return; var pool = POOLS[e[0]].slice(), n = Math.min(e[1], pool.length);
-      for (var i = 0; i < n; i++) { var nm = pool.splice(Math.floor(rng() * pool.length), 1)[0], c = category(nm), q = (c === 'weapons' || c === 'armor' || c === 'magic') ? 1 : nm.indexOf('arrows') > 0 || nm.indexOf('bolts') > 0 ? 2 + Math.floor(rng() * 5) : 1 + Math.floor(rng() * 3); stock[nm] = (stock[nm] || 0) + q; }
+      for (var i = 0; i < n; i++) { var nm = pool.splice(Math.floor(rng() * pool.length), 1)[0], c = category(nm), q = GOODS[nm] && GOODS[nm][0] < 3 ? 2 + Math.floor(rng() * 7) : GOODS[nm] && GOODS[nm][0] >= 20 ? 1 : (c === 'weapons' || c === 'armor' || c === 'magic') ? 1 : nm.indexOf('arrows') > 0 || nm.indexOf('bolts') > 0 ? 2 + Math.floor(rng() * 5) : 1 + Math.floor(rng() * 3); stock[nm] = (stock[nm] || 0) + q; }
     });
     return { role: role, town: town, cp: Math.round(def.gold * (0.8 + rng() * 0.5)) * 100, stock: Object.keys(stock).map(function (k) { return { name: k, qty: stock[k] }; }) };
   }

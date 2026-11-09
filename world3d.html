@@ -1186,10 +1186,21 @@ var fl = (function () {
 
     // ---- talk to the keeper of a named building (press T next to it) ----
     var BROLE = { SHOP: 'shopkeeper', MARKET: 'market warden', ARTISAN: 'artisan', TAVERN: 'barkeep', INN: 'innkeeper', SERVICE: 'clerk', RELIGIOUS: 'priest', EDUCATIONAL: 'tutor', LAW_ENFORCEMENT: 'guard captain', FACTION: 'envoy', INDUSTRIAL: 'foreman', WAREHOUSE: 'warehouse keeper', FARM: 'farmer' };
+    var SHOPRULES = [[/armou?ry|armou?rer|armor/i, 'armorer'], [/weaponsmith|bladesmith|swordsmith|fletcher|bowyer/i, 'weaponsmith'], [/blacksmith|smith|forge|anvil|farrier|metal|iron/i, 'blacksmith'], [/butcher|wild game|venison|meat|sausage/i, 'butcher'], [/bake|pastry|bread|cake|confection|patisserie|pie/i, 'baker'], [/fish|seafood|oyster/i, 'fishmonger'],
+      [/greengrocer|grocer|produce|fruit|vegetable|grain|flour|dairy|cheese|farm|orchard|spice|honey/i, 'grocer'], [/herbalist|herb|healer/i, 'herbalist'], [/medicine|medical|apothec|clinic|hospital|health|surgeon|physician|doctor/i, 'apothecary'],
+      [/tailor|cloth|draper|linen|fiber|fibre|yarn|wool|furrier|glove|outfitter|weaver|dyer|seamstress|hat/i, 'tailor'], [/cobbler|shoe|boot/i, 'cobbler'], [/leather|tanner|saddle|tack/i, 'leatherworker'], [/book|scribe|scroll|bookbinder|stationer|paper|library/i, 'bookseller'],
+      [/jewel|gem|goldsmith|silversmith/i, 'jeweler'], [/magic|arcane|rare|potion|alchem|curio|wizard|mage/i, 'arcane dealer'], [/candle|lantern|chandler|lamp/i, 'chandler'], [/carpenter|cooper|wood|timber|lumber|cartwright|wheelwright|joiner/i, 'carpenter'],
+      [/potter|glass|basket|wicker|ceramic|crockery|household/i, 'household'], [/soap|perfum|toilet|barber/i, 'toiletries'], [/instrument|music|luthier/i, 'music'], [/hunter|trapper|game/i, 'hunter'], [/general|store|goods|odds|ends|trader|dealer|used|supply|supplies|emporium|mercantile|provision/i, 'general store']];
+    function shopRole(b) {
+      var t = b.type, nm = b.name || '';
+      for (var i = 0; i < SHOPRULES.length; i++) if (SHOPRULES[i][0].test(nm)) { if (t === 'SHOP' || t === 'ARTISAN' || t === 'MARKET' || t === 'SERVICE' || t === 'INDUSTRIAL') return SHOPRULES[i][1]; }
+      if (t === 'TAVERN') return 'tavern'; if (t === 'INN') return 'innkeeper'; if (t === 'MARKET') return 'market'; if (t === 'SHOP') return 'general store';
+      if (t === 'SERVICE' && /medic|health|clinic/i.test(nm)) return 'apothecary'; if (t === 'ARTISAN') return null; return null;
+    }
     function bldTalk(b, pre) {
-      var pl = { n: b.name, pop: 0, role: BROLE[b.type] || 'keeper', bld: true }, t = b.type, opts = [], n = npcFor(pl);
+      var sr_ = shopRole(b), pl = { n: b.name, pop: 0, role: sr_ || BROLE[b.type] || 'keeper', bld: true }, t = b.type, opts = [], n = npcFor(pl);
       function spend(g) { if (!HERO) { bldTalk(b, 'You have no active character.'); return false; } heroRefresh(); if (gpOf() < g) { bldTalk(b, '"You cannot afford that." (' + g + ' gp needed)'); return false; } addGp(-g); return true; }
-      if (t === 'SHOP' || t === 'MARKET' || t === 'ARTISAN') opts.push(['Trade: browse their wares and sell your loot', function () { openShop(pl); }]);
+      if (sr_) opts.push([t === 'TAVERN' || t === 'INN' ? 'Buy food, drink and supplies' : 'Trade: browse their wares and sell your loot', function () { openShop(pl); }]);
       if (t === 'INN') opts.push(['Rent a bed for the night (5 gp): long rest', function () { if (!spend(5)) return; DNDINV.longRest(HERO); hsave(); clkAdvance(8); bldTalk(b, 'You sleep soundly and wake restored. <b style="color:#7ec27e">Long rest taken.</b>'); }]);
       if (t === 'TAVERN') opts.push(['Rest by the fire with a hot meal (1 gp): short rest', function () { if (!spend(1)) return; DNDINV.shortRest(HERO, 0); hsave(); clkAdvance(1); bldTalk(b, 'A warm meal and an hour by the fire. <b style="color:#7ec27e">Short rest taken.</b>'); }]);
       if (t === 'RELIGIOUS') opts.push(['Ask for healing (5 gp donation)', function () { if (!spend(5)) return; HERO.hp = HERO.hpMax; hsave(); bldTalk(b, 'Warm light fills you. <b style="color:#7ec27e">Hit points restored.</b>'); }]);
