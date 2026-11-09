@@ -1094,7 +1094,7 @@ var fl = (function () {
         var cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz;
         if (cw <= 0.0001) { el.style.display = 'none'; continue; }
         el.style.display = 'block'; el.style.left = (cx / cw * 0.5 + 0.5) * w + 'px'; el.style.top = (1 - (cy / cw * 0.5 + 0.5)) * hh + 'px'; el.style.opacity = Math.max(0.25, 1 - c.d / 190);
-        var tx = c.b.name + ' <span style="font-weight:400;opacity:.7;font-size:11px">· ' + (BTYPE[c.b.type] || c.b.type) + '</span>'; if (el.dataset.k !== tx) { el.innerHTML = tx; el.dataset.k = tx; }
+        var tx = c.b.name + ' <span style="font-weight:400;opacity:.7;font-size:11px">· ' + (BTYPE[c.b.type] || c.b.type) + '</span>' + (i === 0 && c.d < 60 ? ' <span style="color:#dcb96c;font-size:11px">[T] Talk</span>' : ''); if (el.dataset.k !== tx) { el.innerHTML = tx; el.dataset.k = tx; }
       }
     }
     function foeUI(vp, w, hh) {
@@ -1154,7 +1154,9 @@ var fl = (function () {
     var ROLE = ['innkeeper', 'village elder', 'guard captain', 'merchant', 'priest', 'blacksmith', 'ferrywoman', 'hunter'];
     var TRAIT = ['weary but kind', 'sharp-tongued and suspicious', 'cheerful and chatty', 'proud and formal', 'nervous, glancing at the road', 'gruff but fair'];
     var RUMOR = ['Travellers say something stirs on the roads at dusk.', 'The old watchtowers have been empty since the last war.', 'A trader swears he saw lights moving in the hills.', 'Folk here keep their doors barred after dark.', 'They say the sea has been strange lately.', 'Bandits have been bold along the trade road.', 'Someone left offerings at the old stones again.'];
-    function npcFor(pl) { var h = hseed(pl.n); return { name: NM1[h % NM1.length] + ' ' + NM2[(h >>> 5) % NM2.length], role: pl.pop > 100000 ? 'city official' : ROLE[(h >>> 9) % ROLE.length], trait: TRAIT[(h >>> 13) % TRAIT.length], h: h }; }
+    var DEITIES = ['Myoso', 'Annos', 'Ameria', 'Borgax', 'Temirrus', 'Larrius', 'Thero', 'Zanos', 'Xarius', 'Aunrea', 'Faxlyn', 'Cyclun', 'Deo', 'Viviness'];
+    function deityName(nm) { var m = /^(.*\bof )(.+)$/.exec(nm); return m ? m[1] + DEITIES[hseed(nm) % DEITIES.length] : nm; }
+    function npcFor(pl) { var h = hseed(pl.n); return { name: NM1[h % NM1.length] + ' ' + NM2[(h >>> 5) % NM2.length], role: pl.role || (pl.pop > 100000 ? 'city official' : ROLE[(h >>> 9) % ROLE.length]), trait: TRAIT[(h >>> 13) % TRAIT.length], h: h }; }
     function skillBonus(n) { return HERO && HERO.skills && HERO.skills[n] ? HERO.skills[n].bonus : 0; }
     function d20() { return 1 + Math.floor(Math.random() * 20); }
     var TK = { box: null, prompt: null, log: null };
@@ -1180,6 +1182,21 @@ var fl = (function () {
       opts.push(['Insight: do they seem honest? (Insight DC 12)', function () { var c = check('Insight', 12); talkMenu(pl, c.line + (c.ok ? 'You read them well: they are ' + n.trait + ', and mean what they say.' : 'You cannot tell what they are thinking.')); }]);
       opts.push(['Leave', closeTalk]);
       talkUI(pl, (pre ? pre + '<br>' : '') + (pre ? '' : '"Travellers are always welcome in ' + pl.n + '."'), opts);
+    }
+
+    // ---- talk to the keeper of a named building (press T next to it) ----
+    var BROLE = { SHOP: 'shopkeeper', MARKET: 'market warden', ARTISAN: 'artisan', TAVERN: 'barkeep', INN: 'innkeeper', SERVICE: 'clerk', RELIGIOUS: 'priest', EDUCATIONAL: 'tutor', LAW_ENFORCEMENT: 'guard captain', FACTION: 'envoy', INDUSTRIAL: 'foreman', WAREHOUSE: 'warehouse keeper', FARM: 'farmer' };
+    function bldTalk(b, pre) {
+      var pl = { n: b.name, pop: 0, role: BROLE[b.type] || 'keeper', bld: true }, t = b.type, opts = [], n = npcFor(pl);
+      function spend(g) { if (!HERO) { bldTalk(b, 'You have no active character.'); return false; } heroRefresh(); if (gpOf() < g) { bldTalk(b, '"You cannot afford that." (' + g + ' gp needed)'); return false; } addGp(-g); return true; }
+      if (t === 'SHOP' || t === 'MARKET' || t === 'ARTISAN') opts.push(['Trade: browse their wares and sell your loot', function () { openShop(pl); }]);
+      if (t === 'INN') opts.push(['Rent a bed for the night (5 gp): long rest', function () { if (!spend(5)) return; DNDINV.longRest(HERO); hsave(); clkAdvance(8); bldTalk(b, 'You sleep soundly and wake restored. <b style="color:#7ec27e">Long rest taken.</b>'); }]);
+      if (t === 'TAVERN') opts.push(['Rest by the fire with a hot meal (1 gp): short rest', function () { if (!spend(1)) return; DNDINV.shortRest(HERO, 0); hsave(); clkAdvance(1); bldTalk(b, 'A warm meal and an hour by the fire. <b style="color:#7ec27e">Short rest taken.</b>'); }]);
+      if (t === 'RELIGIOUS') opts.push(['Ask for healing (5 gp donation)', function () { if (!spend(5)) return; HERO.hp = HERO.hpMax; hsave(); bldTalk(b, 'Warm light fills you. <b style="color:#7ec27e">Hit points restored.</b>'); }]);
+      if (t === 'LAW_ENFORCEMENT' || t === 'FACTION' || t === 'SERVICE') opts.push(['Is there any work for me?', function () { var q = questHere(pl); if (q && q.have >= q.need) turnIn(pl, q); else if (q) talkUI(pl, 'Still ' + (q.need - q.have) + ' to go (' + q.have + '/' + q.need + ').', [['Back', function () { bldTalk(b); }]]); else offer(pl); }]);
+      opts.push(['What are people talking about? (rumours)', function () { bldTalk(b, '"' + RUMOR[(n.h + (QS.seq || 0)) % RUMOR.length] + '"'); }]);
+      opts.push(['Leave', closeTalk]);
+      talkUI(pl, (pre ? pre + '<br>' : '') + (pre ? '' : '"Welcome to ' + b.name + '."'), opts);
     }
     function offer(pl) {
       var n = npcFor(pl), need = 2 + (n.h % 3), lv = (HERO && HERO.level) || 1, disp = QS.disp[pl.n] || 0, xp = 40 * need * lv, gp = Math.max(1, Math.round((6 * need + disp * 4) * (1 + 0.5 * (lv - 1))));
@@ -1368,7 +1385,7 @@ var fl = (function () {
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
       if (TK.prompt) { if (pl) TK.prompt.textContent = 'Press T to talk to someone in ' + pl.n; TK.prompt.style.display = pl ? 'block' : 'none'; }
     }
-    function talkKey() { if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var pl = nearTown(); if (pl) talkMenu(pl); }
+    function talkKey() { if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var bs = BLD.sel && BLD.sel[0]; if (bs && bs.d < 60 && window.DNDINV) { heroRefresh(); bldTalk(bs.b); return; } var pl = nearTown(); if (pl) talkMenu(pl); }
     window.__ENC = ENC; window.__WALK = WALK; var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
@@ -1596,7 +1613,7 @@ var fl = (function () {
         } else { var T = earClip(p); for (j = 0; j < T.length; j += 3) tri([p[2 * T[j]], top + 0.4, p[2 * T[j] + 1]], [p[2 * T[j + 1]], top + 0.4, p[2 * T[j + 1] + 1]], [p[2 * T[j + 2]], top + 0.4, p[2 * T[j + 2] + 1]], rc, up); }
         var x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9; for (j = 0; j < n; j++) { x0 = Math.min(x0, p[2 * j]); x1 = Math.max(x1, p[2 * j]); z0 = Math.min(z0, p[2 * j + 1]); z1 = Math.max(z1, p[2 * j + 1]); }
         gridAdd({ p: p, bb: [x0, z0, x1, z1] }, x0 - 2, z0 - 2, x1 + 2, z1 + 2);
-        if (bt !== 'RESIDENCE' && D.names && D.names[B[3]]) LB.push({ x: cx, z: cz, y: top + (n === 4 ? 12 : 4), name: D.names[B[3]], type: bt });
+        if (bt !== 'RESIDENCE' && D.names && D.names[B[3]]) LB.push({ x: cx, z: cz, y: top + (n === 4 ? 12 : 4), name: bt === 'RELIGIOUS' ? deityName(D.names[B[3]]) : D.names[B[3]], type: bt });
         if (performance.now() - t0 > 8) { yield; t0 = performance.now(); }
       }
       function buf(a) { var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(a), gl.STATIC_DRAW); return b; }
