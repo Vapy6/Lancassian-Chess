@@ -1156,7 +1156,7 @@ var fl = (function () {
     var RUMOR = ['Travellers say something stirs on the roads at dusk.', 'The old watchtowers have been empty since the last war.', 'A trader swears he saw lights moving in the hills.', 'Folk here keep their doors barred after dark.', 'They say the sea has been strange lately.', 'Bandits have been bold along the trade road.', 'Someone left offerings at the old stones again.'];
     var DEITIES = ['Myoso', 'Annos', 'Ameria', 'Borgax', 'Temirrus', 'Larrius', 'Thero', 'Zanos', 'Xarius', 'Aunrea', 'Faxlyn', 'Cyclun', 'Deo', 'Viviness'];
     function deityName(nm) { var m = /^(.*\bof )(.+)$/.exec(nm); return m ? m[1] + DEITIES[hseed(nm) % DEITIES.length] : nm; }
-    function npcFor(pl) { var h = hseed(pl.n); return { name: NM1[h % NM1.length] + ' ' + NM2[(h >>> 5) % NM2.length], role: pl.role || (pl.pop > 100000 ? 'city official' : ROLE[(h >>> 9) % ROLE.length]), trait: TRAIT[(h >>> 13) % TRAIT.length], h: h }; }
+    function npcFor(pl) { var h = hseed(pl.seed || pl.n); return { name: NM1[h % NM1.length] + ' ' + NM2[(h >>> 5) % NM2.length], role: pl.role || (pl.pop > 100000 ? 'city official' : ROLE[(h >>> 9) % ROLE.length]), trait: TRAIT[(h >>> 13) % TRAIT.length], h: h }; }
     function skillBonus(n) { return HERO && HERO.skills && HERO.skills[n] ? HERO.skills[n].bonus : 0; }
     function d20() { return 1 + Math.floor(Math.random() * 20); }
     var TK = { box: null, prompt: null, log: null };
@@ -1385,7 +1385,7 @@ var fl = (function () {
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
       if (TK.prompt) { if (pl) TK.prompt.textContent = 'Press T to talk to someone in ' + pl.n; TK.prompt.style.display = pl ? 'block' : 'none'; }
     }
-    function talkKey() { if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var bs = BLD.sel && BLD.sel[0]; if (bs && bs.d < 60 && window.DNDINV) { heroRefresh(); bldTalk(bs.b); return; } var pl = nearTown(); if (pl) talkMenu(pl); }
+    function talkKey() { if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var nn = npcNearest(); if (nn && window.DNDINV) { npcTalk(nn); return; } var bs = BLD.sel && BLD.sel[0]; if (bs && bs.d < 60 && window.DNDINV) { heroRefresh(); bldTalk(bs.b); return; } var pl = nearTown(); if (pl) talkMenu(pl); }
     window.__ENC = ENC; window.__WALK = WALK; var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
@@ -1646,6 +1646,45 @@ var fl = (function () {
       ENC.foes.forEach(function (f) { f.mv = false; if (f.tx === undefined) return; var ddx = f.tx - f.x, ddz = f.tz - f.z, dl = Math.hypot(ddx, ddz), st = 30 * FT * fdt; if (dl > 1e-9) { f.mv = true; if (dl <= st) { f.x = f.tx; f.z = f.tz; f.mv = false; } else { f.x += ddx / dl * st; f.z += ddz / dl * st; } f.y = groundAt(f.x, f.z); } if (f.mv || true) f.body = Math.atan2(WALK.x - f.x, WALK.z - f.z); });
       if (WALK.third) drawFig(WALK.x, WALK.y, WALK.z, WALK.body, WALK.phase, WALK.moving, !!keys.shift, vpRot, far, 1);
       var sv = COL.tunic, sp = COL.pants, ss = COL.skin; ENC.foes.forEach(function (f) { if (f.dead) return; var c = FC[f.pick] || [0.5, 0.2, 0.2]; if (f.hit && performance.now() - f.hit < 350) c = [1, 0.15, 0.1]; COL.tunic = c; COL.pants = [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]; COL.skin = [c[0] * 0.9 + 0.1, c[1] * 0.9 + 0.1, c[2] * 0.9]; drawFig(f.x, f.y, f.z, f.body, f.mv ? performance.now() / 110 : 0, !!f.mv, false, vpRot, far, /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1); }); COL.tunic = sv; COL.pants = sp; COL.skin = ss;
+      drawNpcs(vpRot, far);
+    }
+
+    // ================= townsfolk: people walking the streets near you =================
+    var NPCS = [], NPCT = { last: 0, spawn: 0 }, NTUN = [[0.55, 0.16, 0.12], [0.18, 0.32, 0.50], [0.30, 0.45, 0.22], [0.62, 0.50, 0.20], [0.45, 0.30, 0.50], [0.55, 0.55, 0.50], [0.25, 0.25, 0.30], [0.60, 0.30, 0.15]], NPAN = [[0.30, 0.25, 0.20], [0.20, 0.20, 0.25], [0.35, 0.30, 0.18], [0.25, 0.18, 0.12]], NSKIN = [[0.85, 0.66, 0.52], [0.72, 0.52, 0.38], [0.55, 0.38, 0.27], [0.92, 0.76, 0.64], [0.40, 0.27, 0.20]], NHAIR = [[0.25, 0.15, 0.08], [0.10, 0.08, 0.06], [0.55, 0.40, 0.18], [0.65, 0.65, 0.62], [0.45, 0.22, 0.10]];
+    function npcCity() {
+      var best = null, bd = 9300; CITYS.forEach(function (C) { var d = Math.max(Math.abs(WALK.x - C.cx), Math.abs(WALK.z - C.cz)) / FT; if (C.D && d < bd) { bd = d; best = C; } }); return best;
+    }
+    function npcSpawn(C) {
+      var D = C.D, F2 = 3.28084 / 10, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, cands = [], q, m, f;
+      for (q = 0; q < D.r.length; q++) { f = D.r[q][1]; if (f.length < 4) continue; for (m = 0; m < f.length; m += 2) { var x = f[m] * F2, z = -f[m + 1] * F2, d = Math.hypot(x - lx, z - lz); if (d > 60 && d < 320) cands.push([q, m / 2]); } }
+      if (!cands.length) return; var pick = cands[(Math.random() * cands.length) | 0], f2 = D.r[pick[0]][1], n = f2.length / 2;
+      NPCS.push({ C: C, q: pick[0], i: pick[1], dir: Math.random() < 0.5 ? 1 : -1, x: f2[pick[1] * 2] * F2, z: -f2[pick[1] * 2 + 1] * F2, wait: Math.random() * 3, sp: 2.6 + Math.random() * 1.4, body: 0, mv: false, id: (Math.random() * 1e9) | 0,
+        tun: NTUN[(Math.random() * NTUN.length) | 0], pan: NPAN[(Math.random() * NPAN.length) | 0], skin: NSKIN[(Math.random() * NSKIN.length) | 0], hair: NHAIR[(Math.random() * NHAIR.length) | 0], ph: Math.random() * 6 });
+    }
+    function npcWorld(n) { return [n.C.cx + n.x * FT, n.C.cz + n.z * FT]; }
+    function drawNpcs(vpRot, far) {
+      var now = performance.now(), dtU = (now - NPCT.last) / 1000, dt = Math.min(0.1, dtU); NPCT.last = now; var C = npcCity(), F2 = 3.28084 / 10;
+      if (!C || ENC.box) { NPCS.length = 0; return; }
+      var night = TOD < 5 || TOD > 21.5, target = night ? 3 : 14, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT;
+      NPCS = NPCS.filter(function (n) { return n.C === C && Math.hypot(n.x - lx, n.z - lz) < 420; });
+      if (NPCS.length > target) NPCS.length = target;
+      NPCT.spawn += Math.min(dtU, 3); if (NPCS.length < target && NPCT.spawn > 0.7) { NPCT.spawn = 0; npcSpawn(C); }
+      NPCS.forEach(function (n) {
+        var f = C.D.r[n.q][1], cnt = f.length / 2; n.mv = false;
+        if (n.wait > 0) { n.wait -= dt; }
+        else { var ni = n.i + n.dir; if (ni < 0 || ni >= cnt) { n.dir = -n.dir; n.wait = 1 + Math.random() * 4; ni = n.i; }
+          var tx = f[ni * 2] * F2, tz = -f[ni * 2 + 1] * F2, dx = tx - n.x, dz = tz - n.z, dl = Math.hypot(dx, dz), st = n.sp * dt;
+          if (dl <= st) { n.x = tx; n.z = tz; n.i = ni; if (Math.random() < 0.08) n.wait = 2 + Math.random() * 5; } else { n.x += dx / dl * st; n.z += dz / dl * st; n.mv = true; var tb = Math.atan2(dx, dz), db = Math.atan2(Math.sin(tb - n.body), Math.cos(tb - n.body)); n.body += db * Math.min(1, dt * 8); } }
+      });
+      var sv = [COL.tunic, COL.pants, COL.skin, COL.hair];
+      NPCS.forEach(function (n) { var w = npcWorld(n); if (Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT > 320) return; COL.tunic = n.tun; COL.pants = n.pan; COL.skin = n.skin; COL.hair = n.hair; drawFig(w[0], groundAt(w[0], w[1]), w[1], n.body, n.mv ? now / 110 + n.ph : 0, n.mv, false, vpRot, far, 1); });
+      COL.tunic = sv[0]; COL.pants = sv[1]; COL.skin = sv[2]; COL.hair = sv[3];
+    }
+    function npcNearest() { var b = null, bd = 16; NPCS.forEach(function (n) { var w = npcWorld(n), d = Math.hypot(w[0] - WALK.x, w[1] - WALK.z) / FT; if (d < bd) { bd = d; b = n; } }); return b; }
+    function npcTalk(n, pre) {
+      var pl = { n: n.C === CITYS[0] ? 'Lanca' : 'the city', seed: 'street' + n.id, pop: 0, role: 'townsperson' }; n.mv = false; n.wait = 6;
+      var h = hseed('street' + n.id), opts = [['Ask what people are talking about', function () { npcTalk(n, '"' + RUMOR[(h + (QS.seq || 0)) % RUMOR.length] + '"'); }], ['Ask for directions', function () { npcTalk(n, '"The market is straight on, and the gate is behind you. Mind the guards."'); }], ['Leave', closeTalk]];
+      talkUI(pl, pre || '"Well met, traveller."', opts);
     }
     function drawFig(px, py, pz, body, phase, moving, sprint, vpRot, far, sc) {
       var m = buildFigure(phase, moving, sprint);
@@ -1727,6 +1766,7 @@ var fl = (function () {
         if (full) { var key = ((X2 / 80) | 0) + ',' + ((Y2 / 16) | 0); if (used[key]) return; used[key] = 1; }
         g.fillStyle = '#ffd34d'; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.arc(X2, Y2, full ? 3.5 : 3, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.lineWidth = 3; g.strokeText(p.n, X2 + 6, Y2 + 4); g.fillText(p.n, X2 + 6, Y2 + 4); });
       (ENC.foes || []).forEach(function (f) { if (!f || f.dead) return; var X3 = Sx / 2 + (f.x - cx) / FT * k, Y3 = Sy / 2 + (f.z - cz) / FT * k; if (X3 < 2 || X3 > Sx - 2 || Y3 < 2 || Y3 > Sy - 2) return; g.fillStyle = '#e04646'; g.strokeStyle = '#000'; g.lineWidth = 1; g.beginPath(); g.arc(X3, Y3, 3.5, 0, 7); g.fill(); g.stroke(); });
+      if (!full && R <= 4000) NPCS.forEach(function (n) { var w = npcWorld(n), X4 = Sx / 2 + (w[0] - cx) / FT * k, Y4 = Sy / 2 + (w[1] - cz) / FT * k; if (X4 < 2 || X4 > Sx - 2 || Y4 < 2 || Y4 > Sy - 2) return; g.fillStyle = '#d8f0ff'; g.strokeStyle = '#000'; g.lineWidth = 1; g.beginPath(); g.arc(X4, Y4, 2.5, 0, 7); g.fill(); g.stroke(); });
       var PX = Sx / 2 + (pl.x - cx) / FT * k, PY = Sy / 2 + (pl.z - cz) / FT * k; if (PX > -10 && PX < Sx + 10 && PY > -10 && PY < Sy + 10) { g.save(); g.translate(PX, PY); g.rotate(-pl.yaw); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -9); g.lineTo(6, 7); g.lineTo(0, 3); g.lineTo(-6, 7); g.closePath(); g.fill(); g.stroke(); g.restore(); }
     }
     function mapSpan(R) { return R >= 5280 ? (R * 2 / 5280).toFixed(R >= 26400 ? 0 : 1) + ' mi across' : Math.round(R * 2) + ' ft across'; }
