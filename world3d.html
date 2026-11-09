@@ -1408,13 +1408,14 @@ var fl = (function () {
     (function titleScreen() {
       if (/[?&](dev=1|notitle)/.test(location.search)) return;
       heroRefresh(); var pos = null; try { pos = JSON.parse(localStorage.getItem('dnd.pos') || 'null'); } catch (e) { }
-      var o = document.createElement('div'); o.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,rgba(30,22,14,.72),rgba(6,5,4,.93));font-family:Georgia,serif;color:#e8dfcb;text-align:center';
+      var cam0 = { x: cam.x, y: cam.y, z: cam.z, yaw: cam.yaw, pitch: cam.pitch }; window.__TITLE = true; var tst = document.createElement('style'); tst.textContent = '#hud,#info,#mini{display:none !important}'; document.head.appendChild(tst);
+      var o = document.createElement('div'); o.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 45%,rgba(8,6,4,.38),rgba(3,2,2,.82));font-family:Georgia,serif;color:#e8dfcb;text-align:center';
       function btn(label, sub, f, main) { var b = document.createElement('button'); b.style.cssText = 'display:block;width:300px;margin:10px auto;padding:12px 16px;cursor:pointer;font:' + (main ? '600 18px' : '16px') + ' Georgia,serif;letter-spacing:.08em;color:' + (main ? '#1a120a' : '#e8dfcb') + ';background:' + (main ? 'linear-gradient(180deg,#e2c27a,#b48d43)' : 'rgba(26,20,14,.85)') + ';border:1px solid #8a6a3f;border-radius:4px'; b.innerHTML = label + (sub ? '<div style="font-size:12px;font-weight:400;letter-spacing:0;margin-top:3px;opacity:.75">' + sub + '</div>' : ''); b.onclick = f; return b; }
       var mus = null, musOn = true, vol = 0.55; try { musOn = localStorage.getItem('myosia3d.mute') !== '1'; } catch (e) { }
       try { mus = new Audio('Myosia_Title_Screen.mp3'); mus.loop = true; mus.volume = vol; } catch (e) { }
       function musPlay() { if (mus && musOn && mus.paused) { var pr = mus.play(); if (pr && pr.catch) pr.catch(function () { }); } }
       function musFade() { if (!mus) return; var m = mus, k = setInterval(function () { m.volume = Math.max(0, m.volume - 0.04); if (m.volume <= 0.001) { clearInterval(k); m.pause(); } }, 90); mus = null; }
-      function close() { musFade(); o.remove(); }
+      function close() { musFade(); o.remove(); window.__TITLE = false; tst.remove(); cam.x = cam0.x; cam.y = cam0.y; cam.z = cam0.z; cam.yaw = cam0.yaw; cam.pitch = cam0.pitch; }
       musPlay(); o.addEventListener('pointerdown', musPlay); window.addEventListener('keydown', musPlay, { once: true });
       var mb = document.createElement('button'); mb.style.cssText = 'position:absolute;right:16px;top:14px;background:rgba(26,20,14,.85);color:#e8dfcb;border:1px solid #8a6a3f;border-radius:4px;padding:6px 12px;cursor:pointer;font:15px Georgia,serif';
       function mbl() { mb.textContent = musOn ? '\u266A Music on' : '\u266A Music off'; } mbl();
@@ -2039,13 +2040,22 @@ var fl = (function () {
       setAtmoUniforms(p, far); setShadowUniforms(p);
       gl.uniform1f(p.u.uBio, bioEl.checked ? 1 : 0); gl.uniform2f(p.u.uGal, GALX, GALZ); gl.uniform1f(p.u.uPxK, pxK);
     }
+    // title screen: slow cinematic orbit around the largest city
+    var TC = null;
+    function titleCam(tt) {
+      if (!TC) { var bp = null; for (var j = 0; j < P.length; j++) { if (groundAt(P[j].x, P[j].y) > 0.08) continue; if (!bp || (P[j].pop || 0) > (bp.pop || 0)) bp = P[j]; } if (!bp) bp = P[0]; TC = { x: bp.x, z: bp.y, a0: 0.6 }; }
+      var a = TC.a0 + tt * 0.045, R = 0.3 + 0.06 * Math.sin(tt * 0.05), cx = TC.x + Math.cos(a) * R, cz = TC.z + Math.sin(a) * R;
+      var ty = groundAt(TC.x, TC.z) + 0.0008, gy = Math.max(groundAt(cx, cz), groundAt((cx + TC.x) / 2, (cz + TC.z) / 2), groundAt((cx + TC.x * 3) / 4, (cz + TC.z * 3) / 4), groundAt(TC.x, TC.z)), cy = Math.max(gy + 0.03, ty + 0.075 + 0.01 * Math.sin(tt * 0.11));
+      cam.x = cx; cam.z = cz; cam.y = cy;
+      var dx = TC.x - cx, dz = TC.z - cz; cam.yaw = Math.atan2(-dx, -dz); cam.pitch = Math.atan2(ty - cy, Math.hypot(dx, dz)) * 0.9;
+    }
     // ================= main loop =================
     var last = performance.now(), frame = 0, fpsAcc = 0, fpsN = 0, fpsT = performance.now();
     function loop(t) {
       perfT = t / 1000;
       var dt = Math.min(0.1, (t - last) / 1000), rawDt = (t - last) / 1000; last = t;
       var gnd = groundAt(cam.x, cam.z), alt = Math.max(0.0004, cam.y - gnd);
-      if (WALK.on) walkStep(dt); else {
+      if (window.__TITLE) titleCam(t / 1000); else if (WALK.on) walkStep(dt); else {
       var v = Math.max(alt, 0.0015) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
       if (keys.w || keys.arrowup) { cam.x += f[0] * v; cam.y += f[1] * v; cam.z += f[2] * v; }
       if (keys.s || keys.arrowdown) { cam.x -= f[0] * v; cam.y -= f[1] * v; cam.z -= f[2] * v; }
