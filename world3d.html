@@ -299,6 +299,11 @@ canvas:active{cursor:grabbing}
       'c+=uSunCol*(pow(sd,8.0)*(0.03+0.14*low)+pow(sd,180.0)*0.25);return c;}\n' +
       'vec3 tonemap(vec3 x){x*=uExp;x=(x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14);return pow(clamp(x,0.0,1.0),vec3(0.4545));}\n' +
       'vec3 fogColAt(vec3 rd){vec3 h=vec3(rd.x,0.0,rd.z);float l=length(h);h=l>1e-4?h/l:vec3(1.0,0.0,0.0);return skyCol(vec3(h.x,0.02,h.z)*0.9995);}\n';
+    // ---- globe: the map is a patch of a sphere; vertices are bent azimuthally around the camera's foot point ----
+    var PLANET = /[?&]flat/.test(location.search) ? 0 : Math.sqrt(W * H / (0.8 * Math.PI));   // radius in map px so the map covers ~20% of the sphere
+    var G_CURVE = 'uniform float uPR;\n' +
+      'vec3 curveP(vec3 r,float cy){if(uPR<=0.0)return r;float d=length(r.xz);if(d<1e-7)return r;float th=min(d/uPR,3.1);float h=r.y+cy;float s=sin(th*0.5);float k=(1.0+h/uPR)*(th>1e-4?sin(th)/th:1.0);return vec3(r.x*k,r.y-2.0*s*s*(h+uPR),r.z*k);}\n' +
+      'vec3 curveN(vec3 n,vec3 r,float cy){if(uPR<=0.0)return n;float d=length(r.xz);if(d<1e-7)return n;float th=min(d/uPR,3.1);vec2 u=r.xz/d;float nr=dot(n.xz,u);vec2 nt=n.xz-nr*u;float c=cos(th),sn=sin(th);float a=nr*c+n.y*sn;return vec3(a*u.x+nt.x,-nr*sn+n.y*c,a*u.y+nt.y);}\n';
     var G_SHADOW = 'uniform sampler2D uSh;uniform mat4 uLVP;uniform vec4 uShP;\n' +
       'float unpackD(vec4 c){return dot(c,vec4(1.0,1.0/255.0,1.0/65025.0,1.0/16581375.0));}\n' +
       'float shadowAt(vec3 rel,float bias){if(uShP.x<=0.0)return 1.0;vec4 lp=uLVP*vec4(rel,1.0);vec3 sc=lp.xyz*0.5+0.5;' +
@@ -320,7 +325,7 @@ canvas:active{cursor:grabbing}
       'return lf*((0.02+0.10*h0)*t.x*(1.0-mw*0.4)+mw*0.50*h0*(t.y*0.45+0.55*(smoothstep(-0.12,0.12,t.y)*2.0-1.0)));}\n';
     var CLIP_VS = 'precision highp float;attribute vec2 aIJ;uniform highp sampler2D uHT;uniform sampler2D uNZ;uniform sampler2D uLF;uniform mat4 uVP;uniform vec2 uOrg;uniform vec2 uRel;uniform float uCamY;uniform float uS;uniform vec2 uWH;uniform float uEx;uniform float uMorph;uniform vec2 uMr;uniform sampler2D uED;uniform vec4 uEDc;uniform vec4 uEDf;' +
       'uniform float uW[12];uniform float uWc[12];uniform vec2 uOct[12];uniform vec2 uRot[12];uniform float uA[12];' +
-      'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
+      G_CURVE + 'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;\n' +
       G_RIV + 'vec4 tx(vec2 i){i=clamp(i,vec2(0.0),uWH-1.0);return texture2D(uHT,(i+0.5)/uWH);}\n' +
       'float dec(vec4 t){vec3 b=floor(t.rgb*255.0+0.5);return (b.r*65536.0+b.g*256.0+b.b)/16777215.0*0.5;}\n' +
       'float vnz(vec2 p){vec2 i=floor(p);vec2 f=p-i;f=f*f*f*(f*(f*6.0-15.0)+10.0);vec2 uv=(i+0.5)/256.0;' +
@@ -350,12 +355,12 @@ canvas:active{cursor:grabbing}
       'else hc=hgt(loc,1.0,t0);' +
       'float e2=2.0*e;float cxm=hgt(loc-vec2(e2,0.0),1.0,t0);float cxp=hgt(loc+vec2(e2,0.0),1.0,t0);float czm=hgt(loc-vec2(0.0,e2),1.0,t0);float czp=hgt(loc+vec2(0.0,e2),1.0,t0);' +
       'vec3 n2=normalize(vec3(cxm-cxp,2.0*e2,czm-czp));h=mix(h,hc,a);n=normalize(mix(n,n2,a));}' +
-      'rel.y=h-uCamY;vRel=rel;vN=n;vW=uOrg+loc;vLocFt=loc*15840.0;vBy=by0;gl_Position=uVP*vec4(rel,1.0);}';
+      'rel.y=h-uCamY;vec3 rc=curveP(rel,uCamY);vRel=rc;vN=curveN(n,rel,uCamY);vW=uOrg+loc;vLocFt=loc*15840.0;vBy=by0;gl_Position=uVP*vec4(rc,1.0);}';
     // coarse world mesh (static) beyond the clipmap
     var KV = 'precision highp float;attribute vec2 axz;attribute vec3 ad;uniform mat4 uVP;uniform float uEx;uniform vec3 uCam;uniform sampler2D uLF;uniform vec2 uWH;' + G_LF +
-      'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;' +
+      G_CURVE + 'varying vec3 vRel;varying vec3 vN;varying vec2 vW;varying vec2 vLocFt;varying float vBy;' +
       'void main(){float y=ad.x;float yy=y>0.0?y*(1.0+(uEx-1.0)*smoothstep(0.0004,0.005,y)):0.0;if(y>0.0)yy=max(yy+lform(axz,yy),0.0003);float dyx=ad.y,dyz=ad.z;float ex=1.0+(uEx-1.0)*smoothstep(0.0004,0.005,y);' +
-      'vN=normalize(vec3(-dyx*ex,1.0,-dyz*ex));vec3 rel=vec3(axz.x-uCam.x,yy-uCam.y,axz.y-uCam.z);vRel=rel;vW=axz;vLocFt=axz*15840.0;vBy=y;gl_Position=uVP*vec4(rel,1.0);}';
+      'vec3 nn=normalize(vec3(-dyx*ex,1.0,-dyz*ex));vec3 rel=vec3(axz.x-uCam.x,yy-uCam.y,axz.y-uCam.z);vec3 rc=curveP(rel,uCam.y);vN=curveN(nn,rel,uCam.y);vRel=rc;vW=axz;vLocFt=axz*15840.0;vBy=y;gl_Position=uVP*vec4(rc,1.0);}';
 
     // ================= terrain fragment shader =================
     var TERR_FS = G_FHEAD + G_COMMON + G_SHADOW +
@@ -425,11 +430,11 @@ canvas:active{cursor:grabbing}
       'float lineK=smoothstep(12.0,70.0,dist);if(lineK>0.0){float lw=dist*0.0016*uPxK;float ln=1.0-smoothstep(lw*0.6,lw*1.25,abs(L-0.5));col=mix(col,vec3(0.004,0.006,0.01),ln*0.55*lineK);}\n' +
       'float f=1.0-exp(-dist*uFogK);col=mix(col,fogc,clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
 
-    var UCLIP = ['uLF', 'uRV', 'uHT', 'uNZ', 'uVP', 'uOrg', 'uRel', 'uCamY', 'uS', 'uWH', 'uEx', 'uMorph', 'uMr', 'uW', 'uWc', 'uOct', 'uRot', 'uA', 'uED', 'uEDc', 'uEDf'];
+    var UCLIP = ['uPR', 'uLF', 'uRV', 'uHT', 'uNZ', 'uVP', 'uOrg', 'uRel', 'uCamY', 'uS', 'uWH', 'uEx', 'uMorph', 'uMr', 'uW', 'uWc', 'uOct', 'uRot', 'uA', 'uED', 'uEDc', 'uEDf'];
     var UFRAG = ['uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime', 'uSh', 'uLVP', 'uShP', 'uC', 'uB', 'uDet', 'uSD', 'uBio', 'uFO0', 'uFO1', 'uFO2', 'uGal', 'uHole', 'uPxK'];
     var PC = mkProg(CLIP_VS, '#define CLIP 1\n' + TERR_FS, ['aIJ'], UCLIP.concat(UFRAG));
     var PCS = mkProg(CLIP_VS, DEPTH_FS, ['aIJ'], UCLIP);
-    var PK = mkProg(KV, TERR_FS, ['axz', 'ad'], ['uVP', 'uEx', 'uCam', 'uWH', 'uHT', 'uRV', 'uLF'].concat(UFRAG));
+    var PK = mkProg(KV, TERR_FS, ['axz', 'ad'], ['uPR', 'uVP', 'uEx', 'uCam', 'uWH', 'uHT', 'uRV', 'uLF'].concat(UFRAG));
     // per-program uniforms that never change
     var ROTU = new Float32Array(NOCT * 2), AU = new Float32Array(NOCT);
     for (k = 0; k < NOCT; k++) { ROTU[k * 2] = OCT[k].c / OCT[k].lam; ROTU[k * 2 + 1] = OCT[k].s / OCT[k].lam; AU[k] = OCT[k].a; }
@@ -556,6 +561,30 @@ canvas:active{cursor:grabbing}
       'gl_FragColor=vec4(tonemap(c),1.0);}';
     var PSKY = mkProg(SKY_VS, SKY_FS, ['aP'], ['uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime', 'uR', 'uU', 'uF', 'uTan', 'uAsp', 'uSunD', 'uMoonD', 'uStar', 'uCamP', 'uCloud', 'uDet']);
     var bQuad = buf(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]));
+    // ---- the rest of the planet: a sea disc centred on the camera, bent onto the sphere ----
+    var SEA = null;
+    if (PLANET > 0) {
+      var SR = 320, SS = 256, sv = new Float32Array((SR * SS + 1) * 2), si = [], d0 = 0.002, dm = PLANET * 3.0, rt = Math.pow(dm / d0, 1 / (SR - 1)), q2 = 2, r2, a2;
+      for (r2 = 0; r2 < SR; r2++) { var dd = d0 * Math.pow(rt, r2); for (a2 = 0; a2 < SS; a2++) { var an = a2 / SS * 6.2831853; sv[q2++] = Math.cos(an) * dd; sv[q2++] = Math.sin(an) * dd; } }
+      for (a2 = 0; a2 < SS; a2++) si.push(0, 1 + a2, 1 + (a2 + 1) % SS);
+      for (r2 = 0; r2 < SR - 1; r2++) for (a2 = 0; a2 < SS; a2++) { var A = 1 + r2 * SS + a2, B = 1 + r2 * SS + (a2 + 1) % SS, C = A + SS, D2 = B + SS; si.push(A, C, B, B, C, D2); }
+      var SVS = 'precision highp float;attribute vec2 aXZ;uniform mat4 uVP;uniform float uCamY;' + G_CURVE + 'varying vec3 vRel;varying vec3 vN;\n' +
+        'void main(){vec3 rel=vec3(aXZ.x,-uCamY,aXZ.y);vec3 rc=curveP(rel,uCamY);vRel=rc;vN=normalize(rc-vec3(0.0,-uCamY-uPR,0.0));gl_Position=uVP*vec4(rc,1.0);}';
+      var SFS = G_FHEAD + G_COMMON + 'varying vec3 vRel;varying vec3 vN;void main(){float dist=length(vRel);vec3 rd=vRel/dist;vec3 n=normalize(vN);vec3 V=-rd;float F=0.02+0.98*pow(1.0-max(dot(n,V),0.0),5.0);' +
+        'vec3 rr=reflect(rd,n);rr.y=abs(rr.y)+0.02;rr=normalize(rr);float nd=dot(n,uSun);float day=smoothstep(-0.2,0.15,nd);vec3 refl=skyCol(rr)*(0.12+0.88*day);' +
+        'vec3 body=vec3(0.003,0.026,0.068)*(uAmbTop*0.55+uSunCol*0.10*max(nd,0.0)+0.01);vec3 col=mix(body,refl,F)+uSunCol*pow(max(dot(rr,uSun),0.0),500.0)*5.0*day;' +
+        'float f=1.0-exp(-dist*uFogK);col=mix(col,fogColAt(rd),clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
+      SEA = mkProg(SVS, SFS, ['aXZ'], ['uPR', 'uVP', 'uCamY', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
+      SEA.bV = buf(gl.ARRAY_BUFFER, sv); SEA.bI = buf(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(si)); SEA.n = si.length;
+    }
+    function drawSea(vpRot, far) {
+      if (!SEA) return;
+      gl.useProgram(SEA); setAtmoUniforms(SEA, far); gl.uniform1f(SEA.u.uPR, PLANET); gl.uniform1f(SEA.u.uCamY, cam.y); gl.uniformMatrix4fv(SEA.u.uVP, false, vpRot);
+      gl.disable(gl.CULL_FACE); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(3, 3);
+      gl.bindBuffer(gl.ARRAY_BUFFER, SEA.bV); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, SEA.bI); gl.drawElements(gl.TRIANGLES, SEA.n, gl.UNSIGNED_INT, 0);
+      gl.disableVertexAttribArray(0); gl.disable(gl.POLYGON_OFFSET_FILL); gl.enable(gl.CULL_FACE);
+    }
     function drawSky(asp, far) {
       gl.useProgram(PSKY); setAtmoUniforms(PSKY, far);
       var cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
@@ -642,19 +671,19 @@ var fl = (function () {
 
     var FP = null;
     if (fl) {
-      var FV = 'precision highp float;attribute vec3 p;attribute vec3 n;attribute vec3 c;uniform mat4 uVP;uniform float uEx;uniform vec3 uCam;varying vec3 vN;varying vec3 vC;varying vec3 vRel;varying float vY;' +
-        'void main(){vec3 q=vec3(p.x,p.y*uEx,p.z);vN=vec3(n.x,n.y/uEx,n.z);vC=c;vY=p.y;vRel=q-uCam;gl_Position=uVP*vec4(vRel,1.0);}';
+      var FV = 'precision highp float;' + G_CURVE + 'attribute vec3 p;attribute vec3 n;attribute vec3 c;uniform mat4 uVP;uniform float uEx;uniform vec3 uCam;varying vec3 vN;varying vec3 vC;varying vec3 vRel;varying float vY;' +
+        'void main(){vec3 q=vec3(p.x,p.y*uEx,p.z);vN=vec3(n.x,n.y/uEx,n.z);vC=c;vY=p.y;vec3 rl=q-uCam;vRel=curveP(rl,uCam.y);vN=curveN(vec3(n.x,n.y/uEx,n.z),rl,uCam.y);gl_Position=uVP*vec4(vRel,1.0);}';
       var FF = G_FHEAD + G_COMMON + 'varying vec3 vN;varying vec3 vC;varying vec3 vRel;varying float vY;void main(){float dist=length(vRel);vec3 rd=vRel/dist;vec3 n=normalize(vN);float d=dot(n,uSun);' +
         'float st=smoothstep(0.55,0.86,1.0-abs(n.y));float band=0.5+0.5*sin(vY*820.0+sin(vY*130.0)*2.0)*(1.0-smoothstep(0.02,0.25,dist));' +
         'vec3 rock=vec3(0.50,0.45,0.40)*(0.82+0.3*band);vec3 cc=mix(vC,rock,st*step(0.0,n.y+1.0));' +
         'vec3 alb=pow(cc,vec3(2.0));vec3 amb=mix(uAmbBot,uAmbTop,n.y*0.5+0.5);vec3 col=alb*(uSunCol*(max(d,0.0)*0.8+abs(d)*0.2)+amb);' +
         'float f=1.0-exp(-dist*uFogK);col=mix(col,fogColAt(rd),clamp(f,0.0,1.0));gl_FragColor=vec4(tonemap(col),1.0);}';
-      FP = mkProg(FV, FF, ['p', 'n', 'c'], ['uVP', 'uEx', 'uCam', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
+      FP = mkProg(FV, FF, ['p', 'n', 'c'], ['uPR', 'uVP', 'uEx', 'uCam', 'uSun', 'uSunCol', 'uSkyTop', 'uSkyHor', 'uAmbTop', 'uAmbBot', 'uFogK', 'uExp', 'uTime']);
       FP.bP = buf(gl.ARRAY_BUFFER, fl.P); FP.bN = buf(gl.ARRAY_BUFFER, fl.N); FP.bC = buf(gl.ARRAY_BUFFER, fl.C); FP.bI = buf(gl.ELEMENT_ARRAY_BUFFER, fl.I);
     }
     function drawIslands(vpRot, far) {
       if (!FP) return;
-      gl.useProgram(FP); gl.disable(gl.CULL_FACE); setAtmoUniforms(FP, far);
+      gl.useProgram(FP); gl.disable(gl.CULL_FACE); setAtmoUniforms(FP, far); gl.uniform1f(FP.u.uPR, PLANET);
       gl.uniformMatrix4fv(FP.u.uVP, false, vpRot); gl.uniform1f(FP.u.uEx, EX); gl.uniform3f(FP.u.uCam, cam.x, cam.y, cam.z);
       [[FP.bP, 0], [FP.bN, 1], [FP.bC, 2]].forEach(function (q) { gl.bindBuffer(gl.ARRAY_BUFFER, q[0]); gl.enableVertexAttribArray(q[1]); gl.vertexAttribPointer(q[1], 3, gl.FLOAT, false, 0, 0); });
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, FP.bI); gl.drawElements(gl.TRIANGLES, fl.I.length, gl.UNSIGNED_INT, 0);
@@ -1979,6 +2008,7 @@ var fl = (function () {
       for (var j = 0; j < P.length && cnt < LB; j++) {
         var p = P[j]; if (!p.cap && p.pop < minPop) continue; if (Math.hypot(p.x - cam.x, p.y - cam.z) > lim) continue;
         var it = fl ? fl.topAt(p.x, p.y) : NaN, rx = p.x - cam.x, ry = (it === it ? it * EX : groundAt(p.x, p.y)) - cam.y, rz = p.y - cam.z;
+        if (PLANET > 0) { var dd = Math.hypot(rx, rz), th = Math.min(dd / PLANET, 3.1), hh0 = ry + cam.y; if (th > Math.acos(PLANET / (PLANET + Math.max(cam.y, 0))) + 0.01 + Math.sqrt(2 * Math.max(hh0, 0) / PLANET)) continue; if (dd > 1e-9) { var sn2 = Math.sin(th * 0.5), kk = (1 + hh0 / PLANET) * (th > 1e-4 ? Math.sin(th) / th : 1); ry = ry - 2 * sn2 * sn2 * (hh0 + PLANET); rx *= kk; rz *= kk; } }
         var cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz;
         if (cw <= 0.0001) continue; var sx = (cx / cw * 0.5 + 0.5) * w, sy = (1 - (cy / cw * 0.5 + 0.5)) * hh;
         if (sx < 0 || sx > w || sy < 20 || sy > hh) continue;
@@ -2050,7 +2080,7 @@ var fl = (function () {
       bindWorldTex(); bindTex(6, SHD.tex);
       // coarse world beyond the clip region
       var st11 = levelState(NLEV - 1), hr0 = 32 * st11.s;
-      gl.useProgram(PK); gl.uniformMatrix4fv(PK.u.uVP, false, vpRot); gl.uniform1f(PK.u.uEx, EX); gl.uniform3f(PK.u.uCam, cam.x, cam.y, cam.z);
+      gl.useProgram(PK); gl.uniform1f(PK.u.uPR, PLANET); gl.uniformMatrix4fv(PK.u.uVP, false, vpRot); gl.uniform1f(PK.u.uEx, EX); gl.uniform3f(PK.u.uCam, cam.x, cam.y, cam.z);
       setFragCommon(PK, far, pxK); gl.uniform2f(PK.u.uFO0, 0, 0); gl.uniform2f(PK.u.uFO1, 0, 0); gl.uniform2f(PK.u.uFO2, 0, 0); gl.uniform4f(PK.u.uHole, st11.ox - hr0 + 1.0, st11.oz - hr0 + 1.0, st11.ox + hr0 - 1.0, st11.oz + hr0 - 1.0);
       gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, bKXZ); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -2058,8 +2088,9 @@ var fl = (function () {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bKI); gl.drawElements(gl.TRIANGLES, kidx.length, gl.UNSIGNED_INT, 0);
       gl.disableVertexAttribArray(0); gl.disableVertexAttribArray(1); gl.disable(gl.POLYGON_OFFSET_FILL);
       // clipmap levels
-      gl.useProgram(PC); gl.uniformMatrix4fv(PC.u.uVP, false, vpRot); setFragCommon(PC, far, pxK);
+      gl.useProgram(PC); gl.uniform1f(PC.u.uPR, PLANET); gl.uniformMatrix4fv(PC.u.uVP, false, vpRot); setFragCommon(PC, far, pxK);
       drawClipLevels(PC, NLEV - 1, true);
+      drawSea(vpRot, far);
       if (VEG) VEG.draw(vpRot, far, t);
       drawIslands(vpRot, far); drawCity(vpRot, far); drawPlayer(vpRot, far);
       if (usePost) postRun(vpRot, cv.width, cv.height, t);
