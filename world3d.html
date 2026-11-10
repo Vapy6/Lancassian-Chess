@@ -1423,7 +1423,7 @@ var fl = (function () {
       var box = document.createElement('div'); box.innerHTML = '<div style="font-size:54px;letter-spacing:.35em;color:#dcb96c;text-shadow:0 2px 18px #000">MYOSIA</div><div style="height:30px"></div>'; o.appendChild(box);
       var can = !!(HERO && pos && isFinite(pos.x));
       if (can) box.appendChild(btn('Continue', DNDUI_esc(HERO.name) + ', level ' + (HERO.level || 1) + ' ' + DNDUI_esc(HERO.cls || '') + ' · ' + calStr(CLK.day), function () { close(); cam.x = pos.x; cam.z = pos.z; cam.yaw = pos.yaw || 0; cam.y = Math.max(cam.y, groundAt(pos.x, pos.z) + 40); toggleWalk(); }, true));
-      box.appendChild(btn(can ? 'Explore the world' : 'Enter the world', 'Fly freely over the map', close, !can));
+      box.appendChild(btn(can ? 'Explore the world' : 'Enter the world', 'Fly freely over the map', function () { window.__FLYM = true; close(); }, !can));
       box.appendChild(btn(HERO ? 'Characters' : 'Create a character', HERO ? 'Switch or build a hero' : 'You need a hero to play', function () { location.href = 'character.html'; }));
       document.body.appendChild(o);
     })();
@@ -2049,6 +2049,15 @@ var fl = (function () {
       cam.x = cx; cam.z = cz; cam.y = cy;
       var dx = TC.x - cx, dz = TC.z - cz; cam.yaw = Math.atan2(-dx, -dz); cam.pitch = Math.atan2(ty - cy, Math.hypot(dx, dz)) * 0.9;
     }
+    // flyover music: plays only in fly mode after "Explore the world", fades out in walk mode
+    var FM_A = null;
+    setInterval(function () {
+      var muted = false; try { muted = localStorage.getItem('myosia3d.mute') === '1'; } catch (e) { }
+      var want = window.__FLYM && !window.__TITLE && !WALK.on && !muted;
+      if (!FM_A) { if (!want) return; try { FM_A = new Audio('Myosia_Flyover.mp3'); FM_A.loop = true; FM_A.volume = 0; } catch (e) { return; } }
+      if (want) { if (FM_A.paused) { var pr = FM_A.play(); if (pr && pr.catch) pr.catch(function () { }); } FM_A.volume = Math.min(0.5, FM_A.volume + 0.03); }
+      else if (!FM_A.paused) { FM_A.volume = Math.max(0, FM_A.volume - 0.04); if (FM_A.volume <= 0.001) FM_A.pause(); }
+    }, 120);
     // ================= main loop =================
     var last = performance.now(), frame = 0, fpsAcc = 0, fpsN = 0, fpsT = performance.now();
     function loop(t) {
