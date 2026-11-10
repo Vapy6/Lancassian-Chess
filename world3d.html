@@ -228,7 +228,8 @@ canvas:active{cursor:grabbing}
       }
       var h0 = by * (1 + (EX - 1) * sstep(0.0004, 0.005, by)); return rcutC(x, z, Math.max(h0 + det * rough * lf * (1 + EX / 50) + lformC(x, z, h0), 0.0003));
     }
-    function groundAt(x, z) { x = Math.max(0, Math.min(W - 1, x)); z = Math.max(0, Math.min(H - 1, z)); return hgtC(x, z, W0); }
+    var INT = { on: false };
+    function groundAt(x, z) { if (INT.on) return INT.base; x = Math.max(0, Math.min(W - 1, x)); z = Math.max(0, Math.min(H - 1, z)); return hgtC(x, z, W0); }
     function baseAt(x, z) { return baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[0]; }
     function landAt(x, z) { return baseAtC(Math.max(0, Math.min(W - 1.0001, x)), Math.max(0, Math.min(H - 1.0001, z)))[1] > 0.5; }
     function dtS(ch, fx, fz, T) {            // bilinear, repeating sample of the detail tile (same maths as the GPU, finest mip)
@@ -1230,6 +1231,9 @@ var fl = (function () {
     function bldTalk(b, pre) {
       var sr_ = shopRole(b), pl = { n: b.name, pop: 0, role: sr_ || BROLE[b.type] || 'keeper', bld: true }, t = b.type, opts = [], n = npcFor(pl);
       function spend(g) { if (!HERO) { bldTalk(b, 'You have no active character.'); return false; } heroRefresh(); if (gpOf() < g) { bldTalk(b, '"You cannot afford that." (' + g + ' gp needed)'); return false; } addGp(-g); return true; }
+      var dq = QS.err.filter(function (x) { return x.kind === 'deliver' && x.to === b.name; })[0];
+      if (dq && hbQty('Sealed package') > 0) opts.unshift(['Deliver the sealed package from ' + dq.giverName, function () { heroRefresh(); DNDINV.drop(HERO, 'Sealed package', 1); hsave(); var r = errPay(dq, pl); bldTalk(b, '"Ah, at last! Tell ' + dq.giverName + ' I am grateful." ' + r); }]);
+      if (!INT.on && b.name && /^(SHOP|MARKET|ARTISAN|TAVERN|INN|RELIGIOUS|LAW_ENFORCEMENT|SERVICE|FACTION)$/.test(t) && WALK.on) opts.unshift(['Step inside', function () { closeTalk(); enterInterior(b); }]);
       if (sr_) opts.push([t === 'TAVERN' || t === 'INN' ? 'Buy food, drink and supplies' : 'Trade: browse their wares and sell your loot', function () { openShop(pl); }]);
       if (t === 'INN') opts.push(['Rent a bed for the night (5 gp): long rest', function () { if (!spend(5)) return; DNDINV.longRest(HERO); hsave(); clkAdvance(8); bldTalk(b, 'You sleep soundly and wake restored. <b style="color:#7ec27e">Long rest taken.</b>'); }]);
       if (t === 'TAVERN') opts.push(['Rest by the fire with a hot meal (1 gp): short rest', function () { if (!spend(1)) return; DNDINV.shortRest(HERO, 0); hsave(); clkAdvance(1); bldTalk(b, 'A warm meal and an hour by the fire. <b style="color:#7ec27e">Short rest taken.</b>'); }]);
@@ -1253,7 +1257,8 @@ var fl = (function () {
       if (TK.log) { TK.log.remove(); TK.log = null; return; }
       var b = document.createElement('div'); b.style.cssText = 'position:fixed;right:14px;top:70px;width:min(320px,90vw);z-index:45;background:rgba(14,16,22,.92);border:1px solid #3a4050;border-radius:10px;padding:12px 14px;color:#e8e6df;font:14px/1.5 system-ui,sans-serif';
       var h = '<div style="color:#e0b84a;font:600 14px Georgia">Quest log (J to close)</div>' + (HERO ? '<div style="color:#9aa0ad;font-size:12px">' + HERO.name + ' - ' + (HERO.xp || 0) + ' XP - ' + gpOf() + ' gp</div>' : '');
-      h += QS.active.length ? QS.active.map(function (q) { return '<div style="margin-top:6px">Clear the roads for ' + q.town + ': <b>' + q.have + '/' + q.need + '</b>' + (q.have >= q.need ? ' <span style="color:#7ec27e">- return to ' + q.town + '</span>' : '') + '</div>'; }).join('') : '<div style="margin-top:6px;color:#9aa0ad">No active quests. Talk to people in towns (T).</div>';
+      h += QS.active.length ? QS.active.map(function (q) { return '<div style="margin-top:6px">Clear the roads for ' + q.town + ': <b>' + q.have + '/' + q.need + '</b>' + (q.have >= q.need ? ' <span style="color:#7ec27e">- return to ' + q.town + '</span>' : '') + '</div>'; }).join('') : (QS.err && QS.err.length ? '' : '<div style="margin-top:6px;color:#9aa0ad">No active quests. Talk to people in towns (T).</div>');
+      QS.err.forEach(function (q) { var ok = q.kind === 'fetch' && hbQty(q.item) >= q.qty; h += '<div style="margin-top:6px">' + (q.kind === 'fetch' ? 'Errand for ' + q.giverName + ' (' + q.town + '): bring ' + q.qty + ' x ' + q.item + (ok ? ' <span style="color:#7ec27e">- you have it</span>' : '') : 'Deliver a sealed package to <b>' + q.to + '</b> (from ' + q.giverName + ')') + ' <span style="color:#9aa0ad">- ' + q.gp + ' gp</span></div>'; });
       if (QS.done.length) h += '<div style="margin-top:8px;color:#9aa0ad;font-size:12px">Completed: ' + QS.done.length + '</div>';
       b.innerHTML = h; document.body.appendChild(b); TK.log = b;
     }
@@ -1278,7 +1283,7 @@ var fl = (function () {
       });
     }
     // ================= hotbar (bottom centre, keys 1-9 and 0; click a slot to use it, right-click or click an empty slot to assign) =================
-    var HB = { bar: null, pick: null, slots: [], key: '', sig: '' };
+    var HB = { bar: null, pick: null, slots: [], key: '', sig: '', sel: -1, held: null };
     var HBI = {
       spell: '<path d="M16 3 L19 12 L28 13 L21 19 L23 28 L16 23 L9 28 L11 19 L4 13 L13 12 Z"/>', inv: '<path d="M11 11 Q16 2 21 11"/><path d="M9 11 H23 L26 27 H6 Z"/><path d="M12 17 H20"/>',
       quests: '<path d="M8 5 H22 Q25 5 25 8 V27 H11 Q8 27 8 24 Z"/><path d="M12 11 H21 M12 16 H21 M12 21 H18"/>', travel: '<circle cx="16" cy="16" r="11"/><path d="M20 12 L14 14 L12 20 L18 18 Z"/>',
@@ -1338,6 +1343,7 @@ var fl = (function () {
       if (ENC.box) { var fr = ENC.box.querySelector('iframe'), s0 = HB.slots && HB.slots[i]; if (!s0) { hbPicker(i); return; } if (fr && fr.contentWindow) { var bt = s0.t === 'act' ? (HBA[s0.n] && HBA[s0.n].bt) : null; fr.contentWindow.postMessage({ dndHotbar: { t: s0.t, n: s0.n, bt: bt } }, '*'); } return; }
       heroRefresh(); if (!HERO) return; DNDINV.ensure(HERO); var sl = HB.slots[i];
       if (!sl) { hbPicker(i); return; }
+      HB.sel = i;
       if (sl.t === 'act') { if (HBA[sl.n].bt) walkMsg(HBA[sl.n].n + ' is used in battle.'); else HBA[sl.n].f(); }
       else if (sl.t === 'spell') { if (sl.n === 'Cure Wounds' || sl.n === 'Healing Word') hbCastHeal(sl.n); else walkMsg(sl.n + ' is cast in battle (press E to seek an encounter).'); }
       else { var kd = DNDINV.kind(sl.n), r; if (!hbQty(sl.n)) { walkMsg('You do not have ' + sl.n + ' any more.'); return; }
@@ -1363,12 +1369,32 @@ var fl = (function () {
       draw(); document.body.appendChild(p);
     }
     function hbClosePick() { if (HB.pick) { HB.pick.remove(); HB.pick = null; } }
+    // held item: a hand holding the selected hotbar item, bottom right in walk mode, swaying as you move
+    var HELD = { el: null, sig: '' };
+    function heldTick(tm) {
+      var show = WALK.on && HERO && window.DNDUI && !INV.box && !TK.box && !ENC.box && !FM.el && !TITLE_ON();
+      if (!HELD.el) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;right:6%;bottom:-30px;width:230px;height:300px;z-index:35;pointer-events:none;transform-origin:70% 100%'; document.body.appendChild(e); HELD.el = e; }
+      var el = HELD.el; if (!show) { el.style.display = 'none'; return; } el.style.display = 'block';
+      var sl = HB.sel >= 0 ? HB.slots[HB.sel] : null, nm = sl && sl.t !== 'act' ? sl.n : null;
+      if (!nm) { var eq = HERO.equipped || {}; nm = eq.mainHand || eq.weapon || eq.main || eq.mainhand || null; }
+      var sig = (sl ? sl.t : '') + '|' + nm; if (sig !== HELD.sig) { HELD.sig = sig;
+        var inner = !nm ? '' : sl && sl.t === 'spell' ? HBI.spell : (DNDUI.IC[DNDUI.iconKey(nm)] || DNDUI.IC.tool), col = sl && sl.t === 'spell' ? '#9fc4f0' : '#dcb96c';
+        el.innerHTML = '<svg viewBox="0 0 200 300" style="width:100%;height:100%;overflow:visible"><defs><linearGradient id="hsk" x1="0" x2="1"><stop offset="0" stop-color="#d9a47c"/><stop offset="1" stop-color="#a8714e"/></linearGradient></defs>' +
+          '<path d="M95 300 L88 205 Q86 180 104 176 L150 176 Q170 180 166 205 L172 300 Z" fill="#3b2a1c" stroke="#1a110a" stroke-width="2"/>' +
+          (nm ? '<g transform="translate(40,36) scale(4.4) rotate(0 16 16)" fill="none" stroke="' + col + '" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 3px #000)">' + inner + '</g>' : '') +
+          '<path d="M92 190 Q96 160 112 162 Q140 158 158 168 Q172 178 164 198 Q150 216 118 214 Q96 212 92 190 Z" fill="url(#hsk)" stroke="#6b4228" stroke-width="2"/>' +
+          '<path d="M104 166 q4 -14 12 -2 M124 160 q4 -16 12 -2 M142 164 q6 -14 12 0" fill="none" stroke="#6b4228" stroke-width="2.5" stroke-linecap="round"/></svg>'; }
+      var mv = (keys.w || keys.a || keys.s || keys.d || keys.arrowup || keys.arrowdown) ? 1 : 0, t = tm / 1000;
+      HELD.k = (HELD.k || 0) + ((mv - (HELD.k || 0)) * 0.1);
+      el.style.transform = 'translate(' + (Math.sin(t * 6) * 10 * HELD.k + Math.sin(t * 1.1) * 3) + 'px,' + (Math.abs(Math.sin(t * 6)) * 12 * HELD.k + Math.sin(t * 1.4) * 3) + 'px) rotate(' + (Math.sin(t * 6) * 2 * HELD.k) + 'deg)';
+    }
+    function TITLE_ON() { return !!window.__TITLE; }
     function hudTick() {
       var hudEl = document.getElementById('hud'); if (hudEl) hudEl.style.display = WALK.on ? 'none' : '';
       var show = WALK.on && !TK.box && (!INV.box || !INV.shopTown); heroRefresh();
       if (!show || !HERO || !window.DNDINV || !window.DNDUI) { if (HB.bar) HB.bar.style.display = 'none'; hbClosePick(); return; }
       if (HB.key !== hbKey()) { DNDINV.ensure(HERO); HB.key = hbKey(); HB.slots = hbLoad(); HB.sig = ''; }
-      var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), sig = [hp, mx, HERO.ac, gpOf(), JSON.stringify(HB.slots), JSON.stringify(HERO.inventory), JSON.stringify(HERO.equipped), HERO.level].join('|');
+      var hp = Math.max(0, HERO.hp), mx = Math.max(1, HERO.hpMax), sig = [hp, mx, HERO.ac, gpOf(), JSON.stringify(HB.slots), JSON.stringify(HERO.inventory), JSON.stringify(HERO.equipped), HERO.level, HB.sel].join('|');
       if (!HB.bar) { HB.bar = document.createElement('div'); HB.bar.style.cssText = 'position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;display:flex;align-items:stretch;gap:10px;padding:8px 12px;background:linear-gradient(180deg,rgba(35,28,20,.95),rgba(14,11,8,.96));border:1px solid #8a6a3f;border-radius:6px;box-shadow:inset 0 0 0 1px #000a,0 6px 24px #000c;user-select:none;font:13px Georgia,serif;color:#e8dfcb'; document.body.appendChild(HB.bar); }
       HB.bar.style.display = 'flex'; HB.bar.style.zIndex = INV.box ? 49 : 40; if (sig === HB.sig) return; HB.sig = sig;
       var pc = Math.min(100, hp / mx * 100), col = pc > 50 ? '#5fa36a' : pc > 25 ? '#c9a23c' : '#c9675a', ini = (HERO.name || '?').charAt(0).toUpperCase();
@@ -1376,8 +1402,8 @@ var fl = (function () {
         '<div style="width:100%;height:8px;margin-top:5px;background:#000;border:1px solid #3a2c1b;border-radius:2px;overflow:hidden"><div style="height:100%;width:' + pc + '%;background:' + col + '"></div></div><div style="font-size:11px;color:#b8ae9a;margin-top:2px">' + hp + '/' + mx + ' HP</div></div>';
       h += '<div style="display:flex;gap:5px;align-items:center">';
       for (var i = 0; i < 10; i++) {
-        var sl = HB.slots[i], q = sl && sl.t === 'item' ? hbQty(sl.n) : -1, dim = sl && sl.t === 'item' && !q, on = sl && sl.t === 'item' && hbEquipped(sl.n);
-        h += '<div data-i="' + i + '" title="' + DNDUI.esc(hbTip(sl)) + '" style="position:relative;width:48px;height:48px;border:1px solid ' + (on ? '#dcb96c' : '#5b4630') + ';border-radius:4px;background:linear-gradient(180deg,#241c13,#120e09);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:' + (dim ? 0.4 : 1) + '">' + hbIcon(sl) +
+        var sl = HB.slots[i], q = sl && sl.t === 'item' ? hbQty(sl.n) : -1, dim = sl && sl.t === 'item' && !q, on = sl && sl.t === 'item' && hbEquipped(sl.n), sel = i === HB.sel && sl;
+        h += '<div data-i="' + i + '" title="' + DNDUI.esc(hbTip(sl)) + '" style="position:relative;width:48px;height:48px;border:' + (sel ? '2px solid #f3d98a' : '1px solid ' + (on ? '#dcb96c' : '#5b4630')) + ';' + (sel ? 'box-shadow:0 0 10px #f3d98a99,inset 0 0 8px #dcb96c55;transform:translateY(-4px);' : '') + 'border-radius:4px;background:linear-gradient(180deg,#241c13,#120e09);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:' + (dim ? 0.4 : 1) + '">' + hbIcon(sl) +
           '<span style="position:absolute;left:3px;top:1px;font-size:10px;color:#8f8575">' + (i === 9 ? 0 : i + 1) + '</span>' + (q > 1 ? '<span style="position:absolute;right:3px;bottom:1px;font-size:11px;color:#e8dfcb">' + q + '</span>' : '') + (on ? '<span style="position:absolute;right:3px;top:2px;width:5px;height:5px;border-radius:50%;background:#dcb96c"></span>' : '') + '</div>';
       }
       h += '</div><div style="display:flex;flex-direction:column;justify-content:center;font-size:11px;color:#b8ae9a;min-width:56px"><div>Lv ' + (HERO.level || 1) + '</div><div>AC ' + HERO.ac + '</div><div>' + gpOf() + ' gp</div></div>';
@@ -1435,7 +1461,7 @@ var fl = (function () {
       if (pl && !TK.prompt) { var e = document.createElement('div'); e.style.cssText = 'position:fixed;left:50%;bottom:9vh;transform:translateX(-50%);z-index:44;background:rgba(14,16,22,.85);color:#e8e6df;border:1px solid #3a4050;border-radius:20px;padding:6px 16px;font:600 14px system-ui'; document.body.appendChild(e); TK.prompt = e; }
       if (TK.prompt) { if (pl) TK.prompt.textContent = 'Press T to talk to someone in ' + pl.n; TK.prompt.style.display = pl ? 'block' : 'none'; }
     }
-    function talkKey() { if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var nn = npcNearest(); if (nn && window.DNDINV) { npcTalk(nn); return; } var bs = BLD.sel && BLD.sel[0]; if (bs && bs.d < 60 && window.DNDINV) { heroRefresh(); bldTalk(bs.b); return; } var pl = nearTown(); if (pl) talkMenu(pl); }
+    function talkKey() { if (INT.on) { if (TK.box) closeTalk(); else intTalk(); return; } if (TK.box) { closeTalk(); return; } if (!WALK.on || ENC.box || INV.box) return; var nn = npcNearest(); if (nn && window.DNDINV) { npcTalk(nn); return; } var bs = BLD.sel && BLD.sel[0]; if (bs && bs.d < 60 && window.DNDINV) { heroRefresh(); bldTalk(bs.b); return; } var pl = nearTown(); if (pl) talkMenu(pl); }
     window.__ENC = ENC; window.__WALK = WALK; var WSTAT = false;
     function walkMsg(t) { var e = document.getElementById('wk'); if (e) e.textContent = t; }
     function toggleWalk() {
@@ -1452,7 +1478,7 @@ var fl = (function () {
       if (keys.w || keys.arrowup) { mx += f[0]; mz += f[1]; } if (keys.s || keys.arrowdown) { mx -= f[0]; mz -= f[1]; }
       if (keys.d || keys.arrowright) { mx += r[0]; mz += r[1]; } if (keys.a || keys.arrowleft) { mx -= r[0]; mz -= r[1]; }
       if (ENC.box && !(ENC.mine && ENC.left > 0.05) || TK.box || INV.box) { mx = 0; mz = 0; } var len = Math.hypot(mx, mz), sprint = !!keys.shift && !ENC.box, ox = WALK.x, oz = WALK.z; WALK.moving = len > 0;
-      function ok(nx, nz) { if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; if (CITYS.length && cityBlocked(nx, nz) && !cityBlocked(WALK.x, WALK.z)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
+      function ok(nx, nz) { if (INT.on) return intOk(nx, nz); if (nx < 1 || nz < 1 || nx > W - 2 || nz > H - 2 || !landSafe(nx, nz)) return false; if (CITYS.length && cityBlocked(nx, nz) && !cityBlocked(WALK.x, WALK.z)) return false; var run = Math.hypot(nx - WALK.x, nz - WALK.z); return !(WALK.grounded && run > 0 && (groundAt(nx, nz) - WALK.y) / run > 1.7); }
       if (WALK.moving) {
         var spd = 13 * FT * (sprint ? 3 : 1) * dt; if (ENC.box) spd = Math.min(spd, ENC.left * FT); var spd0 = spd, dx = mx / len * spd, dz = mz / len * spd;
         if (ok(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; } else if (ok(WALK.x + dx, WALK.z)) WALK.x += dx; else if (ok(WALK.x, WALK.z + dz)) WALK.z += dz;
@@ -1465,7 +1491,8 @@ var fl = (function () {
       WALK.vy -= 32 * FT * dt; WALK.y += WALK.vy * dt;
       if (WALK.y <= gnd + 0.0001 * FT * 10 && WALK.vy <= 0 || WALK.y < gnd) { WALK.y = gnd; WALK.vy = 0; WALK.grounded = true; } else WALK.grounded = false;
       var eye = 5.4 * FT, hx = WALK.x, hy = WALK.y + eye, hz = WALK.z;
-      if (WALK.third) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
+      if (INT.on) intExitCheck();
+      if (WALK.third && !INT.on) { var F = fwd(), d = WALK.dist * FT; cam.x = hx - F[0] * d; cam.y = hy - F[1] * d + 0.5 * FT; cam.z = hz - F[2] * d; } else { cam.x = hx; cam.y = hy; cam.z = hz; }
     }
     // ================= terrain sculpting (developer tool: open world3d.html?dev=1, press G in fly mode) =================
     var DEV = /[?&]dev=1/.test(location.search), SC = { open: false, tool: 'raise', layer: 0, rad: 2000, str: 10, painting: false, ptr: null, hit: null, stroke: null, undo: [], lastCam: '', ring: null, panel: null, save: 0 };
@@ -1691,13 +1718,90 @@ var fl = (function () {
       gl.drawArrays(gl.TRIANGLES, CITY.nRoad, CITY.nAll - CITY.nRoad);
       for (var q2 = 0; q2 < 3; q2++) gl.disableVertexAttribArray(q2); gl.enable(gl.CULL_FACE);
     }
+    // ---- building interiors: a small furnished room built from boxes, hung in empty sky over the map's NW corner; walk in through the door, leave through it ----
+    var IBOX = [];
+    function intLayout(t) {
+      var L = { w: 24, d: 18, solids: [], kx: 12, kz: 4.4, kind: 'shop' };
+      function box(x, z, w, d, h, col, y0) { L.solids.push([x, z, w, d, h || 3, col, y0 || 0]); }
+      var wood = [0.34, 0.22, 0.12], dark = [0.22, 0.14, 0.08], stone = [0.5, 0.48, 0.44];
+      if (t === 'TAVERN' || t === 'INN') {
+        L.w = 30; L.d = 22; L.kind = 'tavern'; L.kx = 12.5; L.kz = 2.5;
+        box(5, 3.6, 15, 1.6, 3.6, dark); box(2, 0.4, 26, 1, 7.5, wood); for (var i = 0; i < 9; i++) box(3 + i * 2.7, 0.5, 0.5, 0.5, 0.9, [0.2 + (i % 3) * 0.25, 0.5 - (i % 2) * 0.2, 0.3 + (i % 4) * 0.12], 4.2 + (i % 2) * 1.6);
+        box(28.4, 6, 1.6, 7, 4.5, stone); box(28.0, 8.2, 0.6, 2.6, 1.1, [1, 0.55, 0.12], 0.1);
+        [[5, 10], [14, 12], [21, 9], [8, 17], [19, 17]].forEach(function (q) { box(q[0], q[1], 3.6, 3.6, 2.5, wood); box(q[0] - 1.8, q[1] + 1, 1.1, 1.1, 1.5, dark); box(q[0] + 3.6, q[1] + 1, 1.1, 1.1, 1.5, dark); });
+        if (t === 'INN') { box(1, 14, 6, 3.5, 2, [0.5, 0.18, 0.18]); box(1, 18, 6, 3.5, 2, [0.5, 0.18, 0.18]); }
+      } else if (t === 'RELIGIOUS') {
+        L.w = 30; L.d = 26; L.kind = 'temple'; L.kx = 15; L.kz = 6;
+        box(11.5, 2.2, 7, 2.2, 3, [0.78, 0.76, 0.7]); box(14, 1.0, 2, 1, 6.5, [0.9, 0.78, 0.35], 0); box(8, 1.6, 1, 1, 4, [1, 0.8, 0.3], 0); box(21, 1.6, 1, 1, 4, [1, 0.8, 0.3], 0);
+        [11, 14.5, 18, 21.5].forEach(function (z) { box(4, z, 8, 1.1, 2.6, wood); box(18, z, 8, 1.1, 2.6, wood); });
+      } else {
+        L.kind = 'shop';
+        box(6, 6.6, 12, 1.6, 3.4, wood); box(1.2, 1.0, 21.5, 1.2, 7, dark); box(1.2, 4, 1.2, 9, 7, dark); box(21.6, 4, 1.2, 9, 7, dark);
+        for (var j = 0; j < 12; j++) box(2 + (j % 6) * 3.5, 0.9, 1.2, 0.9, 0.9, [0.3 + (j * 0.37 % 0.6), 0.25 + (j * 0.23 % 0.5), 0.2 + (j * 0.53 % 0.5)], 2 + (j % 3) * 1.8);
+        box(3, 11, 3.5, 3.5, 2.6, wood); box(4, 11.5, 1.2, 1.2, 0.5, [0.7, 0.3, 0.25], 2.6); box(16, 12, 3.5, 3.5, 2.6, wood); box(17.2, 12.6, 1.1, 1.1, 0.5, [0.3, 0.5, 0.7], 2.6);
+      }
+      return L;
+    }
+    function intMesh(L) {
+      var P = [], N = [], C = [];
+      function bx(x0, y0, z0, x1, y1, z1, c, inward) {
+        var f = [[[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], 0.86], [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], 0.86], [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], 1.12],
+          [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], 0.6], [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], 0.95], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], 0.95]];
+        f.forEach(function (q) { var nn = inward ? [-q[4][0], -q[4][1], -q[4][2]] : q[4], v = inward ? [q[0], q[3], q[2], q[2], q[1], q[0]] : [q[0], q[1], q[2], q[2], q[3], q[0]], k = q[5];
+          if (inward) v = [q[0], q[2], q[1], q[0], q[3], q[2]]; v.forEach(function (p) { P.push(p[0], p[1], p[2]); N.push(nn[0], nn[1], nn[2]); C.push(c[0] * k, c[1] * k, c[2] * k); }); });
+      }
+      var H = 10, wall = [0.80, 0.74, 0.62], tt = 0.8;
+      bx(-tt, -0.4, -tt, L.w + tt, 0, L.d + tt, [0.40, 0.28, 0.17]);                       // floor
+      bx(-tt, H, -tt, L.w + tt, H + 0.6, L.d + tt, [0.38, 0.27, 0.16]);                    // ceiling
+      bx(-tt, 0, -tt, L.w + tt, H, 0, wall); bx(-tt, 0, -tt, 0, H, L.d + tt, wall); bx(L.w, 0, -tt, L.w + tt, H, L.d + tt, wall);
+      bx(-tt, 0, L.d, L.w / 2 - 3, H, L.d + tt, wall); bx(L.w / 2 + 3, 0, L.d, L.w + tt, H, L.d + tt, wall); bx(L.w / 2 - 3, 7.2, L.d, L.w / 2 + 3, H, L.d + tt, wall);   // south wall with a door gap
+      for (var b = 3; b < L.w; b += 6) bx(b, H - 0.7, 0, b + 0.5, H, L.d, [0.25, 0.16, 0.09]);                                                                       // ceiling beams
+      L.solids.forEach(function (s) { bx(s[0], s[6], s[1], s[0] + s[2], s[6] + s[4], s[1] + s[3], s[5]); });
+      return { P: new Float32Array(P), N: new Float32Array(N), C: new Float32Array(C), n: P.length / 3 };
+    }
+    function enterInterior(b) {
+      if (INT.on || !WP) return; var L = intLayout(b.type), m = intMesh(L); closeTalk();
+      INT.saved = { x: WALK.x, z: WALK.z, y: WALK.y, body: WALK.body, third: WALK.third, yaw: cam.yaw, pitch: cam.pitch }; INT.L = L; INT.b = b; INT.m = m;
+      INT.ox = 3; INT.oz = 3; INT.base = 0.6; INT.bp = gl.createBuffer(); INT.bn = gl.createBuffer(); INT.bc = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, INT.bp); gl.bufferData(gl.ARRAY_BUFFER, m.P, gl.STATIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, INT.bn); gl.bufferData(gl.ARRAY_BUFFER, m.N, gl.STATIC_DRAW); gl.bindBuffer(gl.ARRAY_BUFFER, INT.bc); gl.bufferData(gl.ARRAY_BUFFER, m.C, gl.STATIC_DRAW);
+      INT.on = true; WALK.third = false; WALK.x = INT.ox + L.w / 2 * FT; WALK.z = INT.oz + (L.d - 2.4) * FT; WALK.y = INT.base; WALK.vy = 0; cam.yaw = 0; cam.pitch = 0; WALK.body = cam.yaw + Math.PI;
+      var h = hseed(b.name || 'x'); INT.kcol = [NTUN[h % NTUN.length], NPAN[(h >>> 3) % NPAN.length]]; INT.kskin = NSKIN[(h >>> 6) % NSKIN.length]; INT.khair = NHAIR ? NHAIR[(h >>> 9) % NHAIR.length] : [0.25, 0.15, 0.08];
+      walkMsg('Inside ' + (b.name || 'the building') + '. T talks to the keeper; walk out through the door to leave.');
+    }
+    function intOk(nx, nz) {
+      var L = INT.L, lx = (nx - INT.ox) / FT, lz = (nz - INT.oz) / FT, door = Math.abs(lx - L.w / 2) < 2.4;
+      if (lx < 1 || lx > L.w - 1 || lz < 1 || lz > L.d + (door ? 1.6 : -1)) return false;
+      for (var i = 0; i < L.solids.length; i++) { var s = L.solids[i]; if (s[6] > 1 && s[4] < 2) continue; if (s[6] > 1.5) continue; if (lx > s[0] - 0.9 && lx < s[0] + s[2] + 0.9 && lz > s[1] - 0.9 && lz < s[1] + s[3] + 0.9) return false; }
+      return true;
+    }
+    function intExitCheck() { var L = INT.L, lz = (WALK.z - INT.oz) / FT; if (lz > L.d + 0.6) leaveInterior(); }
+    function leaveInterior() {
+      var sv = INT.saved; INT.on = false; WALK.x = sv.x; WALK.z = sv.z; WALK.third = sv.third; WALK.y = groundAt(sv.x, sv.z); WALK.vy = 0; WALK.body = sv.body; cam.yaw = sv.yaw + Math.PI * (0); cam.pitch = sv.pitch;
+      [INT.bp, INT.bn, INT.bc].forEach(function (b) { gl.deleteBuffer(b); }); walkMsg('Back outside.');
+    }
+    window.__INT = function (t) { WALK.on = true; enterInterior({ name: "Test Hall", type: t }); };
+    function intTalk() {
+      var L = INT.L, lx = (WALK.x - INT.ox) / FT, lz = (WALK.z - INT.oz) / FT;
+      if (Math.hypot(lx - L.kx, lz - L.kz) < 9) bldTalk(INT.b); else walkMsg('Nobody close enough to talk to. Walk up to the keeper.');
+    }
+    function drawInterior(vpRot, far) {
+      var L = INT.L; if (!L) return;
+      gl.useProgram(WP); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); setAtmoUniforms(WP, far);
+      gl.uniform3f(WP.u.uSunCol, 0.55, 0.42, 0.28); gl.uniform3f(WP.u.uSun, 0.25, 0.9, 0.3); gl.uniform3f(WP.u.uAmbTop, 0.5, 0.4, 0.3); gl.uniform3f(WP.u.uAmbBot, 0.3, 0.22, 0.15); gl.uniform1f(WP.u.uFogK, 0.0); gl.uniform1f(WP.u.uExp, 1.0);
+      gl.uniformMatrix4fv(WP.u.uVP, false, vpRot); gl.uniform3f(WP.u.uOff, INT.ox - cam.x, INT.base - cam.y, INT.oz - cam.z); gl.uniform2f(WP.u.uRot, 1, 0); gl.uniform1f(WP.u.uScale, FT);
+      [[INT.bp, 0], [INT.bn, 1], [INT.bc, 2]].forEach(function (q) { gl.bindBuffer(gl.ARRAY_BUFFER, q[0]); gl.enableVertexAttribArray(q[1]); gl.vertexAttribPointer(q[1], 3, gl.FLOAT, false, 0, 0); });
+      gl.disable(gl.CULL_FACE); gl.drawArrays(gl.TRIANGLES, 0, INT.m.n);
+      var sv = [COL.tunic, COL.pants, COL.skin, COL.hair]; COL.tunic = INT.kcol[0]; COL.pants = INT.kcol[1]; COL.skin = INT.kskin; COL.hair = INT.khair;
+      var kx = INT.ox + L.kx * FT, kz = INT.oz + L.kz * FT, face = Math.atan2(WALK.x - kx, WALK.z - kz);
+      drawFig(kx, INT.base, kz, face, 0, false, false, vpRot, far, 1); COL.tunic = sv[0]; COL.pants = sv[1]; COL.skin = sv[2]; COL.hair = sv[3];
+    }
     function drawPlayer(vpRot, far) {
       if (!WP || !WALK.on) return;
       var tnow = performance.now(), fdt = Math.min(0.1, (tnow - (ENC.t || tnow)) / 1000); ENC.t = tnow;
       ENC.foes.forEach(function (f) { f.mv = false; if (f.tx === undefined) return; var ddx = f.tx - f.x, ddz = f.tz - f.z, dl = Math.hypot(ddx, ddz), st = 30 * FT * fdt; if (dl > 1e-9) { f.mv = true; if (dl <= st) { f.x = f.tx; f.z = f.tz; f.mv = false; } else { f.x += ddx / dl * st; f.z += ddz / dl * st; } f.y = groundAt(f.x, f.z); } if (f.mv || true) f.body = Math.atan2(WALK.x - f.x, WALK.z - f.z); });
       if (WALK.third) drawFig(WALK.x, WALK.y, WALK.z, WALK.body, WALK.phase, WALK.moving, !!keys.shift, vpRot, far, 1);
       var sv = COL.tunic, sp = COL.pants, ss = COL.skin; ENC.foes.forEach(function (f) { if (f.dead) return; var c = FC[f.pick] || [0.5, 0.2, 0.2]; if (f.hit && performance.now() - f.hit < 350) c = [1, 0.15, 0.1]; COL.tunic = c; COL.pants = [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6]; COL.skin = [c[0] * 0.9 + 0.1, c[1] * 0.9 + 0.1, c[2] * 0.9]; drawFig(f.x, f.y, f.z, f.body, f.mv ? performance.now() / 110 : 0, !!f.mv, false, vpRot, far, /Ogre/.test(f.pick) ? 1.5 : /Rat|Kobold|Goblin/.test(f.pick) ? 0.6 : 1); }); COL.tunic = sv; COL.pants = sp; COL.skin = ss;
-      drawNpcs(vpRot, far);
+      if (INT.on) drawInterior(vpRot, far); else drawNpcs(vpRot, far);
     }
 
     // ================= the living town: residents with homes, jobs, daily routines, memory and things to say =================
@@ -1818,12 +1922,21 @@ var fl = (function () {
     function npcWorld(n) { return [n.C.cx + n.px * FT, n.C.cz + n.pz * FT]; }
     function drawNpcs(vpRot, far) {
       var now = performance.now(), dtU = (now - NPCT.last) / 1000, dt = Math.min(0.1, dtU); NPCT.last = now; var C = npcCity();
-      if (!C || ENC.box) { NPCS.length = 0; NACT = {}; NSAY = []; return; }
+      if (!C) { NPCS.length = 0; NACT = {}; NSAY = []; return; }
       var hr = TOD, target = (hr < 5.5 || hr >= 22) ? 5 : hr < 7 ? 9 : hr < 17 ? 18 : hr < 21.5 ? 21 : 9, lx = (WALK.x - C.cx) / FT, lz = (WALK.z - C.cz) / FT, G = npcGraph(C);
       NPCS = NPCS.filter(function (n) { return n.C === C && Math.hypot(n.x - lx, n.z - lz) < 430; }); NACT = {}; NPCS.forEach(function (n) { NACT[n.key] = 1; });
-      NPCT.spawn += Math.min(dtU, 3); if (NPCS.filter(function (n) { return !n.inside; }).length < target && NPCT.spawn > 0.5) { NPCT.spawn = 0; nSpawn(C, lx, lz); }
-      NPCT.tick += dt; if (NPCT.tick > 1) { NPCT.tick = 0; NPCS.forEach(function (n) { var s = nsched(n, hr); if (s.key !== n.goal.key) { if (n.inside) { n.inside = false; if (n.cur >= 0) { n.x = G.X[n.cur]; n.z = G.Z[n.cur]; n.px = n.x; n.pz = n.z; } } nGoal(n, s); } }); }
-      NPCT.amb += dt; if (NPCT.amb > 5) { NPCT.amb = 0; var vis = NPCS.filter(function (n) { return !n.inside && Math.hypot(n.x - lx, n.z - lz) < 40 && (!n.said || now - n.said > 30000); }); if (vis.length) { var an = vis[(Math.random() * vis.length) | 0], jt = an.jb ? an.jb.type : '', pool = (NJOBSAY[jt] && an.goal.m === 'stand') ? NJOBSAY[jt] : an.age === 'kid' ? ['Catch me if you can!', 'Hee hee!'] : NCHAT; nSay(an, pool[(Math.random() * pool.length) | 0], 4); } }
+      NPCT.spawn += Math.min(dtU, 3); if (!ENC.box && NPCS.filter(function (n) { return !n.inside; }).length < target && NPCT.spawn > 0.5) { NPCT.spawn = 0; nSpawn(C, lx, lz); }
+      if (ENC.box) {   // danger: townsfolk bolt for the nearest-away street and hide indoors
+        var shouted = 0, FL = ['Run!', 'Monsters!', 'To arms!', 'Help! Help!', 'Get inside!', 'Gods preserve us!'];
+        NPCS.forEach(function (n) {
+          if (n.fl || n.inside) return; n.fl = 1; n.sp0 = n.sp; n.sp = n.sp * 1.9; var bi = -1, bd = -1;
+          if (n.cur >= 0) for (var q = 0; q < G.X.length; q++) { var dn = Math.hypot(G.X[q] - n.x, G.Z[q] - n.z); if (dn < 25 || dn > 140) continue; var away = Math.hypot(G.X[q] - lx, G.Z[q] - lz) - dn * 0.3 + Math.random() * 20; if (away > bd) { bd = away; bi = q; } }
+          if (bi >= 0) nGoal(n, { m: 'enter', node: bi, key: 'flee' }); else n.inside = true;
+          n.wait = Math.random() * 0.6; if (shouted < 3 && Math.hypot(n.x - lx, n.z - lz) < 60) { shouted++; nSay(n, FL[(Math.random() * FL.length) | 0], 3); }
+        });
+      } else NPCS.forEach(function (n) { if (n.fl) { n.fl = 0; n.sp = n.sp0 || n.sp; } });
+      NPCT.tick += dt; if (!ENC.box && NPCT.tick > 1) { NPCT.tick = 0; NPCS.forEach(function (n) { var s = nsched(n, hr); if (s.key !== n.goal.key) { if (n.inside) { n.inside = false; if (n.cur >= 0) { n.x = G.X[n.cur]; n.z = G.Z[n.cur]; n.px = n.x; n.pz = n.z; } } nGoal(n, s); } }); }
+      NPCT.amb += dt; if (NPCT.amb > 5 && !ENC.box) { NPCT.amb = 0; var vis = NPCS.filter(function (n) { return !n.inside && Math.hypot(n.x - lx, n.z - lz) < 40 && (!n.said || now - n.said > 30000); }); if (vis.length) { var an = vis[(Math.random() * vis.length) | 0], jt = an.jb ? an.jb.type : '', pool = (NJOBSAY[jt] && an.goal.m === 'stand') ? NJOBSAY[jt] : an.age === 'kid' ? ['Catch me if you can!', 'Hee hee!'] : NCHAT; nSay(an, pool[(Math.random() * pool.length) | 0], 4); } }
       NPCS.forEach(function (n) {
         nMove(n, dt, G, lx, lz);
         if (!n.inside && (n.mv || n.goal.m === 'wander' || n.goal.m === 'patrol')) { var hx2 = n.hd[0], hz2 = n.hd[1], k2 = Math.min(1, dt * 3); if (n.mv) { n.ox += (hz2 * 2.0 - n.ox) * k2; n.oz += (-hx2 * 2.0 - n.oz) * k2; } n.px = n.x + n.ox; n.pz = n.z + n.oz; } else if (!n.inside && n.goal.m !== 'stand') { n.px = n.x + n.ox; n.pz = n.z + n.oz; }
@@ -1837,7 +1950,7 @@ var fl = (function () {
     // name tag and speech bubbles
     var NUI = { els: [], bub: [] };
     function npcUI(vp, w, hh) {
-      var on = WALK.on && !ENC.box && !TK.box && !INV.box, i, now = performance.now();
+      var on = WALK.on && !TK.box && !INV.box, i, now = performance.now();
       function proj(n, up, el) { var p = npcWorld(n), rx = p[0] - cam.x, ry = (groundAt(p[0], p[1]) + up * FT * n.sc) - cam.y, rz = p[1] - cam.z, cx = vp[0] * rx + vp[4] * ry + vp[8] * rz, cy = vp[1] * rx + vp[5] * ry + vp[9] * rz, cw = vp[3] * rx + vp[7] * ry + vp[11] * rz; if (cw <= 0.0001) { el.style.display = 'none'; return false; } el.style.display = 'block'; el.style.left = (cx / cw * 0.5 + 0.5) * w + 'px'; el.style.top = (1 - (cy / cw * 0.5 + 0.5)) * hh + 'px'; return true; }
       var tag = NUI.tag; if (!tag) { tag = NUI.tag = document.createElement('div'); tag.style.cssText = 'position:fixed;z-index:39;transform:translate(-50%,-100%);pointer-events:none;text-align:center;font:600 12px Georgia,serif;color:#f1e6c8;text-shadow:0 1px 3px #000;padding:2px 8px;border-radius:3px;background:rgba(20,15,10,.62);border:1px solid rgba(138,106,63,.7);white-space:nowrap;display:none'; document.body.appendChild(tag); }
       var nn = on ? npcNearest() : null; if (nn && nn.age !== undefined && proj(nn, 7.2 * nn.sc / nn.sc, tag)) { var m = NMEM[nn.key], tx = (m && m.met ? nn.name : nn.role.charAt(0).toUpperCase() + nn.role.slice(1)) + ' <span style="font-weight:400;opacity:.7;font-size:11px">' + (m && m.met ? '· ' + nn.role : '') + '</span> <span style="color:#dcb96c;font-size:11px">[T] Talk</span>'; if (tag.dataset.k !== tx) { tag.innerHTML = tx; tag.dataset.k = tx; } } else tag.style.display = 'none';
@@ -1851,6 +1964,37 @@ var fl = (function () {
       if (!best) return 'Nothing like that close by, I am afraid.'; var ang = Math.atan2(best.x - px, -(best.z - pz)), dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'], dn = dirs[(Math.round(ang / (Math.PI / 4)) + 8) % 8];
       return '"Try ' + best.name + ' - about ' + (Math.round(bd / 10) * 10) + ' feet to the ' + dn + '. You can see the name floating over the door once you are close."';
     }
+    // ---- errands: small jobs from townsfolk (fetch goods, or carry a sealed package to another building in town) ----
+    QS.err = QS.err || [];
+    var ERR_ITEMS = ['Rope, hempen (50 ft)', 'Torch', 'Loaf of bread', 'Hunk of cheese', 'Bandages', 'Candles (10)', 'Bolt of wool', 'Soap', 'Ink (1 oz bottle)', 'Honey pot', 'Healing poultice', 'Whetstone', 'Smoked fish', 'Bottle of cider'];
+    function errFor(n) { for (var i = 0; i < QS.err.length; i++) if (QS.err[i].giver === n.key) return QS.err[i]; return null; }
+    function errPay(q, pl) {
+      QS.err = QS.err.filter(function (x) { return x !== q; }); QS.done.push({ town: q.town, need: 1, xp: q.xp, gp: q.gp, err: 1 }); QS.seq = (QS.seq || 0) + 1; qsave();
+      if (HERO) { heroRefresh(); HERO.xp = (HERO.xp || 0) + q.xp; addGp(q.gp); hsave(); }
+      return '<b style="color:#7ec27e">+' + q.xp + ' XP, +' + q.gp + ' gp</b>';
+    }
+    function errandOffer(n) {
+      var q = errFor(n), pl = { n: n.where, seed: n.seed, role: n.role, pop: 0 };
+      if (!HERO) { npcTalk(n, '"I could use a hand, but you have no one to speak for. Make a character first."'); return; }
+      heroRefresh();
+      if (q) {
+        if (q.kind === 'fetch') {
+          if (hbQty(q.item) >= q.qty) { talkUI(pl, '"You found it! ' + q.qty + ' x ' + q.item + ' - exactly what I needed."', [['Hand it over', function () { DNDINV.drop(HERO, q.item, q.qty); hsave(); var r = errPay(q, pl); npcTalk(n, '"Thank you, truly. Here is your pay." ' + r); }], ['Not yet', function () { npcTalk(n); }]]); }
+          else npcTalk(n, '"Still after ' + q.qty + ' x ' + q.item + '. You might find it at a shop in town. I will pay ' + q.gp + ' gp."');
+        } else npcTalk(n, '"The sealed package goes to ' + q.to + ' here in town. Do not open it, and do not dawdle. ' + q.gp + ' gp when it is delivered."');
+        return;
+      }
+      if (n.age === 'kid') { npcTalk(n, '"I am just a kid. Ask the grown-ups!"'); return; }
+      var h = (n.h + (QS.seq || 0) * 7) >>> 0, C = n.C, kind = (h % 3 === 0) ? 'deliver' : 'fetch', lvl = HERO.level || 1, nq;
+      if (kind === 'deliver') {
+        var ps = npcCand(C, 'w', n.x, n.z, 600).filter(function (i) { var b = C.wk[i]; return b.name && b.name !== (n.jb && n.jb.name); });
+        if (ps.length < 1) kind = 'fetch'; else { var b = C.wk[ps[h % ps.length]], dd = Math.round(Math.hypot(b.x - n.x, b.z - n.z));
+          nq = { id: 'e' + h, kind: 'deliver', giver: n.key, giverName: n.name, town: n.where, to: b.name, gp: 4 + lvl * 2 + (dd / 60 | 0), xp: 20 + lvl * 8 }; }
+      }
+      if (kind === 'fetch') { var it = ERR_ITEMS[h % ERR_ITEMS.length], qn = 1 + (h >>> 4) % 3, pr = DNDINV.price(it) || 1; nq = { id: 'e' + h, kind: 'fetch', giver: n.key, giverName: n.name, town: n.where, item: it, qty: qn, gp: Math.max(2, Math.round(pr * qn * 1.8 + 2 + lvl)), xp: 20 + lvl * 8 }; }
+      var txt = nq.kind === 'fetch' ? '"I am short on ' + nq.qty + ' x ' + nq.item + ' and cannot leave my post. Bring it and I will pay ' + nq.gp + ' gp."' : '"Could you carry this sealed package to ' + nq.to + '? Safe hands only. ' + nq.gp + ' gp when it is delivered."';
+      talkUI(pl, txt + ' <span style="color:#9aa0ad">(+' + nq.xp + ' XP)</span>', [['I will do it', function () { QS.err.push(nq); if (nq.kind === 'deliver') { DNDINV.addItem(HERO, 'Sealed package', 1); DNDINV.recompute(HERO); hsave(); } qsave(); npcTalk(n, '"Splendid. I will be here."'); }], ['Not right now', function () { npcTalk(n, '"Another time, perhaps."'); }]]);
+    }
     function npcTalk(n, pre) {
       var pl = { n: n.where, seed: n.seed, role: n.role, pop: 0 }, m = NMEM[n.key] = NMEM[n.key] || { met: 0, att: 0 }, hero = HERO ? HERO.name : 'traveller', opts = [], first = !m.met; n.mv = false; n.wait = 8; n.lk = Math.atan2((WALK.x - n.C.cx) / FT - n.x, (WALK.z - n.C.cz) / FT - n.z);
       var jt = n.jb ? n.jb.type : '', art = /^[AEIOU]/i.test(n.role) ? 'an' : 'a';
@@ -1859,6 +2003,7 @@ var fl = (function () {
       opts.push(['Where can I find...', function () { talkUI(pl, 'They think a moment. "What are you after?"', [['A place to sleep', function () { npcTalk(n, nDir(n, ['INN'])); }], ['A drink and a meal', function () { npcTalk(n, nDir(n, ['TAVERN', 'INN'])); }], ['Somewhere to trade', function () { npcTalk(n, nDir(n, ['SHOP', 'MARKET', 'ARTISAN'])); }], ['A temple', function () { npcTalk(n, nDir(n, ['RELIGIOUS'])); }], ['The watch', function () { npcTalk(n, nDir(n, ['LAW_ENFORCEMENT'])); }], ['Never mind', function () { npcTalk(n); }]]); }]);
       opts.push(['Heard any rumours?', function () { npcTalk(n, '"' + RUMOR[(n.h + (QS.seq || 0) + m.met) % RUMOR.length] + '"'); }]);
       if (jt && n.jb && n.jb.name && n.stand && Math.hypot(n.x - n.jb.x, n.z - n.jb.z) < 40 && window.DNDINV) opts.push(['Do business at ' + n.jb.name, function () { heroRefresh(); bldTalk({ name: n.jb.name, type: jt }); }]);
+      if (n.age !== 'kid') opts.push([errFor(n) ? 'About that job...' : 'Any work for me?', function () { errandOffer(n); }]);
       opts.push(['Persuade them to share gossip (Persuasion DC 13)', function () { var c = check('Persuasion', 13); if (!c.ok) { m.att--; nmSave(); npcTalk(n, c.line + 'They purse their lips. "I do not think so."'); return; } m.att++; nmSave();
         var C = n.C, ps = npcCand(C, 'w', n.x, n.z, 500).filter(function (i) { var b = C.wk[i]; return b.name && JOBS[b.type] && C.wk[i] !== n.jb; }), who = '';
         if (ps.length) { var i = ps[(n.h + m.met) % ps.length], b = C.wk[i], kn = npcFor({ seed: 'npc' + 'keep' + i + C.cx.toFixed(0), n: 'x', pop: 0 }).name; who = '"Between us - ' + kn + ' over at ' + b.name + ' has been up to something. Counting coin late, whispering with strangers. Draw your own conclusions."'; } else who = '"Honestly? Nothing worth telling."'; npcTalk(n, c.line + who); }]);
@@ -1892,7 +2037,7 @@ var fl = (function () {
     cv.addEventListener('pointerup', function () { drag = false; });
     cv.addEventListener('pointermove', function (e) { if (!drag || document.pointerLockElement === cv) return; cam.yaw -= (e.clientX - lx) * 0.004; cam.pitch = Math.max(-1.55, Math.min(1.55, cam.pitch - (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
     cv.addEventListener('wheel', function (e) { e.preventDefault(); if (WALK.on) { WALK.dist = Math.max(2, Math.min(80, WALK.dist * (e.deltaY < 0 ? 1 / 1.15 : 1.15))); return; } speed = Math.max(0.1, Math.min(30, speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); }, { passive: false });
-    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'g') toggleSculpt(); else if (/^[0-9]$/.test(kk) && WALK.on) hbUse(kk === '0' ? 9 : +kk - 1); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
+    window.addEventListener('keydown', function (e) { if (/INPUT|SELECT/.test(e.target.tagName)) return; keys[e.key.toLowerCase()] = true; if (!e.repeat) { var kk = e.key.toLowerCase(); if (kk === 'f') toggleWalk(); else if (kk === 'v' && WALK.on) WALK.third = !WALK.third; else if (kk === 'e' && WALK.on && !TK.box && !INT.on) startEncounter(); else if (kk === 'i') toggleInv(); else if (kk === 't') talkKey(); else if (kk === 'j') toggleLog(); else if (kk === 'n') toggleTravel(); else if (kk === 'g') toggleSculpt(); else if (/^[0-9]$/.test(kk) && WALK.on) hbUse(kk === '0' ? 9 : +kk - 1); else if (kk === 'escape' && INV.box && INV.box._tv) toggleTravel(); } if (WALK.on && e.key === ' ') e.preventDefault(); });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     var exEl = document.getElementById('ex');
     exEl.addEventListener('input', function () { EX = +exEl.value; EXV.textContent = EX; });
@@ -2058,12 +2203,43 @@ var fl = (function () {
       if (want) { if (FM_A.paused) { var pr = FM_A.play(); if (pr && pr.catch) pr.catch(function () { }); } FM_A.volume = Math.min(0.5, FM_A.volume + 0.03); }
       else if (!FM_A.paused) { FM_A.volume = Math.max(0, FM_A.volume - 0.04); if (FM_A.volume <= 0.001) FM_A.pause(); }
     }, 120);
+    // ---- ambient sound: everything synthesised with WebAudio (no files). Wind, surf, birds, crickets, town murmur, footsteps ----
+    var AMB = { ctx: null, g: {}, next: 0, step: 0, lastStep: 0 };
+    function ambInit() {
+      if (AMB.ctx) { if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      var c = AMB.ctx = new AC(), n = c.sampleRate * 3, buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0), b0 = 0, i;
+      for (i = 0; i < n; i++) { var w = Math.random() * 2 - 1; b0 = (b0 + 0.02 * w) / 1.02; d[i] = b0 * 3.5; }
+      var wb = c.createBuffer(1, n, c.sampleRate), wd = wb.getChannelData(0); for (i = 0; i < n; i++) wd[i] = Math.random() * 2 - 1;
+      AMB.noise = wb;
+      function layer(name, src, type, f, q) { var s = c.createBufferSource(); s.buffer = src; s.loop = true; var fl = c.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q || 0.7; var g = c.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(c.destination); s.start(); AMB.g[name] = { g: g, f: fl }; }
+      layer('wind', buf, 'lowpass', 500, 0.6); layer('surf', wb, 'bandpass', 500, 0.5); layer('town', wb, 'bandpass', 420, 0.8); layer('night', wb, 'highpass', 5200, 4);
+    }
+    function ambBurst(type, f, dur, vol, sweep) { var c = AMB.ctx, t = c.currentTime, o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(60, f * (sweep || 1)), t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.15); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.05); }
+    function ambStep(wet) { var c = AMB.ctx, t = c.currentTime, s = c.createBufferSource(); s.buffer = AMB.noise; var f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = wet ? 1400 : 260 + Math.random() * 120; f.Q.value = 0.9; var g = c.createGain(); g.gain.setValueAtTime(wet ? 0.16 : 0.22, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (wet ? 0.28 : 0.11)); s.connect(f); f.connect(g); g.connect(c.destination); s.start(t, Math.random() * 2, 0.35); }
+    ['pointerdown', 'keydown'].forEach(function (e) { window.addEventListener(e, ambInit, { passive: true }); });
+    setInterval(function () {
+      if (!AMB.ctx || AMB.ctx.state !== 'running') return;
+      var muted = false; try { muted = localStorage.getItem('myosia3d.mute') === '1'; } catch (e) { }
+      var c = AMB.ctx, t = c.currentTime, walk = WALK.on && !window.__TITLE, gnd = groundAt(cam.x, cam.z), alt = Math.max(0, cam.y - gnd), fly = !walk && !window.__TITLE;
+      var shore = 0, k, r = walk ? 0.004 : Math.max(0.01, alt * 0.8); for (k = 0; k < 8; k++) { var an = k * 0.785; if (groundAt(cam.x + Math.cos(an) * r, cam.z + Math.sin(an) * r) <= 0.0003) shore++; }
+      var sea = gnd <= 0.0003 ? 1 : shore / 8, day = ATM ? ATM.dayF : 1, town = walk ? Math.min(1, NPCS.length / 14) : 0, vol = muted || window.__TITLE ? 0 : 1;
+      var windV = (walk ? 0.05 + 0.03 * Math.sin(t * 0.3) : Math.min(0.28, 0.04 + alt * 1.3)) * vol * (fly ? 0.55 : 1);
+      var set = function (n, v, f) { var L = AMB.g[n]; L.g.gain.setTargetAtTime(v, t, 0.5); if (f) L.f.frequency.setTargetAtTime(f, t, 0.5); };
+      set('wind', windV, 350 + Math.min(1400, alt * 4000) + 120 * Math.sin(t * 0.37));
+      set('surf', sea * (walk ? 0.16 : Math.min(0.12, 0.03 + (1 / (1 + alt * 30)) * 0.1)) * (0.65 + 0.35 * Math.sin(t * 0.7)) * vol * (fly ? 0.7 : 1), 380 + 160 * Math.sin(t * 0.7));
+      set('town', town * 0.07 * vol * (0.8 + 0.2 * Math.sin(t * 2.1)), 380 + 90 * Math.sin(t * 0.9));
+      set('night', walk && day < 0.25 && sea < 0.5 ? 0.012 * vol * (0.5 + 0.5 * Math.sin(t * 9)) : 0);
+      if (walk && !muted && t > AMB.next) { AMB.next = t + 2.5 + Math.random() * 6; if (day > 0.4 && sea < 0.4 && town < 0.8) { var f0 = 2400 + Math.random() * 2000, cnt = 1 + (Math.random() * 3 | 0); for (k = 0; k < cnt; k++) (function (kk) { setTimeout(function () { if (AMB.ctx) ambBurst('sine', f0 + kk * 140, 0.09 + Math.random() * 0.05, 0.035, 1.5); }, kk * 130); })(k); } }
+      if (walk && !muted && (keys.w || keys.a || keys.s || keys.d || keys.arrowup || keys.arrowdown) && !ENC.box && !TK.box && !INV.box && t > AMB.lastStep) { AMB.lastStep = t + (keys.shift ? 0.27 : 0.43); ambStep(gnd <= 0.0003); }
+    }, 100);
     // ================= main loop =================
     var last = performance.now(), frame = 0, fpsAcc = 0, fpsN = 0, fpsT = performance.now();
     function loop(t) {
       perfT = t / 1000;
       var dt = Math.min(0.1, (t - last) / 1000), rawDt = (t - last) / 1000; last = t;
       var gnd = groundAt(cam.x, cam.z), alt = Math.max(0.0004, cam.y - gnd);
+      heldTick(t);
       if (window.__TITLE) titleCam(t / 1000); else if (WALK.on) walkStep(dt); else {
       var v = Math.max(alt, 0.0015) * 1.6 * speed * (keys.shift ? 4 : 1) * dt, f = fwd(), r = [Math.cos(cam.yaw), 0, -Math.sin(cam.yaw)];
       if (keys.w || keys.arrowup) { cam.x += f[0] * v; cam.y += f[1] * v; cam.z += f[2] * v; }

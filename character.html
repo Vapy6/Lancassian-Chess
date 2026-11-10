@@ -19,7 +19,12 @@ label{display:block;color:var(--dim);font-size:12px;margin:8px 0 2px}select,inpu
 .st{background:#12151a;border:1px solid var(--line);border-radius:8px;text-align:center;padding:6px}.st b{display:block;font:600 20px Georgia,serif}.st span{font-size:11px;color:var(--dim)}
 table{width:100%;border-collapse:collapse;font-size:13px}td{padding:2px 4px;border-bottom:1px solid #232a33}td.n{text-align:right;width:40px;font-variant-numeric:tabular-nums}.pf{color:var(--acc)}
 ul{margin:4px 0 0 18px;padding:0}textarea{width:100%;min-height:80px;background:#12151a;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit;resize:vertical}.tw{white-space:pre-wrap}details summary{cursor:pointer;color:var(--dim);font-size:13px}.sp{font-size:12px;color:var(--dim);margin:2px 0 6px}@media print{.left,#errs,.btn,#saved,.noprint{display:none!important}body{background:#fff;color:#000}.card{border:0}}.note{font-size:12px;color:var(--dim)}
-</style><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="dnd-theme.css"></head><body>
+</style><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="dnd-theme.css"><style id="wzcss">.wz-hide{display:none !important}.wz{position:sticky;top:0;z-index:5;margin:0 0 12px;padding:12px 14px;background:linear-gradient(180deg,#1b1610,#100c08);border:1px solid #8a6a3f;border-radius:8px;box-shadow:0 6px 18px #000a}
+.wz .st{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.wz .sp{flex:1 1 90px;min-width:84px;text-align:center;padding:6px 4px;border:1px solid #4a3a26;border-radius:5px;background:#17120c;color:#9d9380;font:600 12px Cinzel,Georgia,serif;letter-spacing:.06em;cursor:pointer}
+.wz .sp.on{background:linear-gradient(180deg,#e6c273,#b48a3a);color:#1a1405;border-color:#f3d98a}.wz .sp.done{color:#dcb96c;border-color:#8a6a3f}.wz .sp small{display:block;font:11px Georgia;opacity:.8;letter-spacing:0}
+.wz .bar{height:4px;background:#2a2118;border-radius:3px;overflow:hidden;margin-bottom:10px}.wz .bar i{display:block;height:100%;background:#dcb96c;transition:width .3s}.wz .nav{display:flex;gap:8px;align-items:center}.wz .nav .sp2{flex:1}.wz .hint{color:#b8ae9a;font-size:13px;margin-bottom:8px}
+.wz .nav a{color:#9d9380;font-size:12px;cursor:pointer;text-decoration:underline}</style>
+</head><body>
 <div class="wrap">
  <div class="left">
   <div class="card"><h1>Character Creator</h1><div class="note">D&amp;D 5e SRD 5.1 rules (CC-BY-4.0). Level 1.</div>
@@ -222,5 +227,37 @@ ul{margin:4px 0 0 18px;padding:0}textarea{width:100%;min-height:80px;background:
   $('print').onclick = function () { window.print(); };
   $('saved').onclick = function (e) { var ed = e.target.dataset && e.target.dataset.edit; if (ed !== undefined) { e.preventDefault(); loadEdit(+ed); return; } var pl = e.target.dataset && e.target.dataset.play; if (pl !== undefined) { e.preventDefault(); var ch = load()[+pl]; if (ch) { try { localStorage.setItem('dnd.active', JSON.stringify(ch)); } catch (x) { } location.href = 'world3d.html'; } return; } var i = e.target.dataset && e.target.dataset.del; if (i !== undefined) { e.preventDefault(); var l = load(); l.splice(+i, 1); try { localStorage.setItem('dnd.characters', JSON.stringify(l)); } catch (x) { } listSaved(); } };
   setMethod('pointbuy'); listSaved();
+})();
+</script><script>
+(function () {
+  var left = document.querySelector('.left'); if (!left) return;
+  var cards = Array.prototype.slice.call(left.querySelectorAll(':scope > .card'));
+  var STEPS = [
+    { t: 'Origin', h: 'Who are you? Choose a name, species, class and background.', c: [0] },
+    { t: 'Abilities', h: 'Set your six ability scores. Point buy is the easiest place to start.', c: [1] },
+    { t: 'Skills', h: 'Pick the skills your hero is trained in.', c: [2] },
+    { t: 'Kit & Spells', h: 'Choose starting equipment, and spells if your class casts them.', c: [3, 4] },
+    { t: 'Story', h: 'Optional: describe your hero. You can leave this blank and fill it in later.', c: [5] }
+  ];
+  var cur = 0, all = false, w = document.createElement('div'); w.className = 'wz'; left.insertBefore(w, left.firstChild);
+  var maxSeen = 0;
+  function nameOk() { var n = document.getElementById('name'); return n && n.value.trim().length > 0; }
+  function show() {
+    cards.forEach(function (c, i) { var on = all || STEPS[cur].c.indexOf(i) >= 0; c.classList.toggle('wz-hide', !on); });
+    var last = cur === STEPS.length - 1, h = '<div class="st">' + STEPS.map(function (s, i) { return '<div class="sp ' + (i === cur ? 'on' : i < maxSeen ? 'done' : '') + '" data-s="' + i + '"><small>Step ' + (i + 1) + '</small>' + s.t + '</div>'; }).join('') + '</div>' +
+      '<div class="bar"><i style="width:' + ((cur + 1) / STEPS.length * 100) + '%"></i></div>' + (all ? '' : '<div class="hint">' + STEPS[cur].h + '</div>') +
+      '<div class="nav">' + (all ? '' : '<button class="btn g" id="wzb"' + (cur ? '' : ' disabled style="opacity:.4"') + '>Back</button><button class="btn" id="wzn">' + (last ? 'Save character' : 'Next') + '</button>') + '<span class="sp2"></span><a id="wza">' + (all ? 'Back to guided steps' : 'Show every option at once') + '</a></div>';
+    w.innerHTML = h; maxSeen = Math.max(maxSeen, cur);
+    var b = document.getElementById('wzb'), n = document.getElementById('wzn');
+    if (b) b.onclick = function () { cur = Math.max(0, cur - 1); show(); window.scrollTo(0, 0); };
+    if (n) n.onclick = function () {
+      if (cur === 0 && !nameOk()) { var i = document.getElementById('name'); i.focus(); i.style.outline = '2px solid #c9675a'; setTimeout(function () { i.style.outline = ''; }, 1800); return; }
+      if (last) { var sv = document.getElementById('save'); if (sv) sv.click(); return; }
+      cur++; show(); window.scrollTo(0, 0);
+    };
+    document.getElementById('wza').onclick = function () { all = !all; show(); };
+    Array.prototype.forEach.call(w.querySelectorAll('[data-s]'), function (e) { e.onclick = function () { var t = +e.dataset.s; if (t > 0 && !nameOk()) { cur = 0; show(); document.getElementById('name').focus(); return; } cur = t; show(); }; });
+  }
+  show();
 })();
 </script></body></html>
