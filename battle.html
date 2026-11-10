@@ -99,7 +99,7 @@ input[type=checkbox]{accent-color:#b8923f}
         if (at.ranged && d > rg[0]) a.dis = true; if (at.ranged) a.range = d; }
       else { var fxx = C.SPELL_FX[a.spell]; if (fxx && fxx.melee && d > 5.6) { log(target.name + ' is ' + Math.round(d) + ' ft away - touch/melee spell needs 5 ft.', 'sys'); pending = null; render(); return; } if (d > 120) { log(target.name + ' is out of spell range (' + Math.round(d) + ' ft).', 'sys'); pending = null; render(); return; } } }
     var cur3 = null, tg = a.aoe ? enc.units.filter(function (u) { return u.team !== cur.team && !u.dead; }) : target ? [target] : [];
-    var r = C.act(enc, cur, a, tg, null); r.log.forEach(function (l) { log(l, /hit|slain|down|drops/.test(l) ? 'hit' : ''); }); pending = null; if (enc.winner()) finish(enc.winner()); else render(); }
+    var r = C.act(enc, cur, a, tg, null); try { if (window.parent !== window && (a.id === 'cast' || a.id === 'attack')) { var ti2 = tg.map(function (u) { return foeList().indexOf(u); }).filter(function (i) { return i >= 0; }); window.parent.postMessage({ dndFx: { id: a.id, spell: a.spell || '', ranged: a.id === 'attack' ? !!(cur.attacks[a.attack || 0] || {}).ranged : false, tg: ti2, aoe: !!a.aoe } }, '*'); } } catch (e) { } r.log.forEach(function (l) { log(l, /hit|slain|down|drops/.test(l) ? 'hit' : ''); }); pending = null; if (enc.winner()) finish(enc.winner()); else render(); }
   document.addEventListener('click', function (e) {
     var t = e.target; if (!t.closest) return;
     if (t.dataset && t.dataset.f) { foes[t.dataset.f] = Math.max(0, Math.min(8, foes[t.dataset.f] + +t.dataset.d)); setup(); return; }
