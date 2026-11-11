@@ -49,11 +49,12 @@ input[type=checkbox]{accent-color:#b8923f}
     var party = roster.filter(function (r) { return r.on; }); var fl = []; Object.keys(foes).forEach(function (k) { for (var i = 0; i < foes[k]; i++) fl.push(k); });
     if (!party.length || !fl.length) { $('warn').textContent = 'Pick at least one hero and one monster.'; return; } $('warn').textContent = '';
     enc = new C.Encounter(); party.forEach(function (r) { enc.add(C.combatant(JSON.parse(JSON.stringify(r.sheet)), 'party')); });
+    try { if (/[?&]enc=/.test(location.search) && localStorage.getItem('dnd.pet') === '1') { var pl = party[0].sheet.level || 1, dg = M.make('Giant Rat'); dg.name = 'Your dog'; dg.hp = dg.hpMax = 6 + 4 * pl; dg.ac = 12; dg.speed = 40; dg.mods = { str: 1, dex: 2, con: 1, int: -4, wis: 1, cha: -2 }; dg.prof = 2 + Math.floor((pl - 1) / 4); dg.attacks = [{ name: 'Bite', bonus: 3 + Math.floor((pl - 1) / 4), dice: '1d6', mod: 1 + Math.floor(pl / 3), type: 'piercing', ranged: false }]; dg.traits = []; var dc = C.combatant(dg, 'party'); dc.companion = true; dc.xp = 0; enc.add(dc); } } catch (e) { }
     var cnt = {}; fl.forEach(function (k) { cnt[k] = (cnt[k] || 0) + 1; }); var seen = {};
     fl.forEach(function (k) { var m = M.make(k); seen[k] = (seen[k] || 0) + 1; if (cnt[k] > 1) m.name += ' ' + seen[k]; enc.add(C.combatant(m, 'foe')); });
     $('setup').style.display = 'none'; $('fight').style.display = 'block'; $('log').innerHTML = ''; enc.start(); log('Battle begins! Initiative: ' + enc.order.map(function (u) { return u.name; }).join(', '), 'sys'); begin();
   }
-  function begin() { sel = null; pending = null; var w = enc.winner(); if (w) { finish(w); return; } var u = enc.current(); render(); if (u.team === 'party' && (u.hp <= 0 || u.dead) && !busy) { setTimeout(advance, 700); return; } if (u.team === 'foe' && !busy) setTimeout(function () { monsterTurn(); }, 500); }
+  function begin() { sel = null; pending = null; var w = enc.winner(); if (w) { finish(w); return; } var u = enc.current(); render(); if (u.team === 'party' && (u.hp <= 0 || u.dead) && !busy) { setTimeout(advance, 700); return; } if (u.team === 'foe' && !busy) setTimeout(function () { monsterTurn(); }, 500); if (u.companion && !busy && u.hp > 0 && !u.dead) setTimeout(function () { var cu = enc.current(); if (cu !== u || enc.winner()) return; var ls = C.aiTurn(enc, u, null); ls.forEach(say); setTimeout(advance, 900); }, 700); }
   function monsterTurn() { var u = enc.current(); if (!u || u.team !== 'foe') return; var i = foeList().indexOf(u), skipAtk = false, wait = 0;
     if (P && F && F[i] && u.turn && !(u.conditions && (u.conditions.paralyzed || u.conditions.stunned || u.conditions.unconscious))) {
       var m = meleeAtk(u), want = m ? 4.5 : 60, moved = 0;
@@ -77,7 +78,7 @@ input[type=checkbox]{accent-color:#b8923f}
     if (doneSent) return; doneSent = true; var xp = enc.units.filter(function (u) { return u.team === 'foe'; }).reduce(function (a, u) { return a + (u.xp || 0); }, 0), wb = null;
     try { wb = writeBack(w, xp); } catch (e) { wb = null; }
     try { if (window.parent !== window) window.parent.postMessage({ dndBattle: true, winner: w, xp: xp, loot: wb ? wb.lines : [], hp: wb ? wb.hp : null, totalXp: wb ? wb.totalXp : null, saved: !!wb }, '*'); } catch (e) { }
-    render(); log(w === 'party' ? 'Victory! The party stands.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : 'Defeat.';
+    render(); log(w === 'party' ? 'Victory! The party stands.' : w === 'fled' ? 'You escaped the fight.' : w === 'surrender' ? 'You surrendered. The enemy takes what they want.' : 'Defeat... the party has fallen.', 'sys'); $('acts').innerHTML = ''; $('hint').textContent = w === 'party' ? 'Victory!' : w === 'fled' ? 'Escaped.' : w === 'surrender' ? 'Surrendered.' : 'Defeat.';
     if (w === 'party') log('XP earned: ' + xp, 'sys'); if (wb && wb.lines.length) log('Loot: ' + wb.lines.join(', '), 'sys'); if (wb) log('You now have ' + wb.hp + '/' + wb.hpMax + ' HP.', 'sys');
   }
   function render() {
@@ -87,7 +88,7 @@ input[type=checkbox]{accent-color:#b8923f}
       var conds = Object.keys(u.conditions).join(', '), pct = Math.max(0, u.hp / u.hpMax * 100), need = pending && pending.target === 'enemy' ? u.team !== (cur && cur.team) : pending && pending.target === 'ally' ? u.team === (cur && cur.team) : false;
       return '<div class="u ' + u.team + (u === cur ? ' cur' : '') + (u.dead ? ' dead' : '') + (need && !u.dead ? ' tgt' : '') + (u === sel ? ' sel' : '') + '" data-u="' + i + '"><b>' + u.name + '</b> <span class="note">init ' + Math.floor(u.initiative) + ' - AC ' + C.effectiveAC(u) + ' - HP ' + u.hp + '/' + u.hpMax + (u.temp ? ' (+' + u.temp + ')' : '') + (u.rage ? ' - RAGING' : '') + (conds ? ' - ' + conds : '') + (u.hp === 0 && !u.dead ? ' - deaths ' + u.deathSaves.ok + '/' + u.deathSaves.fail : '') + '</span><div class="bar"><i style="width:' + pct + '%"></i></div></div>';
     }).join('');
-    var mine = cur && cur.team === 'party' && !enc.winner();
+    var mine = cur && cur.team === 'party' && !cur.companion && !enc.winner();
     $('acts').innerHTML = mine ? C.actions(cur).map(function (a, i) { var spent = (a.id === 'cast' && C.SPELL_FX[a.spell].bonus) ? !cur.turn.bonus : (a.id === 'secondWind' || a.id === 'rage') ? !cur.turn.bonus : !cur.turn.action; return '<button class="btn' + (pending && pending._i === i ? '' : ' g') + '" data-a="' + i + '"' + (spent ? ' disabled' : '') + '>' + a.label + '</button>'; }).join('') : '';
     $('hint').textContent = mine ? (pending ? (pending.target === 'enemy' ? 'Pick an enemy target' + (pending.aoe ? ' (area spells hit all foes)' : '') : 'Pick an ally') : 'Choose an action. Action: ' + (cur.turn.action ? 'ready' : 'used') + ' - Bonus: ' + (cur.turn.bonus ? 'ready' : 'used') + ' - Movement left: ' + Math.round(cur.turn.move) + ' ft (walk in the world; Dash doubles it)') : (cur && !enc.winner() ? cur.name + ' is acting...' : '');
     $('end').disabled = !mine; $('auto').disabled = !!enc.winner();
@@ -112,14 +113,14 @@ input[type=checkbox]{accent-color:#b8923f}
   });
   window.addEventListener('message', function (e) { var dp = e.data; if (dp && dp.dndPos) { var np = dp.dndPos.p; if (!F) F = dp.dndPos.f.slice(); if (!enc) { P = np; return; }
       var cur = enc.current(), moved = P ? dst(P, np) : 0;
-      if (P && moved > 0 && cur && cur.team === 'party' && cur.turn && !enc.winner()) { cur.turn.move = Math.max(0, cur.turn.move - moved);
+      if (P && moved > 0 && cur && cur.team === 'party' && !cur.companion && cur.turn && !enc.winner()) { cur.turn.move = Math.max(0, cur.turn.move - moved);
         foeList().forEach(function (fu, i) { var m = meleeAtk(fu), r = reachOf(m); if (!m || fu.dead || fu.hp <= 0 || !F[i] || cur.disengaged || oaRound[i] === enc.round) return; if (dst(P, F[i]) <= r + 0.1 && dst(np, F[i]) > r + 0.1) { oaRound[i] = enc.round; log('Opportunity attack from ' + fu.name + '!', 'sys'); var lg = []; C.doAttack(enc, fu, cur, m, { range: 5 }, null, lg); lg.forEach(say); } }); }
       P = np; if (moved > 0) { if (enc.winner()) finish(enc.winner()); else render(); } return; }
     var d = e.data; if (d && d.dndHotbar) { hotbar(d.dndHotbar); return; }
     if (!d || d.dndTarget === undefined || !enc || !pending || pending.target !== 'enemy') return;
     var u = enc.units.filter(function (x) { return x.team === 'foe'; })[d.dndTarget]; if (!u || u.dead) return; var a2 = pending; run(a2, u); });
   function hotbar(h) {
-    if (!enc || busy) return; var cur = enc.current(); if (!cur || cur.team !== 'party' || enc.winner()) { return; }
+    if (!enc || busy) return; var cur = enc.current(); if (!cur || cur.team !== 'party' || cur.companion || enc.winner()) { return; }
     var L = C.actions(cur), idx = -1, n = h.n || '';
     L.forEach(function (a, i) { if (idx >= 0) return;
       if (h.t === 'spell') { if (a.id === 'cast' && a.spell === n) idx = i; }

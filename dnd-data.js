@@ -144,21 +144,77 @@
     'Unseen Servant|Conjuration|Action|60 ft|Ritual. An invisible force performs simple tasks for 1 hour.',
     'Witch Bolt|Evocation|Action|30 ft|Ranged spell attack, 1d12 lightning; keep dealing 1d12 each turn. Concentration.'
   ]);
+  sp(2, [
+    'Aid|Abjuration|Action|30 ft|Up to three creatures gain +5 maximum and current hit points for 8 hours.',
+    'Blur|Illusion|Action|Self|Attackers have disadvantage against you for 1 minute. Concentration.',
+    'Darkness|Evocation|Action|60 ft|A 15-foot sphere of magical darkness for 10 minutes. Concentration.',
+    'Flaming Sphere|Conjuration|Action|60 ft|A rolling ball of fire; Dex save or 2d6 fire damage to creatures it touches. Concentration.',
+    'Heat Metal|Transmutation|Action|60 ft|Metal glows hot; 2d8 fire damage and the creature may drop it. Concentration.',
+    'Hold Person|Enchantment|Action|60 ft|Wis save or a humanoid is paralyzed; it repeats the save each turn. Concentration.',
+    'Invisibility|Illusion|Action|Touch|A creature becomes invisible until it attacks or casts. Concentration.',
+    'Lesser Restoration|Abjuration|Action|Touch|End one disease or one condition: blinded, deafened, paralyzed or poisoned.',
+    'Levitate|Transmutation|Action|60 ft|A creature or object rises up to 20 feet for 10 minutes. Concentration.',
+    'Melf\'s Acid Arrow|Evocation|Action|90 ft|Ranged spell attack, 4d4 acid damage, and 2d4 more at the end of its next turn.',
+    'Mirror Image|Illusion|Action|Self|Three illusory duplicates make you hard to hit for 1 minute.',
+    'Misty Step|Conjuration|Bonus|Self|Teleport up to 30 feet to an unoccupied space you can see.',
+    'Moonbeam|Evocation|Action|120 ft|A silvery beam; Con save or 2d10 radiant damage. Concentration.',
+    'Prayer of Healing|Evocation|10 minutes|30 ft|Up to six creatures regain 2d8 + spellcasting modifier hit points.',
+    'Scorching Ray|Evocation|Action|120 ft|Three ranged spell attacks, each 2d6 fire damage.',
+    'Shatter|Evocation|Action|60 ft|A thunderous noise; Con save or 3d8 thunder damage in a 10-foot sphere, half on a success.',
+    'Silence|Illusion|Action|120 ft|No sound can pass through a 20-foot sphere for 10 minutes. Ritual. Concentration.',
+    'Spike Growth|Transmutation|Action|150 ft|Ground in a 20-foot radius turns to thorns that hurt those crossing it. Concentration.',
+    'Spiritual Weapon|Evocation|Bonus|60 ft|A floating weapon strikes: spell attack, 1d8 + spellcasting modifier force damage.',
+    'Suggestion|Enchantment|Action|30 ft|Wis save or a creature follows a reasonable course of action you describe. Concentration.',
+    'Web|Conjuration|Action|60 ft|Sticky webs fill a 20-foot cube; Dex save or restrained. Concentration.'
+  ]);
+  sp(3, [
+    'Bestow Curse|Necromancy|Action|Touch|Wis save or a creature is cursed: disadvantage on one ability, or extra 1d8 necrotic damage from you. Concentration.',
+    'Call Lightning|Conjuration|Action|120 ft|A storm cloud strikes; Dex save or 3d10 lightning damage, half on a success. Concentration.',
+    'Counterspell|Abjuration|Reaction|60 ft|Interrupt a creature casting a spell of 3rd level or lower.',
+    'Daylight|Evocation|Action|60 ft|A 60-foot sphere of bright light for 1 hour.',
+    'Dispel Magic|Abjuration|Action|120 ft|End a spell of 3rd level or lower on a target.',
+    'Fear|Illusion|Action|Self (30 ft cone)|Wis save or creatures drop what they hold and flee in terror. Concentration.',
+    'Fireball|Evocation|Action|150 ft|A burst of flame; Dex save or 8d6 fire damage in a 20-foot sphere, half on a success.',
+    'Fly|Transmutation|Action|Touch|A creature gains a flying speed of 60 feet for 10 minutes. Concentration.',
+    'Haste|Transmutation|Action|30 ft|Double speed, +2 AC and an extra action for a willing creature. Concentration.',
+    'Hunger of Hadar|Conjuration|Action|150 ft|A void of darkness and cold that harms creatures within it. Concentration.',
+    'Hypnotic Pattern|Illusion|Action|120 ft|Wis save or creatures in a 30-foot cube are charmed and incapacitated. Concentration.',
+    'Lightning Bolt|Evocation|Action|Self (100 ft line)|Dex save or 8d6 lightning damage in a line, half on a success.',
+    'Mass Healing Word|Evocation|Bonus|60 ft|Up to six creatures regain 1d4 + spellcasting modifier hit points.',
+    'Revivify|Necromancy|Action|Touch|Return a creature that died within the last minute to life with 1 hit point.',
+    'Sleet Storm|Conjuration|Action|150 ft|Freezing rain makes the ground slippery and douses flames. Concentration.',
+    'Slow|Transmutation|Action|120 ft|Wis save or up to six creatures are slowed for 1 minute. Concentration.',
+    'Spirit Guardians|Conjuration|Action|Self (15 ft)|Spirits swirl around you; enemies take 3d8 radiant (or necrotic) damage, Wis save for half. Concentration.',
+    'Stinking Cloud|Conjuration|Action|90 ft|A 20-foot sphere of nauseating gas; Con save or poisoned. Concentration.',
+    'Vampiric Touch|Necromancy|Action|Self|Melee spell attack, 3d6 necrotic damage; you regain half of it. Concentration.'
+  ]);
   var SPELLS = {}; Object.keys(S).forEach(function (n) { var s = S[n]; SPELLS[n] = { name: n, level: s[0], school: s[1], time: s[2], range: s[3], text: s[4] }; });
   function L(s) { return s.split(',').map(function (x) { return x.trim(); }); }
   var CLASS_SPELLS = {
     'Bard': { 0: L('Blade Ward, Dancing Lights, Friends, Light, Mage Hand, Mending, Message, Minor Illusion, Prestidigitation, True Strike, Vicious Mockery'),
-      1: L('Animal Friendship, Bane, Charm Person, Comprehend Languages, Cure Wounds, Detect Magic, Disguise Self, Dissonant Whispers, Faerie Fire, Feather Fall, Healing Word, Heroism, Identify, Illusory Script, Longstrider, Silent Image, Sleep, Speak with Animals, Tasha\'s Hideous Laughter, Thunderwave, Unseen Servant') },
+      1: L('Animal Friendship, Bane, Charm Person, Comprehend Languages, Cure Wounds, Detect Magic, Disguise Self, Dissonant Whispers, Faerie Fire, Feather Fall, Healing Word, Heroism, Identify, Illusory Script, Longstrider, Silent Image, Sleep, Speak with Animals, Tasha\'s Hideous Laughter, Thunderwave, Unseen Servant'),
+      2: L('Heat Metal, Hold Person, Invisibility, Lesser Restoration, Shatter, Silence, Suggestion'),
+      3: L('Bestow Curse, Dispel Magic, Fear, Hypnotic Pattern, Mass Healing Word') },
     'Cleric': { 0: L('Guidance, Light, Mending, Resistance, Sacred Flame, Spare the Dying, Thaumaturgy'),
-      1: L('Bane, Bless, Command, Create or Destroy Water, Cure Wounds, Detect Evil and Good, Detect Magic, Detect Poison and Disease, Guiding Bolt, Healing Word, Inflict Wounds, Protection from Evil and Good, Purify Food and Drink, Sanctuary, Shield of Faith') },
+      1: L('Bane, Bless, Command, Create or Destroy Water, Cure Wounds, Detect Evil and Good, Detect Magic, Detect Poison and Disease, Guiding Bolt, Healing Word, Inflict Wounds, Protection from Evil and Good, Purify Food and Drink, Sanctuary, Shield of Faith'),
+      2: L('Aid, Hold Person, Lesser Restoration, Prayer of Healing, Silence, Spiritual Weapon'),
+      3: L('Bestow Curse, Daylight, Dispel Magic, Mass Healing Word, Revivify, Spirit Guardians') },
     'Druid': { 0: L('Druidcraft, Guidance, Mending, Poison Spray, Produce Flame, Resistance, Shillelagh'),
-      1: L('Animal Friendship, Charm Person, Create or Destroy Water, Cure Wounds, Detect Magic, Detect Poison and Disease, Entangle, Faerie Fire, Fog Cloud, Goodberry, Healing Word, Jump, Longstrider, Purify Food and Drink, Speak with Animals, Thunderwave') },
+      1: L('Animal Friendship, Charm Person, Create or Destroy Water, Cure Wounds, Detect Magic, Detect Poison and Disease, Entangle, Faerie Fire, Fog Cloud, Goodberry, Healing Word, Jump, Longstrider, Purify Food and Drink, Speak with Animals, Thunderwave'),
+      2: L('Flaming Sphere, Heat Metal, Lesser Restoration, Moonbeam, Spike Growth'),
+      3: L('Call Lightning, Daylight, Dispel Magic, Sleet Storm') },
     'Sorcerer': { 0: L('Acid Splash, Blade Ward, Chill Touch, Dancing Lights, Fire Bolt, Friends, Light, Mage Hand, Mending, Message, Minor Illusion, Poison Spray, Prestidigitation, Ray of Frost, Shocking Grasp, True Strike'),
-      1: L('Burning Hands, Charm Person, Color Spray, Comprehend Languages, Detect Magic, Disguise Self, Expeditious Retreat, False Life, Feather Fall, Fog Cloud, Jump, Mage Armor, Magic Missile, Ray of Sickness, Shield, Silent Image, Sleep, Thunderwave') },
+      1: L('Burning Hands, Charm Person, Color Spray, Comprehend Languages, Detect Magic, Disguise Self, Expeditious Retreat, False Life, Feather Fall, Fog Cloud, Jump, Mage Armor, Magic Missile, Ray of Sickness, Shield, Silent Image, Sleep, Thunderwave'),
+      2: L('Blur, Darkness, Hold Person, Invisibility, Mirror Image, Misty Step, Scorching Ray, Shatter, Suggestion, Web'),
+      3: L('Counterspell, Dispel Magic, Fear, Fireball, Fly, Haste, Hypnotic Pattern, Lightning Bolt, Slow, Stinking Cloud') },
     'Warlock': { 0: L('Blade Ward, Chill Touch, Eldritch Blast, Friends, Mage Hand, Minor Illusion, Poison Spray, Prestidigitation, True Strike'),
-      1: L('Armor of Agathys, Arms of Hadar, Charm Person, Comprehend Languages, Expeditious Retreat, Hellish Rebuke, Hex, Illusory Script, Protection from Evil and Good, Unseen Servant, Witch Bolt') },
+      1: L('Armor of Agathys, Arms of Hadar, Charm Person, Comprehend Languages, Expeditious Retreat, Hellish Rebuke, Hex, Illusory Script, Protection from Evil and Good, Unseen Servant, Witch Bolt'),
+      2: L('Darkness, Hold Person, Invisibility, Mirror Image, Misty Step, Shatter, Suggestion'),
+      3: L('Counterspell, Dispel Magic, Fear, Fly, Hunger of Hadar, Hypnotic Pattern, Vampiric Touch') },
     'Wizard': { 0: L('Acid Splash, Blade Ward, Chill Touch, Dancing Lights, Fire Bolt, Friends, Light, Mage Hand, Mending, Message, Minor Illusion, Poison Spray, Prestidigitation, Ray of Frost, Shocking Grasp, True Strike'),
-      1: L('Alarm, Burning Hands, Charm Person, Color Spray, Comprehend Languages, Detect Magic, Disguise Self, Expeditious Retreat, False Life, Feather Fall, Find Familiar, Fog Cloud, Grease, Identify, Illusory Script, Jump, Longstrider, Mage Armor, Magic Missile, Protection from Evil and Good, Ray of Sickness, Shield, Silent Image, Sleep, Tasha\'s Hideous Laughter, Thunderwave, Unseen Servant') }
+      1: L('Alarm, Burning Hands, Charm Person, Color Spray, Comprehend Languages, Detect Magic, Disguise Self, Expeditious Retreat, False Life, Feather Fall, Find Familiar, Fog Cloud, Grease, Identify, Illusory Script, Jump, Longstrider, Mage Armor, Magic Missile, Protection from Evil and Good, Ray of Sickness, Shield, Silent Image, Sleep, Tasha\'s Hideous Laughter, Thunderwave, Unseen Servant'),
+      2: L('Blur, Darkness, Flaming Sphere, Hold Person, Invisibility, Levitate, Melf\'s Acid Arrow, Mirror Image, Misty Step, Scorching Ray, Shatter, Suggestion, Web'),
+      3: L('Counterspell, Dispel Magic, Fear, Fireball, Fly, Haste, Hypnotic Pattern, Lightning Bolt, Slow, Sleet Storm, Stinking Cloud, Vampiric Touch') }
   };
   var ALIGNMENTS = ['Lawful Good', 'Neutral Good', 'Chaotic Good', 'Lawful Neutral', 'True Neutral', 'Chaotic Neutral', 'Lawful Evil', 'Neutral Evil', 'Chaotic Evil'];
   var api = { WEAPONS: WEAPONS, ARMOR: ARMOR, PACKS: PACKS, KITS: KITS, TOKENS: TOKENS, INSTRUMENTS: INSTRUMENTS, SPELLS: SPELLS, CLASS_SPELLS: CLASS_SPELLS, ALIGNMENTS: ALIGNMENTS };

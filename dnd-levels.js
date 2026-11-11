@@ -1,6 +1,6 @@
 /* D&D 5e (2014 SRD) levelling, levels 1-5. Pure functions on a character sheet made by dnd-rules.js.
    plan(sheet) -> what the player must choose; apply(sheet, choices) -> new sheet (or {errors}).
-   Spell data only exists for cantrips and level-1 spells, so higher-level slots are tracked but have no spells to cast yet.
+   Spell data covers cantrips and levels 1-3; new spells may come from any spell level the new slot table allows.
    Paladin/Ranger spellcasting (level 2) is listed as a feature only until their spell lists are added. */
 (function (root) {
   var DND = root.DND || (typeof require !== 'undefined' ? require('./dnd-rules.js') : null);
@@ -29,6 +29,8 @@
   var CANT = { Bard: [0, 2, 2, 2, 3, 3], Cleric: [0, 3, 3, 3, 4, 4], Druid: [0, 2, 2, 2, 3, 3], Sorcerer: [0, 4, 4, 4, 5, 5], Warlock: [0, 2, 2, 2, 3, 3], Wizard: [0, 3, 3, 3, 4, 4] };
   var KNOWN = { Bard: [0, 4, 5, 6, 7, 8], Sorcerer: [0, 2, 3, 4, 5, 6], Warlock: [0, 2, 3, 4, 5, 6] };
   function slotsFor(cls, lv) { return JSON.parse(JSON.stringify(cls === 'Warlock' ? PACT[lv] : /Paladin|Ranger/.test(cls) ? HALF[lv] : FULL[lv])); }
+  /** Every spell a class may learn at character level lv (levels 1 up to its highest slot level). */
+  function pool(cls, lv) { var CS = DATA && DATA.CLASS_SPELLS[cls], sl = slotsFor(cls, lv), mx = Math.max.apply(null, [0].concat(Object.keys(sl).map(Number))), o = []; if (CS) for (var i = 1; i <= mx; i++) o = o.concat(CS[i] || []); return o; }
   function nextXp(sheet) { return sheet.level >= MAXLV ? null : XP[sheet.level]; }
   function levelFor(xp) { var l = 1; for (var i = 1; i <= MAXLV; i++) if (xp >= XP[i]) l = i + 1; return Math.min(l, MAXLV); }
   function canLevel(sheet) { return sheet.level < MAXLV && (sheet.xp || 0) >= XP[sheet.level]; }
@@ -51,15 +53,15 @@
     // ability score improvement: +2 to one or +1 to two
     if (pl.asi) { var asi = ch.asi || {}, tot = 0, bad = false; ABIL.forEach(function (a) { var v = asi[a] || 0; tot += v; if (v < 0 || v > 2 || s.scores[a] + v > 20) bad = true; });
       if (tot !== 2 || bad) errors.push('Ability Score Improvement: spend exactly 2 points (max 2 in one score, scores cap at 20).'); else ABIL.forEach(function (a) { s.scores[a] += asi[a] || 0; }); }
-    var cantrips = ch.cantrips || [], known = ch.known || [], book = ch.book || [], prep = ch.prepared || [], exp = ch.expertise || [], sc = s.spellcasting, CS = DATA && DATA.CLASS_SPELLS[c];
+    var cantrips = ch.cantrips || [], known = ch.known || [], book = ch.book || [], prep = ch.prepared || [], exp = ch.expertise || [], sc = s.spellcasting, CS = DATA && DATA.CLASS_SPELLS[c], PL = pool(c, lv);
     if (sc) {
       if (cantrips.length !== pl.cantrips) errors.push('Pick ' + pl.cantrips + ' new cantrip(s).');
       cantrips.forEach(function (n) { if (!CS || CS[0].indexOf(n) < 0 || (sc.cantripList || []).indexOf(n) >= 0) errors.push(n + ' is not a valid new cantrip.'); });
       if (known.length !== pl.known) errors.push('Pick ' + pl.known + ' new spell(s).');
-      known.forEach(function (n) { if (!CS || CS[1].indexOf(n) < 0 || (sc.knownSpells || []).indexOf(n) >= 0) errors.push(n + ' is not a valid new spell.'); });
+      known.forEach(function (n) { if (!CS || PL.indexOf(n) < 0 || (sc.knownSpells || []).indexOf(n) >= 0) errors.push(n + ' is not a valid new spell.'); });
       if (book.length !== pl.book) errors.push('Add ' + pl.book + ' spells to your spellbook.');
-      book.forEach(function (n) { if (!CS || CS[1].indexOf(n) < 0 || (sc.knownSpells || []).indexOf(n) >= 0) errors.push(n + ' is not a valid spellbook spell.'); });
-      if (pl.prepared) { var pool = c === 'Wizard' ? (sc.knownSpells || []).concat(book) : CS ? CS[1] : []; if (prep.length !== pl.prepared) errors.push('Prepare exactly ' + pl.prepared + ' spells.'); prep.forEach(function (n) { if (pool.indexOf(n) < 0) errors.push(n + ' cannot be prepared.'); }); }
+      book.forEach(function (n) { if (!CS || PL.indexOf(n) < 0 || (sc.knownSpells || []).indexOf(n) >= 0) errors.push(n + ' is not a valid spellbook spell.'); });
+      if (pl.prepared) { var pool = c === 'Wizard' ? (sc.knownSpells || []).concat(book) : PL; if (prep.length !== pl.prepared) errors.push('Prepare exactly ' + pl.prepared + ' spells.'); prep.forEach(function (n) { if (pool.indexOf(n) < 0) errors.push(n + ' cannot be prepared.'); }); }
     }
     if (exp.length !== pl.expertise) errors.push('Pick ' + pl.expertise + ' skills for Expertise.'); exp.forEach(function (k) { if (!s.skills[k] || !s.skills[k].proficient || s.skills[k].expertise) errors.push(k + ' cannot take Expertise.'); });
     if (errors.length) return { errors: errors };
@@ -85,6 +87,6 @@
     if (pl.asi) gains.push('Ability Score Improvement applied');
     return { sheet: s, gains: gains };
   }
-  var api = { MAXLV: MAXLV, XP: XP, nextXp: nextXp, levelFor: levelFor, canLevel: canLevel, plan: plan, apply: apply, slotsFor: slotsFor };
+  var api = { MAXLV: MAXLV, XP: XP, nextXp: nextXp, levelFor: levelFor, canLevel: canLevel, plan: plan, apply: apply, slotsFor: slotsFor, pool: pool };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.DNDLEVELS = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -96,10 +96,10 @@
   Encounter.prototype.next = function () {
     var guard = 0; do {
       this.index++; if (this.index >= this.order.length) { this.index = 0; this.round++; }
-      var u = this.order[this.index]; if (u && !u.dead) { u.dodging = false; u.disengaged = false; u.acBonus = 0; u.turn = { action: true, bonus: true, reaction: true, move: u.speed * (has(u, 'grappled') || has(u, 'restrained') ? 0 : 1) }; if (u.hp === 0 && !u.stable) { var ds = deathSave(u, this.rng); this.log.push(u.name + ' death save: ' + ds.outcome); } return u; }
+      var u = this.order[this.index]; if (u && !u.dead) { if (u.holdDC && has(u, 'paralyzed')) { var hs = save(u, 'wis', u.holdDC, null, this.rng); if (hs.success) { delete u.conditions.paralyzed; delete u.conditions.incapacitated; u.holdDC = 0; this.log.push(u.name + ' shakes off Hold Person.'); } } u.dodging = false; u.disengaged = false; u.acBonus = 0; u.turn = { action: true, bonus: true, reaction: true, move: u.speed * (has(u, 'grappled') || has(u, 'restrained') ? 0 : 1) }; if (u.hp === 0 && !u.stable) { var ds = deathSave(u, this.rng); this.log.push(u.name + ' death save: ' + ds.outcome); } return u; }
     } while (++guard < this.order.length + 1); return null;
   };
-  Encounter.prototype.winner = function () { var teams = {}; this.units.forEach(function (u) { if (!u.dead && u.hp > 0) teams[u.team] = 1; }); var k = Object.keys(teams); return k.length === 1 ? k[0] : k.length === 0 ? 'none' : null; };
+  Encounter.prototype.winner = function () { if (this.escape) return this.escape; var teams = {}; this.units.forEach(function (u) { if (!u.dead && u.hp > 0) teams[u.team] = 1; }); var k = Object.keys(teams); return k.length === 1 ? k[0] : k.length === 0 ? 'none' : null; };
   /** Spend a part of the current turn; returns false if it is not available. */
   Encounter.prototype.spend = function (what, amount) { var u = this.current(); if (!u || !u.turn) return false; if (what === 'move') { if (u.turn.move < amount) return false; u.turn.move -= amount; return true; } if (!u.turn[what]) return false; u.turn[what] = false; return true; };
 
@@ -115,6 +115,12 @@
     'Burning Hands': { kind: 'save', save: 'dex', dice: '3d6', type: 'fire', half: true, slot: 1, aoe: true }, 'Thunderwave': { kind: 'save', save: 'con', dice: '2d8', type: 'thunder', half: true, slot: 1, aoe: true },
     'Arms of Hadar': { kind: 'save', save: 'str', dice: '2d6', type: 'necrotic', half: true, slot: 1, aoe: true }, 'Dissonant Whispers': { kind: 'save', save: 'wis', dice: '3d6', type: 'psychic', half: true, slot: 1 },
     'Magic Missile': { kind: 'missiles', slot: 1 }, 'Cure Wounds': { kind: 'heal', dice: '1d8', slot: 1 }, 'Healing Word': { kind: 'heal', dice: '1d4', slot: 1, bonus: true },
+    'Scorching Ray': { kind: 'rays', dice: '2d6', type: 'fire', rays: 3, slot: 2 }, 'Melf\'s Acid Arrow': { kind: 'attack', dice: '4d4', type: 'acid', slot: 2 }, 'Spiritual Weapon': { kind: 'attack', dice: '1d8', type: 'force', slot: 2, bonus: true, addMod: true },
+    'Shatter': { kind: 'save', save: 'con', dice: '3d8', type: 'thunder', half: true, slot: 2, aoe: true }, 'Moonbeam': { kind: 'save', save: 'con', dice: '2d10', type: 'radiant', half: true, slot: 2, aoe: true }, 'Flaming Sphere': { kind: 'save', save: 'dex', dice: '2d6', type: 'fire', half: true, slot: 2 },
+    'Hold Person': { kind: 'hold', save: 'wis', slot: 2 }, 'Prayer of Healing': { kind: 'heal', dice: '2d8', slot: 2 },
+    'Fireball': { kind: 'save', save: 'dex', dice: '8d6', type: 'fire', half: true, slot: 3, aoe: true }, 'Lightning Bolt': { kind: 'save', save: 'dex', dice: '8d6', type: 'lightning', half: true, slot: 3, aoe: true },
+    'Spirit Guardians': { kind: 'save', save: 'wis', dice: '3d8', type: 'radiant', half: true, slot: 3, aoe: true }, 'Call Lightning': { kind: 'save', save: 'dex', dice: '3d10', type: 'lightning', half: true, slot: 3, aoe: true },
+    'Vampiric Touch': { kind: 'attack', dice: '3d6', type: 'necrotic', slot: 3, melee: true, drain: true },
     'Shield': { kind: 'shield', slot: 1, reaction: true }, 'Mage Armor': { kind: 'magearmor', slot: 1 }, 'Sleep': { kind: 'sleep', slot: 1 }, 'Hellish Rebuke': { kind: 'save', save: 'dex', dice: '2d10', type: 'fire', half: true, slot: 1, reaction: true }
   };
   function modeOf(enc, actor, tgt, o) {
@@ -161,7 +167,11 @@
       var lvl = fx.slot || 0; if (lvl && !(actor.slots[lvl] > 0)) return fail('No level-' + lvl + ' spell slot left.');
       if (!enc.spend(fx.bonus ? 'bonus' : fx.reaction ? 'reaction' : 'action')) return fail('That action is not available.');
       if (lvl) useSlot(actor, lvl); var mod = actor.mods[sc.ability] || 0;
-      if (fx.kind === 'attack') { if (!t) return fail('Choose a target.'); var sa = { name: action.spell, bonus: sc.attackBonus, dice: fx.dice, mod: 0, type: fx.type, ranged: !fx.melee, magical: true }; doAttack(enc, actor, t, sa, { range: fx.melee ? 5 : 30 }, rng, log); }
+      if (fx.kind === 'attack') { if (!t) return fail('Choose a target.'); var sa = { name: action.spell, bonus: sc.attackBonus, dice: fx.dice, mod: fx.addMod ? mod : 0, type: fx.type, ranged: !fx.melee, magical: true }, hp0 = t.hp; doAttack(enc, actor, t, sa, { range: fx.melee ? 5 : 30 }, rng, log);
+        if (fx.drain && t.hp < hp0) { var dr = heal(actor, Math.floor((hp0 - t.hp) / 2)); if (dr) log.push(actor.name + ' drains ' + dr + ' HP.'); } }
+      else if (fx.kind === 'rays') { if (!t) return fail('Choose a target.'); for (var ri = 0; ri < fx.rays && !t.dead && t.hp > 0; ri++) doAttack(enc, actor, t, { name: action.spell + ' ray ' + (ri + 1), bonus: sc.attackBonus, dice: fx.dice, mod: 0, type: fx.type, ranged: true, magical: true }, { range: 30 }, rng, log); }
+      else if (fx.kind === 'hold') { if (!t) return fail('Choose a target.'); var hv = save(t, fx.save, sc.saveDC, null, rng);
+        if (hv.success) log.push(actor.name + ' casts Hold Person: ' + t.name + ' resists (' + hv.total + ' vs DC ' + sc.saveDC + ').'); else { addCondition(t, 'paralyzed'); t.holdDC = sc.saveDC; log.push(actor.name + ' casts Hold Person: ' + t.name + ' is paralyzed (' + hv.total + ' vs DC ' + sc.saveDC + ').'); } }
       else if (fx.kind === 'save') { var tg = fx.aoe ? targets : [t]; if (!t) return fail('Choose a target.'); var dmg = rollDamage(fx.dice, 0, false, rng);
         tg.forEach(function (x) { if (x.dead) return; var sv = save(x, fx.save, sc.saveDC, null, rng), d3 = sv.success ? (fx.half ? Math.floor(dmg / 2) : 0) : dmg; if (d3 > 0) damage(x, d3, fx.type, { magical: true }); log.push(actor.name + ' casts ' + action.spell + ': ' + x.name + ' ' + (sv.success ? 'saves (' + sv.total + ' vs DC ' + sc.saveDC + ')' : 'fails (' + sv.total + ' vs DC ' + sc.saveDC + ')') + ', takes ' + d3 + ' ' + fx.type + ' (' + x.hp + '/' + x.hpMax + ' HP)' + (x.hp === 0 ? (x.dead ? ' - slain' : ' - down') : '') + '.'); }); }
       else if (fx.kind === 'missiles') { if (!t) return fail('Choose a target.'); var tot = 0; for (var k = 0; k < 3; k++) tot += rollDamage('1d4', 1, false, rng); damage(t, tot, 'force', { magical: true }); log.push(actor.name + ' casts Magic Missile at ' + t.name + ': ' + tot + ' force (' + t.hp + '/' + t.hpMax + ' HP).'); }
@@ -172,6 +182,11 @@
         cand.forEach(function (x) { if (x.hp <= pool && !has(x, 'unconscious')) { pool -= x.hp; addCondition(x, 'unconscious'); addCondition(x, 'prone'); put.push(x.name); } }); log.push(actor.name + ' casts Sleep: ' + (put.length ? put.join(', ') + ' fall asleep.' : 'nobody falls asleep.')); }
       return { ok: true, log: log };
     }
+    if (id === 'flee') { var fo = enc.units.filter(function (u) { return u.team !== actor.team && !u.dead && u.hp > 0; }); if (!fo.length) return fail('Nobody to flee from.'); if (!enc.spend('action')) return fail('No action left.');
+      var dc = 10 + Math.max.apply(null, fo.map(function (u) { return u.mods.dex || 0; })) + (fo.length - 1), fr = DND.d20(actor.mods.dex || 0, has(actor, 'restrained') || has(actor, 'grappled') ? 'dis' : null, rng);
+      if (fr.total >= dc) { enc.escape = 'fled'; return { ok: true, log: [actor.name + ' breaks away and runs (' + fr.total + ' vs DC ' + dc + ').'] }; }
+      return { ok: true, log: [actor.name + ' tries to run but cannot break away (' + fr.total + ' vs DC ' + dc + ').'] }; }
+    if (id === 'surrender') { enc.escape = 'surrender'; return { ok: true, log: [actor.name + ' throws down their weapons and yields.'] }; }
     if (id === 'potion') { var pk = action.kind === 'g' ? 'g' : 'h'; if (!actor.potions || !(actor.potions[pk] > 0)) return fail('You have no such potion.'); if (actor.hp >= actor.hpMax) return fail('You are already at full hit points.'); if (!enc.spend('action')) return fail('No action left.');
       actor.potions[pk]--; actor.potionsUsed[pk]++; var ph = heal(actor, pk === 'g' ? rollDamage('4d4', 4, false, rng) : rollDamage('2d4', 2, false, rng)); return { ok: true, log: [actor.name + ' drinks a Potion of ' + (pk === 'g' ? 'Greater ' : '') + 'Healing: +' + ph + ' HP (' + actor.hp + '/' + actor.hpMax + ').'] }; }
     if (id === 'dodge') { if (!enc.spend('action')) return fail('No action left.'); actor.dodging = true; return { ok: true, log: [actor.name + ' takes the Dodge action.'] }; }
@@ -191,6 +206,7 @@
     if (c.cls === 'Fighter' && !c.used.secondWind) o.push({ id: 'secondWind', label: 'Second Wind', target: 'none' }); if (c.cls === 'Fighter' && c.level >= 2 && !c.used.surge) o.push({ id: 'actionSurge', label: 'Action Surge', target: 'none' }); if (c.cls === 'Barbarian' && !c.rage) o.push({ id: 'rage', label: 'Rage', target: 'none' });
     if (c.cls === 'Paladin' && c.layPool > 0) o.push({ id: 'layOnHands', label: 'Lay on Hands (' + c.layPool + ' HP pool)', target: 'ally' });
     if (c.potions && c.potions.h > 0) o.push({ id: 'potion', kind: 'h', label: 'Potion of Healing (' + c.potions.h + ')', target: 'none' }); if (c.potions && c.potions.g > 0) o.push({ id: 'potion', kind: 'g', label: 'Greater Healing potion (' + c.potions.g + ')', target: 'none' });
+    if (c.team === 'party' && !c.companion) { o.push({ id: 'flee', label: 'Flee (Dex check)', target: 'none' }); o.push({ id: 'surrender', label: 'Surrender', target: 'none' }); }
     o.push({ id: 'dodge', label: 'Dodge', target: 'none' }); o.push({ id: 'dash', label: 'Dash', target: 'none' }); o.push({ id: 'disengage', label: 'Disengage', target: 'none' }); return o;
   }
   /** Simple monster / auto AI: attack the weakest living enemy. */
